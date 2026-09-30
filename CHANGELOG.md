@@ -37,5 +37,5 @@ First tagged release. Captures the current state of the lab, attacks, detector, 
 - Repository scaffolding: `.gitignore`, `CONTRIBUTING.md` (Conventional Commits + workflow),
   and an ASCII project banner (`banner.txt`) printed by the demo.
 
-[Unreleased]: https://github.com/<owner>/<repo>/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/<owner>/<repo>/releases/tag/v1.0.0
+[Unreleased]: https://github.com/cityengin/dos-ddos-project/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/cityengin/dos-ddos-project/releases/tag/v1.0.0
