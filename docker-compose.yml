@@ -1,0 +1,55 @@
+services:
+  victim:
+    image: nginx:alpine
+    container_name: victim
+    networks:
+      dos-lab:
+        ipv4_address: 172.30.0.10
+    ports:
+      - "8080:80"          # xem web từ Windows qua http://localhost:8080
+
+  attacker1:
+    build: ./attacker
+    container_name: attacker1
+    cap_add: [NET_RAW, NET_ADMIN]   # cần để scapy/hping3 gửi raw packet + spoof IP
+    volumes:
+      - ./attacks:/app  
+    networks:
+      dos-lab:
+        ipv4_address: 172.30.0.21
+
+  attacker2:
+    build: ./attacker
+    container_name: attacker2
+    cap_add: [NET_RAW, NET_ADMIN]
+    volumes:
+      - ./attacks:/app  
+    networks:
+      dos-lab:
+        ipv4_address: 172.30.0.22
+
+  attacker3:
+    build: ./attacker
+    container_name: attacker3
+    cap_add: [NET_RAW, NET_ADMIN]
+    volumes:
+      - ./attacks:/app  
+    networks:
+      dos-lab:
+        ipv4_address: 172.30.0.23
+        
+  detector:
+    build: ./attacker              # tai su dung image co scapy san
+    container_name: detector
+    cap_add: [NET_RAW, NET_ADMIN]
+    network_mode: "service:victim" # dung chung mang voi victim -> sniff traffic cua victim
+    volumes:
+      - ./detection:/app
+    command: ["sleep", "infinity"]
+
+networks:
+  dos-lab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

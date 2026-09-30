@@ -1,0 +1,60 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+University end-of-term project (DUT PBL3): simulate DoS/DDoS attacks **and** detect them inside a fully isolated Docker lab. Everything runs against the lab's own `victim` container — never a real target. Comments and status notes are written in ASCII-only Vietnamese (no diacritics); keep that convention when editing them. Host environment is Windows + Docker Desktop (WSL2).
+
+`PROJECT_STATUS.md` is the running log of results, tuned thresholds, and TODOs — read it first and update it when experiments change the numbers or the task list.
+
+## Lab topology (`docker-compose.yml`)
+
+- `victim` — `nginx:alpine` at `172.30.0.10`, published to `localhost:8080`.
+- `attacker1/2/3` — built from `attacker/Dockerfile`, IPs `172.30.0.21/.22/.23`. Have `NET_RAW`+`NET_ADMIN` (required for scapy/hping3 raw packets and IP spoofing). Mount `./attacks` at `/app`.
+- `detector` — reuses the attacker image but runs `network_mode: service:victim`, so it shares the victim's network namespace and sniffs the victim's `eth0` directly. Mounts `./detection` at `/app`.
+- Network `dos-lab`: bridge, subnet `172.30.0.0/24`.
+
+The attack/detection Python scripts are **bind-mounted**, so edits take effect on the next `docker exec` without rebuilding. Rebuild images only when changing `attacker/Dockerfile` (installed tools) or adding pip deps.
+
+## Common commands
+
+```powershell
+docker compose up -d --build          # bring up lab (build attacker/detector image)
+docker compose down                   # tear down
+
+# Detector (run in its own terminal; sniffs victim eth0)
+docker exec -it detector python3 /app/detector.py --pps 40 --syn 25 --csv /app/attack.csv
+
+# Single attacker, manual
+docker exec attacker1 python3 /app/syn_flood.py 172.30.0.10 -p 80 --spoof
+docker exec attacker1 python3 /app/http_flood.py 172.30.0.10 -p 80 -t 20 -d 30
+
+# All 3 attackers in parallel (PowerShell orchestrator)
+.\run_ddos.ps1 syn        # or: .\run_ddos.ps1 http
+.\run_ddos.ps1 syn -target 172.30.0.10 -duration 30
+
+# Reproducible experiment run + analysis (host Python, needs matplotlib)
+python experiments/run_scenarios.py                       # runs A/B/C -> detection/{A,B,C}.csv + .meta.json
+python analysis/metrics.py detection/A.csv --truth DoS    # detection time / FP / FN / classification table
+python analysis/plot_attack.py detection/A.csv -o analysis/A.png
+```
+
+There is no build step, test suite, or linter — this is a set of standalone scripts driven by Docker, the orchestrator, and `experiments/run_scenarios.py`. The analysis scripts (`analysis/`) run on the **host** and need matplotlib; everything else runs inside containers.
+
+## Detection logic (`detection/detector.py`)
+
+The whole point of the project lives here. A background thread runs scapy `sniff`; the main loop snapshots and resets a per-window counter every `--interval` (default 1s) and decides:
+
+- **Inbound-only counting** (`--victim`, default `172.30.0.10`): because the detector shares the victim's netns it sees *both* directions on eth0. It counts only packets whose `dst == victim`, excluding the victim's own replies. This is critical — without it, the victim's SYN-ACK replies (`src = victim`) get counted as a second source, so a single-source DoS is misclassified as DDoS and `ack_s` is inflated enough to suppress the SYN-flood tag. Set `--victim ""` to count both directions (old buggy behavior; kept for the before/after comparison in `PROJECT_STATUS.md`).
+- **Trigger**: `pps >= --pps` OR `syn_s >= --syn`. Note the CLI *defaults* (200/100) are placeholders — the values actually used in the lab are `--pps 40 --syn 25` (see `PROJECT_STATUS.md`). Adjust via flags, not by editing defaults.
+- **DoS vs DDoS**: decided by **source count** `n_src` — `>= 2` distinct source IPs ⇒ DDoS, else DoS. `H(src)` (Shannon entropy of source IPs) is reported as a dispersion measure but is not the classifier.
+- **SYN flood tag**: added when `syn_s >= --syn` and `ack_s < syn_s * 0.2` (half-open connections, few ACKs coming back).
+- `--csv` appends `time,pps,syn_s,ack_s,h_src,h_dport,n_src,alert` per window for later plotting.
+
+Known limits to preserve in any writeup (documented in `PROJECT_STATUS.md`): one host spoofing many IPs is indistinguishable from many real hosts at the victim; thresholds are sensitive to flash crowds (false positives) and miss low-and-slow attacks like Slowloris; entropy depends on baseline and window length.
+
+## Attack scripts (`attacks/`)
+
+- `syn_flood.py` — L4, scapy. Crafts `IP()/TCP(flags="S")`; `--spoof` randomizes source IP (`10.x.x.x`) to emulate a multi-source DDoS. `-c 0` means unbounded (stop with the `timeout` wrapper the orchestrator applies, or Ctrl-C).
+- `http_flood.py` — L7, `urllib` across `-t` threads for `-d` seconds; counts successful GETs. Produces ACK-heavy traffic (distinguishes L7 floods from SYN floods in the detector output).

@@ -1,0 +1,14 @@
+{
+  "name": "A",
+  "desc": "1 nguon SYN (khong spoof)",
+  "truth": "DoS",
+  "mode": "syn",
+  "spoof": false,
+  "sources": [
+    "attacker1"
+  ],
+  "victim": "172.30.0.10",
+  "attack_start": "10:33:48",
+  "attack_end": "10:34:10",
+  "csv": "detection\\A.csv"
+}

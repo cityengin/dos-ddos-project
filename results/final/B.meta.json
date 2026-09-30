@@ -1,0 +1,16 @@
+{
+  "name": "B",
+  "desc": "3 nguon SYN + spoof IP",
+  "truth": "DDoS",
+  "mode": "syn",
+  "spoof": true,
+  "sources": [
+    "attacker1",
+    "attacker2",
+    "attacker3"
+  ],
+  "victim": "172.30.0.10",
+  "attack_start": "10:34:26",
+  "attack_end": "10:34:47",
+  "csv": "detection\\B.csv"
+}
