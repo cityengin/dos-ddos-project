@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- SVG project banner (`banner.svg`), displayed at the top of the README.
 
 ## [1.0.0] - 2026-09-30
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="banner.svg" alt="DoS/DDoS Attack Simulation & Detection Lab — PBL3" width="100%">
+</p>
+
 # DoS/DDoS Attack Simulation & Detection Lab
 
 A self-contained, Docker-based lab that **simulates** DoS/DDoS attacks and **detects and
