@@ -29,6 +29,8 @@ Moi truong: Windows + Docker Desktop (WSL2). Lab co lap hoan toan, KHONG nham ta
 - Entropy: H(src) dinh luong muc phan tan (DoS=0, DDoS-spoof ~6, HTTP-3-nguon ~1.58)
 - --adaptive: nguong THICH NGHI EWMA (mu + k*MAD, san = --pps/--syn), dong bang hoc khi dang alert.
   Thi nghiem so sanh: experiments/adaptive_eval.py -> assets/adaptive_eval.png (fixed thua, adaptive thang)
+- ML: ml/train.py (RF + HistGB) vs luat nguong, F1 0.86->0.99 tren mau kieu-CICDDoS2019 (ml/make_synthetic.py)
+- Phong thu L7: mitigation/ (nginx rate-limit) -> demo_mitigation.py: HTTP flood 30430 -> 240 (chan ~99%)
 
 ## Ket qua da co (so lieu that tu lab)
 - Baseline (baseline.csv, 62s idle): pps=syn=ack=0, 0 episode, 0 false positive -> nguong an toan

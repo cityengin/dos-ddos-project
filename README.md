@@ -216,6 +216,29 @@ On the sample, attack-detection F1 rises from **0.86** (single-threshold rule) t
 
 ![ML vs rule F1](assets/ml_f1_compare.png)
 
+## Defense / mitigation (L7)
+
+The detector is an IDS — it *sees* attacks. [`mitigation/`](mitigation/) adds an IPS-style defense:
+an nginx configuration with per-IP request and connection rate limits
+([`mitigation/nginx/default.conf`](mitigation/nginx/default.conf)) that caps an HTTP flood while
+leaving legitimate clients untouched.
+
+Run the before/after demo (applies the config at runtime, floods from the three attackers, measures
+a legitimate client from the host, then restores nginx):
+
+```bash
+python mitigation/demo_mitigation.py
+```
+
+Lab result: a 3-source HTTP flood was served **30,430** requests without protection vs **240** with
+rate limiting (**~99% blocked**), while a legitimate client kept a **100%** success rate — and its
+latency *dropped* (16 ms → 6 ms) because the server no longer wastes work on the flood.
+
+![L7 mitigation before/after](assets/mitigation_demo.png)
+
+To make the limits permanent instead of applying them at runtime, mount the config into the victim
+(see the commented `volumes` block under `victim` in `docker-compose.yml`).
+
 ## Project Structure
 
 ```

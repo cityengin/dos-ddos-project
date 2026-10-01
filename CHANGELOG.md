@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sample so it runs out of the box (attack-detection F1 0.86 rule → 0.99 ML on the sample).
 - `ml/train.py` reads large CSVs in chunks with size-estimated sampling and accepts a directory
   of CSVs, so it scales to the full CICDDoS2019 flow files without exhausting memory.
+- L7 mitigation (`mitigation/`): an nginx per-IP rate-limit config and a before/after demo
+  (`mitigation/demo_mitigation.py`) that turns the IDS into IPS-style protection. In the lab a
+  3-source HTTP flood drops from 30,430 to 240 served requests (~99% blocked) with no impact on a
+  legitimate client. Optional permanent mount documented in `docker-compose.yml`.
 
 ## [1.0.0] - 2026-09-30
 
