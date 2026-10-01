@@ -187,6 +187,26 @@ Thành thật: phương pháp hiện tại là **kinh điển/nền tảng**, ph
 | Luật if-else + entropy | Machine Learning (CICDDoS2019): Random Forest/XGBoost, CNN/LSTM, autoencoder |
 | Chỉ phát hiện | Phát hiện + tự động giảm thiểu (IPS, SDN) |
 
+### 8.1. Thử nghiệm ML (đã làm)
+
+Đã dựng pipeline ML trong [`ml/`](../ml/): huấn luyện **RandomForest** và **HistGradientBoosting**
+trên đặc trưng flow, so với **luật ngưỡng 1 đặc trưng** (baseline giống detector luật). Pipeline đọc
+được đúng schema CICDDoS2019 thật; kèm bộ mẫu kiểu-CICDDoS2019 (có nhiễu/chồng lấn) để chạy ngay.
+
+| Phương pháp | F1 phát hiện tấn công | macro-F1 (4 lớp) |
+|---|---|---|
+| Luật ngưỡng 1 đặc trưng | 0.857 | — |
+| RandomForest | 0.989 | 0.981 |
+| HistGradientBoosting | 0.989 | 0.981 |
+
+![ML vs luật ngưỡng](../assets/ml_f1_compare.png)
+
+![Confusion matrix](../assets/ml_confusion.png)
+
+Kết luận: ML dùng **nhiều đặc trưng** (tỉ lệ SYN/ACK, fwd/bwd, kích thước gói…) nên tách được
+benign-flash-crowd khỏi HTTP flood — chỗ ngưỡng đơn thất bại — và còn nhận đúng *loại* tấn công.
+Tái lập: `python ml/make_synthetic.py && python ml/train.py`.
+
 ## 9. Giới hạn & hướng phát triển
 
 **Giới hạn:**

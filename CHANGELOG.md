@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while avoiding false positives on drifting legitimate traffic.
 - Markdown theory guide (`docs/LyThuyet_DoS_DDoS.md`) for on-GitHub study, including the
   adaptive-threshold and state-of-the-art sections.
+- Machine-learning pipeline (`ml/`): `train.py` trains RandomForest + HistGradientBoosting on
+  flow features, compares against a single-threshold rule, and plots F1 / confusion matrix;
+  auto-handles the CICDDoS2019 CSV schema. `make_synthetic.py` generates a CICDDoS2019-style
+  sample so it runs out of the box (attack-detection F1 0.86 rule → 0.99 ML on the sample).
 
 ## [1.0.0] - 2026-09-30
 

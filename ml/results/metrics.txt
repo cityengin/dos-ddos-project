@@ -1,0 +1,17 @@
+So sanh PHAT HIEN TAN CONG (nhi phan BENIGN vs tan cong) - F1:
+  Luat nguong 1 dac tr(flow_pkts_s > 322.8): F1 = 0.857
+  RandomForest          : F1 = 0.989   (macro-F1 da lop = 0.981)
+  HistGradientBoosting  : F1 = 0.989   (macro-F1 da lop = 0.981)
+
+Bao cao chi tiet (HistGradientBoosting) - phan loai da lop:
+              precision    recall  f1-score   support
+
+      BENIGN      0.981     0.994     0.987      1781
+  HTTP_FLOOD      0.983     0.972     0.977       754
+   SYN_FLOOD      0.982     0.983     0.982       758
+   UDP_FLOOD      0.992     0.964     0.977       607
+
+    accuracy                          0.983      3900
+   macro avg      0.984     0.978     0.981      3900
+weighted avg      0.983     0.983     0.983      3900
+

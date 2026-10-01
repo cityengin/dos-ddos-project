@@ -19,6 +19,12 @@ analysis/*.png
 # This negation must come AFTER the ignore rules above.
 !results/final/**
 
+# ===== ML datasets & models (regenerable or large; keep ml/results/*.txt + assets/*.png) =====
+ml/data/
+ml/models/
+*.pkl
+*.joblib
+
 # ===== Local tooling / IDE / editors =====
 .claude/settings.local.json
 .vscode/
