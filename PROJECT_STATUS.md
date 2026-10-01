@@ -27,6 +27,8 @@ Moi truong: Windows + Docker Desktop (WSL2). Lab co lap hoan toan, KHONG nham ta
 - Phan loai: n_src>=2 => DDoS, nguoc lai => DoS  (dung so nguon lam tieu chi chinh)
 - SYN flood: nhan dien khi ack < syn*0.2 (half-open)
 - Entropy: H(src) dinh luong muc phan tan (DoS=0, DDoS-spoof ~6, HTTP-3-nguon ~1.58)
+- --adaptive: nguong THICH NGHI EWMA (mu + k*MAD, san = --pps/--syn), dong bang hoc khi dang alert.
+  Thi nghiem so sanh: experiments/adaptive_eval.py -> assets/adaptive_eval.png (fixed thua, adaptive thang)
 
 ## Ket qua da co (so lieu that tu lab)
 - Baseline (baseline.csv, 62s idle): pps=syn=ack=0, 0 episode, 0 false positive -> nguong an toan

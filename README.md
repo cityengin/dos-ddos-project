@@ -99,6 +99,9 @@ Open `http://localhost:8080` to confirm the victim web server responds.
 ```bash
 docker exec -it detector python3 /app/detector.py \
   --pps 40 --syn 25 --victim 172.30.0.10 --csv /app/attack.csv
+
+# Adaptive thresholds (EWMA): learns the baseline; --pps/--syn act as a safety floor
+docker exec -it detector python3 /app/detector.py --adaptive --victim 172.30.0.10 --csv /app/attack.csv
 ```
 
 **2. Launch a single attack** (another terminal):
@@ -153,6 +156,9 @@ decides per window:
   `dst == victim` are counted, excluding the victim's own replies (e.g. SYN-ACK). Without this,
   the victim's replies would be counted as a second source and inflate the ACK rate.
 - **Trigger**: an alert is raised when `pps ≥ --pps` **or** `syn/s ≥ --syn`.
+- **Adaptive thresholds** (`--adaptive`): instead of fixed values, the detector learns the baseline
+  with an EWMA and triggers on `pps/syn > μ + k·MAD` (with `--pps/--syn` as a floor), which reduces
+  false positives when legitimate traffic drifts. See the theory guide for a comparison.
 - **DoS vs DDoS**: decided by the number of distinct source IPs, `n_src` — `1` ⇒ **DoS**,
   `≥ 2` ⇒ **DDoS**.
 - **Source entropy** `H(src) = − Σ pᵢ · log₂(pᵢ)` measures how evenly traffic is spread across
@@ -179,8 +185,12 @@ The **finalized dataset and figures used in the report** are committed under
 [`results/final/`](results/final/) (CSV data, run metadata, and the corresponding plots). All
 other run outputs are git-ignored because they are reproducible by re-running the lab.
 
-A companion theory document for team onboarding is included:
-`TaiLieu_LyThuyet_DoS_DDoS.docx`.
+## Learning material
+
+A full theory guide for the team (in Vietnamese) can be read directly on GitHub:
+**[`docs/LyThuyet_DoS_DDoS.md`](docs/LyThuyet_DoS_DDoS.md)**. It covers DoS/DDoS concepts, the attack
+and detection mechanisms, adaptive thresholding, and a state-of-the-art comparison. A downloadable
+Word version is also included: [`TaiLieu_LyThuyet_DoS_DDoS.docx`](TaiLieu_LyThuyet_DoS_DDoS.docx).
 
 ## Project Structure
 

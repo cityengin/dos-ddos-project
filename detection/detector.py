@@ -27,6 +27,14 @@ def entropy(counter):
         h -= p * math.log2(p)
     return h
 
+def ewma_update(st, pps, syn, alpha):
+    # EWMA cho trung binh (mu) + do lech tuyet doi trung binh (MAD), tung chi so.
+    # Cap nhat MAD truoc (dung mu cu) roi moi cap nhat mu.
+    st["mad_pps"] = alpha * abs(pps - st["mu_pps"]) + (1 - alpha) * st["mad_pps"]
+    st["mu_pps"]  = alpha * pps + (1 - alpha) * st["mu_pps"]
+    st["mad_syn"] = alpha * abs(syn - st["mu_syn"]) + (1 - alpha) * st["mad_syn"]
+    st["mu_syn"]  = alpha * syn + (1 - alpha) * st["mu_syn"]
+
 def on_packet(pkt):
     if IP not in pkt:
         return
@@ -53,6 +61,11 @@ def main():
     ap.add_argument("--syn", type=int, default=100, help="nguong SYN/s")
     ap.add_argument("--victim", default="172.30.0.10",
                     help="chi dem goi inbound toi victim (src!=victim). De rong '' = dem tat ca")
+    ap.add_argument("--adaptive", action="store_true",
+                    help="dung nguong THICH NGHI (EWMA) thay cho nguong co dinh")
+    ap.add_argument("--alpha", type=float, default=0.2, help="he so lam min EWMA (0..1)")
+    ap.add_argument("--k", type=float, default=4.0, help="do nhay: nguong = baseline + k*MAD")
+    ap.add_argument("--warmup", type=int, default=8, help="so cua so hoc baseline truoc khi canh bao")
     ap.add_argument("--csv", default="", help="ghi log ra file CSV neu co")
     args = ap.parse_args()
 
@@ -61,6 +74,9 @@ def main():
 
     print("[*] Detector chay tren iface=%s, interval=%.1fs, nguong pps=%d syn=%d, victim=%s"
           % (args.iface, args.interval, args.pps, args.syn, VICTIM or "(tat ca)"))
+    if args.adaptive:
+        print("[*] Che do NGUONG THICH NGHI (EWMA): alpha=%.2f k=%.1f warmup=%ds, san toi thieu pps>=%d syn>=%d"
+              % (args.alpha, args.k, args.warmup, args.pps, args.syn))
     print("%-8s %8s %8s %8s %10s %10s   %s" %
           ("time","pkts/s","syn/s","ack/s","H(src)","H(dport)","ALERT"))
     csvf = open(args.csv, "w") if args.csv else None
@@ -70,6 +86,9 @@ def main():
     # sniff chay o thread rieng, main loop in bao cao moi interval
     t = threading.Thread(target=lambda: sniff(iface=args.iface, prn=on_packet, store=0), daemon=True)
     t.start()
+
+    ew = {"mu_pps": 0.0, "mad_pps": 0.0, "mu_syn": 0.0, "mad_syn": 0.0}  # trang thai EWMA
+    wcount = 0
 
     while True:
         time.sleep(args.interval)
@@ -88,14 +107,26 @@ def main():
         n_src = len(snap_src)
 
         # ====== ra quyet dinh ======
+        if args.adaptive:
+            # nguong dong = baseline (EWMA) + k*MAD, nhung khong thap hon san --pps/--syn
+            wcount += 1
+            thr_pps = max(ew["mu_pps"] + args.k * ew["mad_pps"], args.pps)
+            thr_syn = max(ew["mu_syn"] + args.k * ew["mad_syn"], args.syn)
+            triggered = wcount > args.warmup and (pps > thr_pps or syn_s > thr_syn)
+            if not triggered:   # chi hoc baseline khi KHONG tan cong (tranh nhiem doc baseline)
+                ewma_update(ew, pps, syn_s, args.alpha)
+        else:
+            thr_pps, thr_syn = args.pps, args.syn
+            triggered = pps >= thr_pps or syn_s >= thr_syn
+
         alert = ""
-        if pps >= args.pps or syn_s >= args.syn:
+        if triggered:
             # co flood -> phan loai dua vao so nguon + entropy nguon
             if n_src >= 2:
                 alert = "!! DDoS (nhieu nguon, H_src=%.2f, n=%d)" % (h_src, n_src)
             else:
                 alert = "!! DoS  (it nguon, H_src=%.2f, n=%d)" % (h_src, n_src)
-            if syn_s >= args.syn and ack_s < syn_s * 0.2:
+            if syn_s >= thr_syn and ack_s < syn_s * 0.2:
                 alert += " [SYN flood]"
                 
         if csvf:

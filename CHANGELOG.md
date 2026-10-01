@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - SVG project banner (`banner.svg`), displayed at the top of the README.
+- Adaptive EWMA thresholding in the detector (`--adaptive`): dynamic threshold
+  `μ + k·MAD` with `--pps/--syn` as a floor, and baseline learning frozen during alerts.
+- Synthetic fixed-vs-adaptive evaluation (`experiments/adaptive_eval.py`) and its figure
+  (`assets/adaptive_eval.png`), showing adaptive catches an attack a fixed threshold misses
+  while avoiding false positives on drifting legitimate traffic.
+- Markdown theory guide (`docs/LyThuyet_DoS_DDoS.md`) for on-GitHub study, including the
+  adaptive-threshold and state-of-the-art sections.
 
 ## [1.0.0] - 2026-09-30
 
