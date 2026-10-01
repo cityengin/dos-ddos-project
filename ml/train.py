@@ -13,6 +13,7 @@ train RandomForest + HistGradientBoosting, va so sanh voi luat nguong 1 dac trun
 giong detector luat cua project). Xuat bang metric + 2 do thi.
 """
 import argparse
+import glob
 import os
 import numpy as np
 import pandas as pd
@@ -29,15 +30,42 @@ ID_COLS = {"flow id", "source ip", "src ip", "destination ip", "dst ip", "source
 RATE_HINTS = ["flow_pkts_s", "flow packets/s", "flow pkts/s", "pps"]
 
 
+def _read_sampled(path, cap):
+    """Doc 1 CSV theo chunk + lay mau de KHONG tran RAM voi file lon (vai GB).
+    Uoc luong so dong tu kich thuoc file -> chon ti le lay mau ~ cap dong."""
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        f.readline()  # header
+        lines = [f.readline() for _ in range(2000)]
+    avg = sum(len(l) for l in lines) / max(1, len([l for l in lines if l]))
+    est_rows = max(1, int(os.path.getsize(path) / max(1.0, avg)))
+    frac = min(1.0, cap / est_rows) if cap else 1.0
+    out = []
+    for ch in pd.read_csv(path, chunksize=200000, low_memory=False):
+        ch.columns = [c.strip() for c in ch.columns]
+        out.append(ch if frac >= 1.0 else ch.sample(frac=frac, random_state=42))
+    df = pd.concat(out, ignore_index=True) if out else pd.DataFrame()
+    if cap and len(df) > cap:
+        df = df.sample(cap, random_state=42).reset_index(drop=True)
+    return df
+
+
 def load(path, label_col, max_rows):
-    df = pd.read_csv(path, low_memory=False)
-    df.columns = [c.strip() for c in df.columns]
+    # ho tro ca FILE lan THU MUC (nhieu CSV cua CICDDoS2019)
+    if os.path.isdir(path):
+        files = sorted(glob.glob(os.path.join(path, "*.csv")))
+        if not files:
+            raise SystemExit(f"Thu muc {path} khong co file .csv nao.")
+        per = max(3000, max_rows // len(files)) if max_rows else None
+        print(f"[*] Doc {len(files)} file CSV trong {path} ...")
+        df = pd.concat([_read_sampled(f, per) for f in files], ignore_index=True)
+        if max_rows and len(df) > max_rows:
+            df = df.sample(max_rows, random_state=42).reset_index(drop=True)
+    else:
+        df = _read_sampled(path, max_rows)
     # tim cot nhan
     lc = label_col or next((c for c in df.columns if c.lower() == "label"), None)
     if lc is None:
         raise SystemExit("Khong tim thay cot nhan (Label). Dung --label-col de chi dinh.")
-    if max_rows and len(df) > max_rows:
-        df = df.sample(max_rows, random_state=42).reset_index(drop=True)
     y = df[lc].astype(str).str.strip()
     # chon dac trung so, bo cot dinh danh
     drop = {lc.lower()} | ID_COLS

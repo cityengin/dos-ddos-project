@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   flow features, compares against a single-threshold rule, and plots F1 / confusion matrix;
   auto-handles the CICDDoS2019 CSV schema. `make_synthetic.py` generates a CICDDoS2019-style
   sample so it runs out of the box (attack-detection F1 0.86 rule → 0.99 ML on the sample).
+- `ml/train.py` reads large CSVs in chunks with size-estimated sampling and accepts a directory
+  of CSVs, so it scales to the full CICDDoS2019 flow files without exhausting memory.
 
 ## [1.0.0] - 2026-09-30
 
