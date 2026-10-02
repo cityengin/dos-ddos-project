@@ -137,6 +137,13 @@ Ba kịch bản chuẩn, số liệu thật từ lab (detection time ≈ 0s, kh�
 Đọc đồ thị: vùng SYN flood có `ack/s ≈ 0` (half-open); vùng HTTP flood có `ack/s` rất cao (ACK ≫ SYN).
 `n_src` và `H(src)` tăng vọt ở kịch bản SYN có giả mạo IP — đúng bản chất phân tán của DDoS.
 
+**Vì sao DDoS mà `n_src` chỉ bằng 3?** Lab chỉ có **3 máy tấn công** (attacker1/2/3), nên một DDoS
+"nhiều nguồn thật" chỉ hiện tối đa 3 IP nguồn (kịch bản C). Detector phân loại DDoS khi `n_src ≥ 2`,
+nên 3 nguồn đã đủ minh họa khác biệt DoS/DDoS. Muốn mô phỏng **hàng chục–hàng trăm nguồn** như botnet
+thật thì dùng **giả mạo IP** (`--spoof`, kịch bản B → `n_src ≈ 66`) — nhưng chỉ làm được với SYN flood
+(L4, không cần bắt tay); HTTP flood (L7) phải hoàn tất bắt tay TCP nên IP nguồn **bắt buộc là thật**,
+do đó kịch bản C luôn chỉ 3 nguồn. Đây là **giới hạn của lab** (mục 10), không phải lỗi phát hiện.
+
 ## 7. Ngưỡng thích nghi (nâng cao)
 
 Ngưỡng **cố định** (pps≥40, syn≥25) đơn giản nhưng yếu khi lưu lượng hợp lệ **biến thiên theo thời
@@ -185,28 +192,43 @@ Thành thật: phương pháp hiện tại là **kinh điển/nền tảng**, ph
 |---|---|
 | Ngưỡng cố định → **ngưỡng thích nghi (EWMA)** ✅ đã thêm | CUSUM, change-point detection đa cửa sổ |
 | Sniff từng gói tại victim | Flow-based (NetFlow/sFlow), eBPF/XDP chặn ở line-rate trong kernel |
-| Luật if-else + entropy | Machine Learning (CICDDoS2019): Random Forest/XGBoost, CNN/LSTM, autoencoder |
+| Luật if-else + entropy → **RF/HistGB trên CICDDoS2019 thật** ✅ đã thêm | XGBoost, CNN/LSTM, autoencoder, phát hiện theo flow online |
 | Chỉ phát hiện | Phát hiện + tự động giảm thiểu (IPS, SDN) |
 
-### 8.1. Thử nghiệm ML (đã làm)
+### 8.1. Thử nghiệm ML trên CICDDoS2019 thật (đã làm)
 
 Đã dựng pipeline ML trong [`ml/`](../ml/): huấn luyện **RandomForest** và **HistGradientBoosting**
-trên đặc trưng flow, so với **luật ngưỡng 1 đặc trưng** (baseline giống detector luật). Pipeline đọc
-được đúng schema CICDDoS2019 thật; kèm bộ mẫu kiểu-CICDDoS2019 (có nhiễu/chồng lấn) để chạy ngay.
+trên đặc trưng flow, so với **luật ngưỡng 1 đặc trưng** (baseline mô phỏng chính detector luật của dự
+án). Chạy trên **bộ dữ liệu CICDDoS2019 thật** (bản đã làm sạch `dhoogla/cicddos2019`, tải qua
+`kagglehub`, định dạng parquet, ~131k flow × 63 đặc trưng, 13 họ tấn công). Nếu không tải dữ liệu,
+`ml/make_synthetic.py` tạo bộ mẫu kiểu-CICDDoS2019 để pipeline vẫn chạy được ngay.
 
-| Phương pháp | F1 phát hiện tấn công | macro-F1 (4 lớp) |
-|---|---|---|
-| Luật ngưỡng 1 đặc trưng | 0.857 | — |
-| RandomForest | 0.989 | 0.981 |
-| HistGradientBoosting | 0.989 | 0.981 |
+**Phát hiện tấn công (nhị phân: tấn công vs hợp lệ)** — đúng việc mà detector luật đang làm:
+
+| Phương pháp | F1 phát hiện tấn công |
+|---|---|
+| Luật ngưỡng 1 đặc trưng (giống detector) | **0.60** |
+| **RandomForest** | **0.999** |
+| HistGradientBoosting | 0.996 |
 
 ![ML vs luật ngưỡng](../assets/ml_f1_compare.png)
 
+Đây là **kết quả cốt lõi**: trên lưu lượng DDoS thật trộn nhiều loại, **một ngưỡng đơn lẻ là yếu**
+(F1 0.60), còn mô hình học nhiều đặc trưng thì gần như hoàn hảo (0.999).
+
+**Phân loại họ tấn công (13 lớp):** accuracy **0.93**, macro-F1 **0.735** (RandomForest).
+
 ![Confusion matrix](../assets/ml_confusion.png)
 
-Kết luận: ML dùng **nhiều đặc trưng** (tỉ lệ SYN/ACK, fwd/bwd, kích thước gói…) nên tách được
-benign-flash-crowd khỏi HTTP flood — chỗ ngưỡng đơn thất bại — và còn nhận đúng *loại* tấn công.
-Tái lập: `python ml/make_synthetic.py && python ml/train.py`.
+Tấn công thể tích có dấu hiệu riêng thì dễ tách (NTP, TFTP, Syn, MSSQL, UDP đều ≥ 0.92 F1); nhóm UDP
+reflection/amplification (DNS, LDAP, SNMP, Portmap, NetBIOS) chồng lấn đặc trưng ở mức flow nên vẫn
+khó — đây là **giới hạn thật**, không giấu. Ngoài ra CICDDoS2019 gán nhãn cùng một họ theo **hai kiểu**
+ở hai ngày chụp (`DrDoS_X` và `X`); `ml/train.py` **gom về họ chuẩn** (cờ `--raw-labels` để giữ nhãn
+gốc — khi đó macro-F1 chỉ 0.54, phần sụt là do nhãn trùng chứ không phải mô hình kém).
+
+Kết luận: ML dùng **nhiều đặc trưng** (kích thước gói, độ dài header, IAT, tỉ lệ fwd/bwd…) nên vượt xa
+ngưỡng đơn ở việc phát hiện tấn công, và còn phân loại được *họ* tấn công. Tái lập: tải dữ liệu rồi
+`python ml/train.py --data <thư mục parquet>` (hoặc `python ml/make_synthetic.py && python ml/train.py`).
 
 ## 9. Phòng thủ L7 (mitigation)
 

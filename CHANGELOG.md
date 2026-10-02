@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to **0.999** (RandomForest; 0.996 HistGradientBoosting); family classification reaches **0.93**
   accuracy / **0.74** macro-F1. The synthetic sample stays as a zero-download fallback. Regenerated
   `assets/ml_f1_compare.png`, `assets/ml_confusion.png`, and `ml/results/metrics.txt`.
+- Theory guide (`docs/LyThuyet_DoS_DDoS.md`): ML section updated to the real CICDDoS2019 results,
+  plus a note explaining why a lab DDoS shows only 3 sources (3 attacker containers; spoofing is L4-only).
 
 ### Fixed
 
