@@ -82,6 +82,26 @@ Figure: `assets/mitigation_demo.png`.
 
 ---
 
+## 4b. Slowloris (low-and-slow) — real service impact
+
+```bash
+python mitigation/demo_slowloris.py
+```
+
+**Expected** (legitimate-client success, measured from the host):
+
+| Phase | Result |
+|---|---|
+| Baseline (no attack) | ~100% OK |
+| Slowloris, **no defense** | **0% OK — service unreachable** |
+| Slowloris, **with defense** | ~100% OK (recovered) |
+
+Key point: a rate-based detector would stay **SAFE** here (Slowloris is very low traffic) — the
+**service-health** signal is what reveals the outage. The defense is `client_header_timeout`
+(drops slow connections), already in `mitigation/nginx/default.conf`.
+
+---
+
 ## 5. Machine learning
 
 ```bash
@@ -109,6 +129,7 @@ Open the page, then verify each case:
 | Click **A** (DoS SYN) | Verdict `DoS [SYN flood]`, victim amber/red, link from attacker1 animates |
 | Click **B** (DDoS SYN+spoof) | Verdict `DDoS [SYN flood]`, n_src high, H(src) ~6, all 3 links active, victim red "overloaded" |
 | Click **C** (DDoS HTTP) | Verdict `DDoS`, ack/s >> syn/s, 3 links active |
+| Click **D** (Slowloris) | Verdict stays **SAFE** (low traffic) but victim + legit client show **DOWN** (purple links) |
 | **Stop attack** | Returns to SAFE / idle within ~2 s |
 | **L7 rate-limit** toggle ON | Victim shows a shield; on an HTTP flood the attack is throttled |
 | **Run benchmark** | Bars show served-requests before vs after (~99% blocked) |

@@ -77,6 +77,18 @@ có rất nhiều `ACK` — đặc điểm **ACK ≫ SYN** giúp phân biệt L7
 | Tài nguyên bị cạn | Bảng kết nối half-open | CPU / xử lý ứng dụng |
 | Dấu hiệu | ACK ≈ 0 (half-open) | ACK ≫ SYN (kết nối thật) |
 
+### 3.3. Slowloris – tấn công chậm (low-and-slow, L7)
+
+Khác với flood (ồ ạt nhiều gói), Slowloris **mở nhiều kết nối TCP rồi gửi header HTTP dang dở**, định
+kỳ gửi thêm 1 dòng rác để GIỮ kết nối sống. Victim có giới hạn số kết nối đồng thời
+(`worker_connections`); chỉ cần vài chục kết nối giữ mãi là **cạn slot → client hợp lệ không vào được**
+(dịch vụ "chết") — dù **lưu lượng rất thấp**. Trong project: [`attacks/slowloris.py`](../attacks/slowloris.py).
+
+**Điểm then chốt:** vì traffic thấp, detector dựa trên ngưỡng pps/syn **KHÔNG phát hiện** Slowloris
+(âm tính giả) — đây là **điểm mù low-and-slow**. Chỉ **chỉ số sức khỏe dịch vụ** (client hợp lệ còn
+vào được không) mới lộ ra. Phòng thủ: `client_header_timeout` (rớt kết nối gửi header chậm). Demo:
+`python mitigation/demo_slowloris.py` → client hợp lệ **100% → 0% (sập) → 100% (hồi phục)**.
+
 ## 4. Kiến trúc hệ thống lab
 
 ![Kiến trúc lab](../assets/architecture.png)
@@ -239,8 +251,9 @@ có giả mạo IP (mỗi gói một IP khác) — loại đó cần SYN cookies
   lớn phải chặn ở thượng nguồn (firewall/CDN/scrubbing).
 
 **Hướng phát triển:** (1) CUSUM/change-point; (2) **ML với CICDDoS2019** (đã làm mục 8.1);
-(3) thêm vector low-and-slow; (4) mitigation L7 đã làm (mục 9) — còn SYN cookies/giới hạn L4 và
-closed-loop (detector tự kích hoạt chặn).
+(3) vector low-and-slow **đã thêm** (Slowloris, mục 3.3); (4) mitigation L7 đã làm (mục 9) — còn
+SYN cookies/giới hạn L4 và closed-loop (detector tự kích hoạt chặn); (5) phát hiện low-and-slow bằng
+tín hiệu sức khỏe dịch vụ / số kết nối (hiện detector ngưỡng bỏ sót).
 
 ## 11. Thuật ngữ nhanh
 

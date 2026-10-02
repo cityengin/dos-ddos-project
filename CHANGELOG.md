@@ -34,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the detector's live stream. Binds to 127.0.0.1 only; control actions are fixed `docker exec`
   argument arrays (no shell interpolation of client input).
 - Testing & verification guide (`docs/TESTING.md`) covering every component with expected results.
+- Slowloris (L7 low-and-slow) attack (`attacks/slowloris.py`) and a deliberately small victim
+  (`victim/nginx.conf`, low `worker_connections`, mounted via compose) so attacks have a visible
+  effect. The combined defense (`mitigation/nginx/default.conf`) now also stops Slowloris via short
+  header/body timeouts. Before/after demo (`mitigation/demo_slowloris.py`): legit-client success
+  100% → 0% (service down) → 100% (recovered).
+- Dashboard scenario D (Slowloris) with a host service-health view: the victim shows DOWN even while
+  the rate-based detector stays SAFE — visualizing the low-and-slow blind spot.
 
 ## [1.0.0] - 2026-09-30
 
