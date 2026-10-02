@@ -197,7 +197,9 @@ body {
 /* ---------- log ---------- */
 .logbar { border-top: 1px solid var(--border); background: var(--bg2); padding: 10px 22px 14px; }
 .log-head { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 6px; }
-#log { list-style: none; margin: 0; padding: 0; max-height: 120px; overflow-y: auto; font-family: var(--mono); font-size: 12px; }
+/* fixed height (not max-height): the log keeps a constant footprint and scrolls
+   internally, so adding lines never shrinks the panels above. Scroll up for history. */
+#log { list-style: none; margin: 0; padding: 0; height: 130px; overflow-y: auto; font-family: var(--mono); font-size: 12px; }
 #log li { padding: 2px 0; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,.03); }
 #log li time { color: #5a6f92; margin-right: 8px; }
 #log li.ok { color: var(--green); } #log li.attack { color: var(--red); }

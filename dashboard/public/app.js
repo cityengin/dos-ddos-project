@@ -112,12 +112,17 @@
   }
 
   function addLog(m) {
-    const ul = $("log"), li = document.createElement("li");
+    const ul = $("log");
+    // only stick to the newest line if the user is already near the bottom,
+    // so scrolling up to read history is not yanked back down.
+    const atBottom = ul.scrollHeight - ul.scrollTop - ul.clientHeight < 24;
+    const li = document.createElement("li");
     li.className = m.level || "info";
     const t = document.createElement("time"); t.textContent = m.time || "";
     li.appendChild(t); li.appendChild(document.createTextNode(m.msg));
-    ul.insertBefore(li, ul.firstChild);
-    while (ul.children.length > 60) ul.removeChild(ul.lastChild);
+    ul.appendChild(li);                                             // newest at the BOTTOM
+    while (ul.children.length > 60) ul.removeChild(ul.firstChild);  // drop the oldest (top)
+    if (atBottom) ul.scrollTop = ul.scrollHeight;                   // auto-scroll to newest
   }
 
   // ---------- network packets (rAF particle flow) ----------

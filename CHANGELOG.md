@@ -54,6 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   breaks the `network_mode: service:victim` namespace) instead of silently streaming `pps=0`.
 - Dashboard service-health probe runs over the victim loopback, so it no longer appears on the
   sniffed interface and inflates `n_src` — scenario A reads **DoS** again (not DDoS).
+- Dashboard event log now has a fixed height and appends the newest entry at the bottom (scroll up
+  for history), so new lines scroll internally instead of growing the log and squeezing the panels
+  above it.
 
 ## [1.0.0] - 2026-09-30
 
