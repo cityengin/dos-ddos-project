@@ -197,11 +197,27 @@ Thành thật: phương pháp hiện tại là **kinh điển/nền tảng**, ph
 
 ### 8.1. Thử nghiệm ML trên CICDDoS2019 thật (đã làm)
 
-Đã dựng pipeline ML trong [`ml/`](../ml/): huấn luyện **RandomForest** và **HistGradientBoosting**
-trên đặc trưng flow, so với **luật ngưỡng 1 đặc trưng** (baseline mô phỏng chính detector luật của dự
-án). Chạy trên **bộ dữ liệu CICDDoS2019 thật** (bản đã làm sạch `dhoogla/cicddos2019`, tải qua
-`kagglehub`, định dạng parquet, ~131k flow × 63 đặc trưng, 13 họ tấn công). Nếu không tải dữ liệu,
-`ml/make_synthetic.py` tạo bộ mẫu kiểu-CICDDoS2019 để pipeline vẫn chạy được ngay.
+#### CICDDoS2019 là gì?
+
+Đây là **bộ dữ liệu chuẩn (benchmark)** về DDoS do Viện An ninh mạng Canada (CIC, Đại học New
+Brunswick) công bố năm 2019 — một trong những bộ được trích dẫn nhiều nhất trong nghiên cứu phát hiện
+DDoS. Đặc điểm:
+
+- Là **lưu lượng mạng thật** đã bắt và gán nhãn, gồm lưu lượng **hợp lệ (Benign)** và ~13 **họ tấn
+  công** thật — phần lớn là reflection/amplification: NTP, DNS, LDAP, MSSQL, NetBIOS, SNMP, Portmap,
+  UDP, SYN, TFTP, UDP-lag, WebDDoS.
+- Mỗi dòng **không phải một gói**, mà là một **flow** (một luồng kết nối) được công cụ **CICFlowMeter**
+  trích ~80 **đặc trưng thống kê**: kích thước gói (min/max/trung bình/độ lệch), thời gian giữa các gói
+  (IAT), số cờ TCP (SYN/ACK/FIN/RST…), tỉ lệ chiều đi/về (fwd/bwd), độ dài header, số byte/giây…
+- Dự án dùng bản đã làm sạch `dhoogla/cicddos2019` (định dạng parquet, tải qua `kagglehub`): sau khi bỏ
+  cột định danh/hằng số còn **~131k flow × 63 đặc trưng số**.
+
+#### Pipeline
+
+Trong [`ml/`](../ml/): huấn luyện **RandomForest** và **HistGradientBoosting** trên đặc trưng flow, so
+với một **luật ngưỡng 1 đặc trưng** — bản rút gọn **mô phỏng chính detector luật** của dự án (chọn
+ngưỡng tối ưu trên 1 đặc trưng tốc độ). Không tải dữ liệu thì `ml/make_synthetic.py` tạo mẫu
+kiểu-CICDDoS2019 để pipeline vẫn chạy được ngay.
 
 **Phát hiện tấn công (nhị phân: tấn công vs hợp lệ)** — đúng việc mà detector luật đang làm:
 
@@ -213,21 +229,44 @@ trên đặc trưng flow, so với **luật ngưỡng 1 đặc trưng** (baselin
 
 ![ML vs luật ngưỡng](../assets/ml_f1_compare.png)
 
-Đây là **kết quả cốt lõi**: trên lưu lượng DDoS thật trộn nhiều loại, **một ngưỡng đơn lẻ là yếu**
-(F1 0.60), còn mô hình học nhiều đặc trưng thì gần như hoàn hảo (0.999).
-
 **Phân loại họ tấn công (13 lớp):** accuracy **0.93**, macro-F1 **0.735** (RandomForest).
 
 ![Confusion matrix](../assets/ml_confusion.png)
 
-Tấn công thể tích có dấu hiệu riêng thì dễ tách (NTP, TFTP, Syn, MSSQL, UDP đều ≥ 0.92 F1); nhóm UDP
-reflection/amplification (DNS, LDAP, SNMP, Portmap, NetBIOS) chồng lấn đặc trưng ở mức flow nên vẫn
-khó — đây là **giới hạn thật**, không giấu. Ngoài ra CICDDoS2019 gán nhãn cùng một họ theo **hai kiểu**
-ở hai ngày chụp (`DrDoS_X` và `X`); `ml/train.py` **gom về họ chuẩn** (cờ `--raw-labels` để giữ nhãn
-gốc — khi đó macro-F1 chỉ 0.54, phần sụt là do nhãn trùng chứ không phải mô hình kém).
+#### Tác dụng của bước ML này (vì sao đồ án cần nó)
 
-Kết luận: ML dùng **nhiều đặc trưng** (kích thước gói, độ dài header, IAT, tỉ lệ fwd/bwd…) nên vượt xa
-ngưỡng đơn ở việc phát hiện tấn công, và còn phân loại được *họ* tấn công. Tái lập: tải dữ liệu rồi
+1. **Định lượng giới hạn của detector luật.** Detector đang chạy chỉ dựa trên **một** tiêu chí (ngưỡng
+   `pps`/`syn`). Thí nghiệm đưa ra con số thẳng thắn: trên lưu lượng DDoS thật trộn nhiều loại, một
+   ngưỡng đơn chỉ đạt **F1 0.60**, còn mô hình nhiều đặc trưng đạt **0.999**. Đây là bằng chứng *vì sao*
+   luật ngưỡng có trần và *vì sao* nên tiến tới ML — không nói suông.
+
+2. **Kiểm chứng trên dữ liệu chuẩn, khách quan.** Lab chỉ tự sinh 3 loại tấn công từ 3 máy — quá nhỏ để
+   kết luận. CICDDoS2019 là dữ liệu mạng thật, có nhãn, công khai → kết quả **so sánh được với giới
+   nghiên cứu**, không chỉ "chạy tốt trên lab của tôi".
+
+3. **Giới thiệu mô hình phát hiện theo FLOW.** Detector luật **đếm gói theo cửa sổ 1 giây** (dựa lưu
+   lượng tức thời). ML học **đặc trưng mức luồng** (kích thước gói, IAT, tỉ lệ fwd/bwd, số cờ…) — đúng
+   cách các hệ IDS thật và SOTA hoạt động. Đây là một **mô hình phát hiện thứ hai**, giàu thông tin hơn
+   cách đếm gói thuần.
+
+4. **Phân loại được LOẠI tấn công.** Luật chỉ nói DoS/DDoS (kèm nhãn `[SYN flood]`). ML gọi tên được
+   **13 họ tấn công** (accuracy 0.93) — mức chi tiết mà một ngưỡng không thể cho.
+
+5. **Chỉ ra đặc trưng nào quan trọng.** RandomForest xếp hạng đặc trưng quan trọng nhất là **kích thước
+   gói** (Packet Length Min, Avg Packet Size, Packet Length Mean) và **kích thước segment chiều đi**
+   (Avg Fwd Segment Size, Fwd Packet Length Min/Max). Nghĩa là tấn công lộ ra chủ yếu ở **hình dạng/kích
+   thước gói**, không chỉ ở số lượng gói — một hiểu biết về *bản chất*, không chỉ là điểm số.
+
+6. **Trung thực về điểm yếu.** Kết quả đa lớp (macro-F1 0.735) cho thấy nhóm UDP reflection/amplification
+   (DNS, LDAP, SNMP, Portmap, NetBIOS) **chồng lấn đặc trưng** ở mức flow nên khó tách rời — bản thân
+   điều này là một *phát hiện*, cho thấy đồ án không thổi phồng kết quả. (Lưu ý thêm: CICDDoS2019 gán
+   nhãn cùng một họ theo **hai kiểu** ở hai ngày chụp — `DrDoS_X` và `X`; `ml/train.py` **gom về họ
+   chuẩn** mặc định. Cờ `--raw-labels` giữ nhãn gốc → macro-F1 tụt còn 0.54, phần sụt là do nhãn trùng
+   chứ không phải mô hình kém.)
+
+**Tóm lại:** ML CICDDoS2019 *không thay thế* detector đang chạy, mà là phần **nâng cao/đối chứng**: nó
+chứng minh bằng dữ liệu thật rằng cách phát hiện bằng luật ngưỡng là bản đơn giản hoá có giới hạn rõ
+rệt, và chỉ ra hướng đi mạnh hơn (phát hiện theo flow + học máy). Tái lập: tải dữ liệu rồi
 `python ml/train.py --data <thư mục parquet>` (hoặc `python ml/make_synthetic.py && python ml/train.py`).
 
 ## 9. Phòng thủ L7 (mitigation)
