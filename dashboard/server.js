@@ -13,14 +13,16 @@ const { WebSocketServer } = require("ws");
 const HOST = "127.0.0.1";
 const PORT = 3000;
 const VICTIM = "172.30.0.10";
-const ATTACKERS = ["attacker1", "attacker2", "attacker3"];
+const ATTACKERS = ["attacker1", "attacker2", "attacker3", "attacker4", "attacker5", "attacker6"];
 const NGINX_CONF = path.join(__dirname, "..", "mitigation", "nginx", "default.conf");
 
 // Fixed scenario definitions. The client only sends the KEY ("A"/"B"/"C").
+// `pps` paces each SYN sender (per container) so the combined load stays controlled while
+// a spoofed flood still produces many distinct source IPs per window.
 const SCENARIOS = {
-  A: { label: "DoS - 1 source SYN", type: "syn", spoof: false, srcs: ["attacker1"] },
-  B: { label: "DDoS - 3 source SYN + spoof", type: "syn", spoof: true, srcs: ATTACKERS },
-  C: { label: "DDoS - 3 source HTTP (L7)", type: "http", spoof: false, srcs: ATTACKERS },
+  A: { label: "DoS - 1 source SYN", type: "syn", spoof: false, srcs: ["attacker1"], pps: 150 },
+  B: { label: "DDoS - 6 source SYN + spoof", type: "syn", spoof: true, srcs: ATTACKERS, pps: 400 },
+  C: { label: "DDoS - 6 source HTTP (L7)", type: "http", spoof: false, srcs: ATTACKERS },
 };
 
 let running = null;        // active scenario id or null
@@ -101,6 +103,7 @@ async function startAttack(id) {
     let cmd;
     if (s.type === "syn") {
       cmd = ["exec", "-d", a, "python3", "/app/syn_flood.py", VICTIM, "-p", "80"];
+      if (s.pps) cmd.push("--pps", String(s.pps));
       if (s.spoof) cmd.push("--spoof");
     } else { // http
       cmd = ["exec", "-d", a, "python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", "6", "-d", "3600"];

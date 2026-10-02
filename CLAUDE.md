@@ -11,7 +11,7 @@ University end-of-term project (DUT PBL3): simulate DoS/DDoS attacks **and** det
 ## Lab topology (`docker-compose.yml`)
 
 - `victim` — `nginx:alpine` at `172.30.0.10`, published to `localhost:8080`.
-- `attacker1/2/3` — built from `attacker/Dockerfile`, IPs `172.30.0.21/.22/.23`. Have `NET_RAW`+`NET_ADMIN` (required for scapy/hping3 raw packets and IP spoofing). Mount `./attacks` at `/app`.
+- `attacker1..6` — built from `attacker/Dockerfile`, IPs `172.30.0.21..26`. Have `NET_RAW`+`NET_ADMIN` (required for scapy/hping3 raw packets and IP spoofing). Mount `./attacks` at `/app`. (6 containers so an L7/HTTP DDoS shows 6 real sources; SYN floods also spoof for thousands.)
 - `detector` — reuses the attacker image but runs `network_mode: service:victim`, so it shares the victim's network namespace and sniffs the victim's `eth0` directly. Mounts `./detection` at `/app`.
 - Network `dos-lab`: bridge, subnet `172.30.0.0/24`.
 
@@ -30,7 +30,7 @@ docker exec -it detector python3 /app/detector.py --pps 40 --syn 25 --csv /app/a
 docker exec attacker1 python3 /app/syn_flood.py 172.30.0.10 -p 80 --spoof
 docker exec attacker1 python3 /app/http_flood.py 172.30.0.10 -p 80 -t 20 -d 30
 
-# All 3 attackers in parallel (PowerShell orchestrator)
+# All 6 attackers in parallel (PowerShell orchestrator)
 .\run_ddos.ps1 syn        # or: .\run_ddos.ps1 http
 .\run_ddos.ps1 syn -target 172.30.0.10 -duration 30
 
@@ -56,5 +56,5 @@ Known limits to preserve in any writeup (documented in `PROJECT_STATUS.md`): one
 
 ## Attack scripts (`attacks/`)
 
-- `syn_flood.py` — L4, scapy. Crafts `IP()/TCP(flags="S")`; `--spoof` randomizes source IP (`10.x.x.x`) to emulate a multi-source DDoS. `-c 0` means unbounded (stop with the `timeout` wrapper the orchestrator applies, or Ctrl-C).
+- `syn_flood.py` — L4, scapy. Crafts `IP()/TCP(flags="S")`; `--spoof` randomizes source IP (`10.x.x.x`) to emulate a multi-source DDoS. Reuses one `conf.L3socket()` (far faster than per-packet `send()`); `--pps N` paces the send rate (controls load, and a higher rate yields more distinct spoofed IPs per window — scenario B reaches `n_src ~2300`). `-c 0` means unbounded (stop with the `timeout` wrapper the orchestrator applies, or Ctrl-C).
 - `http_flood.py` — L7, `urllib` across `-t` threads for `-d` seconds; counts successful GETs. Produces ACK-heavy traffic (distinguishes L7 floods from SYN floods in the detector output).

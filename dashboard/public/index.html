@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div class="console"><!-- topbar + panels: fills exactly one screen; log is below it -->
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
@@ -37,10 +38,10 @@
           <b>A</b> DoS &middot; 1 source SYN
         </button>
         <button class="btn btn-attack" data-scenario="B">
-          <b>B</b> DDoS &middot; 3 source SYN + spoof
+          <b>B</b> DDoS &middot; 6 source SYN + spoof
         </button>
         <button class="btn btn-attack" data-scenario="C">
-          <b>C</b> DDoS &middot; 3 source HTTP (L7)
+          <b>C</b> DDoS &middot; 6 source HTTP (L7)
         </button>
         <button class="btn btn-stop" id="btn-stop" disabled>&#9632; Stop attack</button>
       </div>
@@ -68,23 +69,35 @@
           </defs>
           <!-- links (attacker -> victim) -->
           <g id="links" stroke-linecap="round">
-            <line class="link" id="link-attacker1" x1="120" y1="70"  x2="410" y2="150"/>
-            <line class="link" id="link-attacker2" x1="120" y1="180" x2="410" y2="150"/>
-            <line class="link" id="link-attacker3" x1="120" y1="290" x2="410" y2="150"/>
+            <line class="link" id="link-attacker1" x1="95" y1="35"  x2="410" y2="150"/>
+            <line class="link" id="link-attacker2" x1="95" y1="92"  x2="410" y2="150"/>
+            <line class="link" id="link-attacker3" x1="95" y1="149" x2="410" y2="150"/>
+            <line class="link" id="link-attacker4" x1="95" y1="206" x2="410" y2="150"/>
+            <line class="link" id="link-attacker5" x1="95" y1="263" x2="410" y2="150"/>
+            <line class="link" id="link-attacker6" x1="95" y1="320" x2="410" y2="150"/>
           </g>
           <g id="packets"></g>
           <!-- detector link -->
           <line class="watchlink" x1="440" y1="186" x2="440" y2="262"/>
 
           <!-- nodes -->
-          <g class="node attacker" id="node-attacker1" transform="translate(90,70)">
-            <circle r="26"/><text class="nlabel" y="-34">attacker1</text><text class="nip" y="4">.21</text>
+          <g class="node attacker" id="node-attacker1" transform="translate(75,35)">
+            <circle r="20"/><text class="nlabel" y="-25">attacker1</text><text class="nip" y="4">.21</text>
           </g>
-          <g class="node attacker" id="node-attacker2" transform="translate(90,180)">
-            <circle r="26"/><text class="nlabel" y="-34">attacker2</text><text class="nip" y="4">.22</text>
+          <g class="node attacker" id="node-attacker2" transform="translate(75,92)">
+            <circle r="20"/><text class="nlabel" y="-25">attacker2</text><text class="nip" y="4">.22</text>
           </g>
-          <g class="node attacker" id="node-attacker3" transform="translate(90,290)">
-            <circle r="26"/><text class="nlabel" y="-34">attacker3</text><text class="nip" y="4">.23</text>
+          <g class="node attacker" id="node-attacker3" transform="translate(75,149)">
+            <circle r="20"/><text class="nlabel" y="-25">attacker3</text><text class="nip" y="4">.23</text>
+          </g>
+          <g class="node attacker" id="node-attacker4" transform="translate(75,206)">
+            <circle r="20"/><text class="nlabel" y="-25">attacker4</text><text class="nip" y="4">.24</text>
+          </g>
+          <g class="node attacker" id="node-attacker5" transform="translate(75,263)">
+            <circle r="20"/><text class="nlabel" y="-25">attacker5</text><text class="nip" y="4">.25</text>
+          </g>
+          <g class="node attacker" id="node-attacker6" transform="translate(75,320)">
+            <circle r="20"/><text class="nlabel" y="-25">attacker6</text><text class="nip" y="4">.26</text>
           </g>
           <g class="node victim" id="node-victim" transform="translate(440,150)">
             <circle class="vhalo" r="46"/>
@@ -140,6 +153,7 @@
       </div>
     </section>
   </main>
+  </div><!-- /.console -->
 
   <section class="logbar" aria-label="Event log">
     <div class="log-head">Event log</div>

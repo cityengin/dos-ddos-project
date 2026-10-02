@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ml/train.py` now reads **parquet** as well as CSV, and label canonicalization (`--raw-labels`
   to disable) that merges CICDDoS2019's dual `DrDoS_X`/`X` labels for the same attack family into
   one canonical family — the dataset labels the same families two ways across capture days.
+- Scaled the lab to **6 attacker containers** (`attacker1..6`, IPs `.21..26`) so an L7/HTTP DDoS
+  shows 6 real sources; `run_ddos.ps1` and `experiments/run_scenarios.py` drive all six.
+- `attacks/syn_flood.py` reuses one `conf.L3socket()` (far faster than per-packet `send()`) and takes
+  `--pps` to pace the send rate; spoofing at a high rate now reaches **n_src ~2300** distinct source
+  IPs per window (H(src) ~11) instead of ~66.
 
 ### Changed
 
@@ -46,7 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accuracy / **0.74** macro-F1. The synthetic sample stays as a zero-download fallback. Regenerated
   `assets/ml_f1_compare.png`, `assets/ml_confusion.png`, and `ml/results/metrics.txt`.
 - Theory guide (`docs/LyThuyet_DoS_DDoS.md`): ML section updated to the real CICDDoS2019 results,
-  plus a note explaining why a lab DDoS shows only 3 sources (3 attacker containers; spoofing is L4-only).
+  plus a note explaining why the source count differs by layer (6 real containers for an L7 DDoS;
+  L4 SYN spoofing reaches ~2300 source IPs).
+- Dashboard: scenarios B/C relabelled to **6 sources** and the network view renders 6 attacker nodes;
+  the event log moved **below the console (off-screen)** so it no longer takes space from the panels
+  (scroll down to see it), which also stops the attack panel from being clipped. Scenario B/C attack
+  commands now pace SYN with `--pps` (A 150, B 400 per source).
 
 ### Fixed
 
@@ -54,9 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   breaks the `network_mode: service:victim` namespace) instead of silently streaming `pps=0`.
 - Dashboard service-health probe runs over the victim loopback, so it no longer appears on the
   sniffed interface and inflates `n_src` — scenario A reads **DoS** again (not DDoS).
-- Dashboard event log now has a fixed height and appends the newest entry at the bottom (scroll up
-  for history), so new lines scroll internally instead of growing the log and squeezing the panels
-  above it.
+- Dashboard event log appends the newest entry at the bottom (chronological, terminal-style) and
+  auto-scrolls only when already near the bottom, so reading history is not yanked down.
 
 ## [1.0.0] - 2026-09-30
 

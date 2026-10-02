@@ -36,11 +36,41 @@ services:
     container_name: attacker3
     cap_add: [NET_RAW, NET_ADMIN]
     volumes:
-      - ./attacks:/app  
+      - ./attacks:/app
     networks:
       dos-lab:
         ipv4_address: 172.30.0.23
-        
+
+  attacker4:
+    build: ./attacker
+    container_name: attacker4
+    cap_add: [NET_RAW, NET_ADMIN]
+    volumes:
+      - ./attacks:/app
+    networks:
+      dos-lab:
+        ipv4_address: 172.30.0.24
+
+  attacker5:
+    build: ./attacker
+    container_name: attacker5
+    cap_add: [NET_RAW, NET_ADMIN]
+    volumes:
+      - ./attacks:/app
+    networks:
+      dos-lab:
+        ipv4_address: 172.30.0.25
+
+  attacker6:
+    build: ./attacker
+    container_name: attacker6
+    cap_add: [NET_RAW, NET_ADMIN]
+    volumes:
+      - ./attacks:/app
+    networks:
+      dos-lab:
+        ipv4_address: 172.30.0.26
+
   detector:
     build: ./attacker              # tai su dung image co scapy san
     container_name: detector

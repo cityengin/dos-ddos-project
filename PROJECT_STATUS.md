@@ -6,7 +6,7 @@ Moi truong: Windows + Docker Desktop (WSL2). Lab co lap hoan toan, KHONG nham ta
 
 ## Kien truc lab (docker-compose.yml)
 - victim: nginx:alpine, IP 172.30.0.10, map ra localhost:8080
-- attacker1/2/3: IP 172.30.0.21/.22/.23, co scapy + hping3, cap NET_RAW+NET_ADMIN
+- attacker1..6: IP 172.30.0.21..26, co scapy + hping3, cap NET_RAW+NET_ADMIN (6 nguon that cho L7)
 - detector: dung chung network namespace voi victim (network_mode: service:victim), sniff eth0
 - network dos-lab: bridge, subnet 172.30.0.0/24
 
@@ -14,7 +14,7 @@ Moi truong: Windows + Docker Desktop (WSL2). Lab co lap hoan toan, KHONG nham ta
 - attacker/Dockerfile        : image tan cong (python3-slim + hping3 + scapy + tcpdump)
 - attacks/syn_flood.py        : SYN flood L4, co --spoof (random source IP)
 - attacks/http_flood.py       : HTTP flood L7, multi-thread GET
-- run_ddos.ps1                : orchestrator PowerShell, chay 3 attacker song song (mode syn|http)
+- run_ddos.ps1                : orchestrator PowerShell, chay 6 attacker song song (mode syn|http)
 - detection/detector.py       : sniffer realtime, tinh pps/syn/ack + entropy(src IP) + entropy(dport), phan loai DoS/DDoS, option --csv, --victim
 - experiments/run_scenarios.py: chay lai A/B/C tu dong -> detection/{A,B,C}.csv + {A,B,C}.meta.json
 - analysis/plot_attack.py     : ve do thi tu CSV (pps/syn/ack symlog + H_src/n_src), to vung tan cong A/B/C
@@ -41,9 +41,10 @@ Moi truong: Windows + Docker Desktop (WSL2). Lab co lap hoan toan, KHONG nham ta
 - Baseline (baseline.csv, 62s idle): pps=syn=ack=0, 0 episode, 0 false positive -> nguong an toan
 - BEFORE fix (attack.csv, detector cu dem ca 2 chieu) -> phan loai chi 2/3, A bi nham DDoS. Giu lam bang chung.
 - AFTER fix (detector --victim, moi kich ban 1 file, detection=0s, FP=0, do thi analysis/{A,B,C}.png):
-  - A) DoS 1 nguon SYN      : pps 58  syn 29  ack 0    n_src=1  H_src=0.00 -> DoS  [SYN flood]  (DUNG)
-  - B) DDoS 3 nguon SYN+spoof: pps 132 syn 66  ack 0    n_src=66 H_src=6.04 -> DDoS [SYN flood]  (DUNG)
-  - C) DDoS 3 nguon HTTP L7  : pps 2196 syn 607 ack 1639 (ACK>>SYN) n_src=3 H_src=1.58 -> DDoS L7 (DUNG)
+  - A) DoS 1 nguon SYN       : pps ~300  syn ~150  ack 0     n_src=1     H_src=0.00  -> DoS  [SYN flood]  (DUNG)
+  - B) DDoS 6 nguon SYN+spoof: pps ~4000 syn ~2000 ack 0     n_src ~2300 H_src ~11.1 -> DDoS [SYN flood]  (DUNG)
+  - C) DDoS 6 nguon HTTP L7  : pps ~1800 syn ~400  ack ~1400 (ACK>>SYN) n_src=6 H_src ~2.58 -> DDoS L7 (DUNG)
+  (so lieu do qua dashboard sau khi nang len 6 attacker + syn_flood --pps; B spoof toc do cao -> n_src len hang nghin)
 - Do chinh xac phan loai: 3/3 (truoc khi sua la 2/3).
 
 ## Phat hien / loi da xac dinh (DA SUA)

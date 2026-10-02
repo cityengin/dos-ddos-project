@@ -46,7 +46,7 @@ container on the private `172.30.0.0/24` network.
 The project has two halves that run against each other in an isolated network:
 
 1. **Attack side** — SYN flood (L4) and HTTP flood (L7) scripts, optionally with IP spoofing,
-   driven from one to three attacker containers.
+   driven from one to six attacker containers.
 2. **Detection side** — a real-time sniffer that reports per-second traffic features and raises
    classified alerts (`DoS` / `DDoS`, with a `[SYN flood]` tag when applicable).
 
@@ -60,8 +60,7 @@ All services share one isolated bridge network, `dos-lab` (`172.30.0.0/24`):
 |-------------|--------------------|---------------|-------------------------------------------------------------|
 | `victim`    | `nginx:alpine`     | 172.30.0.10   | Target web server, published to `localhost:8080`            |
 | `attacker1` | `./attacker`       | 172.30.0.21   | Attack source (scapy + hping3), `NET_RAW` + `NET_ADMIN`     |
-| `attacker2` | `./attacker`       | 172.30.0.22   | Attack source                                               |
-| `attacker3` | `./attacker`       | 172.30.0.23   | Attack source                                               |
+| `attacker2`–`attacker6` | `./attacker` | 172.30.0.22–26 | Attack sources (6 total → an L7 DDoS shows 6 real sources)  |
 | `detector`  | `./attacker`       | shares victim | Sniffs the victim's `eth0` (`network_mode: service:victim`) |
 
 The detector shares the victim's network namespace, so it sees exactly the traffic the victim
@@ -85,7 +84,7 @@ sees. Attack and detection scripts are **bind-mounted**, so edits take effect on
 git clone <your-private-repo-url> dos-ddos-project
 cd dos-ddos-project
 docker compose up -d --build      # build images and start all containers
-docker compose ps                 # verify: victim, detector, attacker1..3 are Up
+docker compose ps                 # verify: victim, detector, attacker1..6 are Up
 ```
 
 Open `http://localhost:8080` to confirm the victim web server responds.
@@ -114,7 +113,7 @@ docker exec attacker1 python3 /app/syn_flood.py 172.30.0.10 -p 80 --spoof
 docker exec attacker1 python3 /app/http_flood.py 172.30.0.10 -p 80 -t 20 -d 30
 ```
 
-**3. Launch a distributed attack** from all three sources:
+**3. Launch a distributed attack** from all six sources:
 
 ```powershell
 # PowerShell orchestrator (Windows)
@@ -173,11 +172,11 @@ Output columns (also written to CSV with `--csv`):
 
 Three reference scenarios, validated in the lab (detection time ≈ 0 s, 0 false positives):
 
-| Scenario                | pps  | syn/s | ack/s | n_src | H(src) | Verdict            |
-|-------------------------|------|-------|-------|-------|--------|--------------------|
-| A — 1-source SYN        | 58   | 29    | 0     | 1     | 0.00   | DoS `[SYN flood]`  |
-| B — 3-source SYN + spoof| 132  | 66    | 0     | 66    | 6.04   | DDoS `[SYN flood]` |
-| C — 3-source HTTP (L7)  | 2196 | 607   | 1639  | 3     | 1.58   | DDoS               |
+| Scenario                | pps   | syn/s | ack/s | n_src  | H(src) | Verdict            |
+|-------------------------|-------|-------|-------|--------|--------|--------------------|
+| A — 1-source SYN        | ~300  | ~150  | 0     | 1      | 0.00   | DoS `[SYN flood]`  |
+| B — 6-source SYN + spoof| ~4000 | ~2000 | 0     | ~2300  | ~11.1  | DDoS `[SYN flood]` |
+| C — 6-source HTTP (L7)  | ~1800 | ~400  | ~1400 | 6      | ~2.58  | DDoS               |
 
 ![Demo timeline](assets/demo.png)
 
@@ -268,7 +267,7 @@ npm start            # serves http://127.0.0.1:3000
 ```
 
 Three panels:
-- **Network View** - topology (victim, 3 attackers, detector) with animated packet flows; the victim
+- **Network View** - topology (victim, 6 attackers, detector) with animated packet flows; the victim
   node changes color with load (green -> amber -> red) from the live detector verdict.
 - **Attack** - buttons launch the real A/B/C scenarios against the lab victim, with live
   pps / syn/s / ack/s / n_src / H(src) and the DoS/DDoS verdict.
@@ -296,7 +295,7 @@ fixed `docker exec` argument array - no client input is interpolated into a shel
 │   └── metrics.py               # detection time / FP / FN / classification table
 ├── results/final/               # finalized dataset + figures used in the report (committed)
 ├── docker-compose.yml           # isolated lab topology
-├── run_ddos.ps1                 # PowerShell orchestrator (3 attackers in parallel)
+├── run_ddos.ps1                 # PowerShell orchestrator (6 attackers in parallel)
 └── TaiLieu_LyThuyet_DoS_DDoS.docx
 ```
 

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
-  const ATTACKERS = ["attacker1", "attacker2", "attacker3"];
+  const ATTACKERS = ["attacker1", "attacker2", "attacker3", "attacker4", "attacker5", "attacker6"];
   const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const SVGNS = "http://www.w3.org/2000/svg";
 
@@ -127,9 +127,8 @@
 
   // ---------- network packets (rAF particle flow) ----------
   const pktGroup = $("packets");
-  const linkEls = {
-    attacker1: $("link-attacker1"), attacker2: $("link-attacker2"), attacker3: $("link-attacker3"),
-  };
+  const linkEls = {};
+  ATTACKERS.forEach((a) => { linkEls[a] = $("link-" + a); });   // one line per attacker node
   const pktState = {};
 
   function setLinkActive(name, active, type, throttled) {

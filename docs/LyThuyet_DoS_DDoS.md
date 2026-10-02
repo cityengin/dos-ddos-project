@@ -81,7 +81,7 @@ có rất nhiều `ACK` — đặc điểm **ACK ≫ SYN** giúp phân biệt L7
 
 ![Kiến trúc lab](../assets/architecture.png)
 
-Mạng cô lập `dos-lab` (`172.30.0.0/24`): `victim` (nginx, .10), ba `attacker` (.21/.22/.23, có scapy +
+Mạng cô lập `dos-lab` (`172.30.0.0/24`): `victim` (nginx, .10), sáu `attacker` (.21–.26, có scapy +
 hping3), và `detector`. Detector chạy `network_mode: service:victim` → **dùng chung namespace mạng với
 victim**, nên thấy đúng lưu lượng victim thấy (dẫn tới lưu ý quan trọng ở mục 5.6).
 
@@ -107,8 +107,8 @@ Entropy càng cao → lưu lượng càng rải đều trên nhiều nguồn.
 | Tình huống | Phân bố | H(src) |
 |---|---|---|
 | 1 nguồn (DoS) | toàn bộ từ 1 IP | 0.00 |
-| 3 nguồn đều | log₂(3) | ≈ 1.58 |
-| ~64 nguồn giả mạo | log₂(64) | ≈ 6.00 |
+| 6 nguồn thật đều (kịch bản C) | log₂(6) | ≈ 2.58 |
+| ~2300 nguồn giả mạo (kịch bản B) | log₂(2300) | ≈ 11.2 |
 
 ### 5.4. Phân loại DoS/DDoS
 Dựa **số nguồn**: `n_src = 1` → **DoS**; `n_src ≥ 2` → **DDoS**. Entropy báo kèm như thước đo phân tán.
@@ -128,21 +128,22 @@ Ba kịch bản chuẩn, số liệu thật từ lab (detection time ≈ 0s, kh�
 
 | Kịch bản | pps | syn/s | ack/s | n_src | H(src) | Nhãn detector |
 |---|---|---|---|---|---|---|
-| A – 1 nguồn SYN | 58 | 29 | 0 | 1 | 0.00 | DoS `[SYN flood]` |
-| B – 3 nguồn SYN + spoof | 132 | 66 | 0 | 66 | 6.04 | DDoS `[SYN flood]` |
-| C – 3 nguồn HTTP (L7) | 2196 | 607 | 1639 | 3 | 1.58 | DDoS |
+| A – 1 nguồn SYN | ~300 | ~150 | 0 | 1 | 0.00 | DoS `[SYN flood]` |
+| B – 6 nguồn SYN + spoof | ~4000 | ~2000 | 0 | **~2300** | ~11.1 | DDoS `[SYN flood]` |
+| C – 6 nguồn HTTP (L7) | ~1800 | ~400 | ~1400 | 6 | ~2.58 | DDoS |
 
 ![Diễn biến demo](../assets/demo.png)
 
 Đọc đồ thị: vùng SYN flood có `ack/s ≈ 0` (half-open); vùng HTTP flood có `ack/s` rất cao (ACK ≫ SYN).
 `n_src` và `H(src)` tăng vọt ở kịch bản SYN có giả mạo IP — đúng bản chất phân tán của DDoS.
 
-**Vì sao DDoS mà `n_src` chỉ bằng 3?** Lab chỉ có **3 máy tấn công** (attacker1/2/3), nên một DDoS
-"nhiều nguồn thật" chỉ hiện tối đa 3 IP nguồn (kịch bản C). Detector phân loại DDoS khi `n_src ≥ 2`,
-nên 3 nguồn đã đủ minh họa khác biệt DoS/DDoS. Muốn mô phỏng **hàng chục–hàng trăm nguồn** như botnet
-thật thì dùng **giả mạo IP** (`--spoof`, kịch bản B → `n_src ≈ 66`) — nhưng chỉ làm được với SYN flood
-(L4, không cần bắt tay); HTTP flood (L7) phải hoàn tất bắt tay TCP nên IP nguồn **bắt buộc là thật**,
-do đó kịch bản C luôn chỉ 3 nguồn. Đây là **giới hạn của lab** (mục 10), không phải lỗi phát hiện.
+**Vì sao số nguồn `n_src` khác nhau giữa B và C?** Lab có **6 máy tấn công** (attacker1–6). HTTP flood
+(L7, kịch bản C) phải **hoàn tất bắt tay TCP** nên IP nguồn **bắt buộc là thật** → số nguồn = số
+container = **6**. SYN flood (L4, kịch bản B) **không cần bắt tay** nên có thể **giả mạo IP** (`--spoof`):
+mỗi gói một IP `10.x.x.x` ngẫu nhiên, bắn tốc độ cao thì một cửa sổ 1 giây chứa **hàng nghìn IP nguồn
+khác nhau** (đo được `n_src ≈ 2300`, `H(src) ≈ 11`). Detector phân loại DDoS khi `n_src ≥ 2`. Điểm mấu
+chốt: **spoofing chỉ mô phỏng được nhiều nguồn ở tầng 4**, còn tầng 7 giới hạn ở số máy thật — một đặc
+điểm của lab (mục 10), không phải lỗi phát hiện.
 
 ## 7. Ngưỡng thích nghi (nâng cao)
 

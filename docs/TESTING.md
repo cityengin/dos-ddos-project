@@ -7,7 +7,7 @@ All tests run against the lab's own `victim` only.
 
 ```bash
 docker compose up -d --build
-docker compose ps          # expect: victim, detector, attacker1, attacker2, attacker3 all "Up"
+docker compose ps          # expect: victim, detector, attacker1..6 all "Up"
 pip install matplotlib pandas scikit-learn   # host, for analysis + ML
 ```
 
@@ -43,12 +43,13 @@ python analysis/metrics.py detection/C.csv --truth DDoS
 
 | Scenario | pps | syn/s | ack/s | n_src | H(src) | Verdict |
 |---|---|---|---|---|---|---|
-| A — 1-source SYN | ~58 | ~29 | 0 | 1 | 0.00 | `DoS [SYN flood]` |
-| B — 3-source SYN + spoof | ~132 | ~66 | 0 | ~66 | ~6.0 | `DDoS [SYN flood]` |
-| C — 3-source HTTP (L7) | ~2000+ | ~600 | ~1600 | 3 | ~1.58 | `DDoS` (no SYN tag) |
+| A — 1-source SYN | ~300 | ~150 | 0 | 1 | 0.00 | `DoS [SYN flood]` |
+| B — 6-source SYN + spoof | ~4000 | ~2000 | 0 | **~2300** | ~11.1 | `DDoS [SYN flood]` |
+| C — 6-source HTTP (L7) | ~1800 | ~400 | ~1400 | 6 | ~2.58 | `DDoS` (no SYN tag) |
 
 Key checks: **A is DoS (n_src=1), B/C are DDoS**; SYN floods have `ack≈0`, the HTTP flood has
-`ack >> syn`.
+`ack >> syn`. B uses 6 attackers each spoofing random IPs at a paced rate, so a single window shows
+**~2300 distinct source IPs** (`H(src)≈11`); C uses the 6 real containers, so `n_src=6`.
 
 **Manual alternative** (two terminals): run the detector (as in step 1, add `--csv /app/attack.csv`)
 and in another terminal launch one attack, e.g.
@@ -121,8 +122,8 @@ Open the page, then verify each case:
 |---|---|
 | Idle (no attack) | Verdict **SAFE**, victim node green "idle", pps/syn tiles 0 |
 | Click **A** (DoS SYN) | Verdict `DoS [SYN flood]`, victim amber/red, link from attacker1 animates |
-| Click **B** (DDoS SYN+spoof) | Verdict `DDoS [SYN flood]`, n_src high, H(src) ~6, all 3 links active, victim red "overloaded" |
-| Click **C** (DDoS HTTP) | Verdict `DDoS`, ack/s >> syn/s, 3 links active |
+| Click **B** (DDoS SYN+spoof) | Verdict `DDoS [SYN flood]`, n_src ~2300, H(src) ~11, all 6 links active, victim red "overloaded" |
+| Click **C** (DDoS HTTP) | Verdict `DDoS`, ack/s >> syn/s, n_src=6, 6 links active |
 | **Stop attack** | Returns to SAFE / idle within ~2 s |
 | **L7 rate-limit** toggle ON | Victim shows a shield; on an HTTP flood the attack is throttled |
 

@@ -25,10 +25,14 @@ body {
   background:
     radial-gradient(1200px 500px at 75% -10%, rgba(59,130,246,0.10), transparent 60%),
     var(--bg);
+  min-height: 100dvh;
+}
+/* The console (topbar + 3 panels) fills exactly one screen. The event log is placed
+   BELOW it, off-screen, so it never steals space from the panels; scroll down to see it. */
+.console {
+  min-height: 100dvh;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  height: 100dvh;
-  overflow: hidden;
+  grid-template-rows: auto 1fr;
 }
 
 /* ---------- topbar ---------- */
@@ -197,16 +201,16 @@ body {
 /* ---------- log ---------- */
 .logbar { border-top: 1px solid var(--border); background: var(--bg2); padding: 10px 22px 14px; }
 .log-head { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 6px; }
-/* fixed height (not max-height): the log keeps a constant footprint and scrolls
-   internally, so adding lines never shrinks the panels above. Scroll up for history. */
-#log { list-style: none; margin: 0; padding: 0; height: 130px; overflow-y: auto; font-family: var(--mono); font-size: 12px; }
+/* the log lives below the console (off-screen); give it a comfortable height with its own
+   scroll. Newest line is at the bottom (chronological); scroll within for older history. */
+#log { list-style: none; margin: 0; padding: 0; height: 300px; overflow-y: auto; font-family: var(--mono); font-size: 12px; }
 #log li { padding: 2px 0; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,.03); }
 #log li time { color: #5a6f92; margin-right: 8px; }
 #log li.ok { color: var(--green); } #log li.attack { color: var(--red); }
 #log li.error { color: var(--amber); }
 
 @media (max-width: 1100px) {
-  body { height: auto; overflow: auto; }
+  .console { min-height: auto; }
   .grid { grid-template-columns: 1fr; overflow: visible; }
   .panel { overflow: visible; }
   .panel.center { order: -1; }

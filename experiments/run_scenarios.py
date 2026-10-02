@@ -9,14 +9,15 @@ import argparse, json, subprocess, time, datetime as dt, os
 
 VICTIM = "172.30.0.10"
 DETECTOR = "detector"
-ATTACKERS = ["attacker1", "attacker2", "attacker3"]
+ATTACKERS = ["attacker1", "attacker2", "attacker3", "attacker4", "attacker5", "attacker6"]
 OUT_DIR = "detection"   # bind-mount /app cua detector -> ./detection tren host
 
-# ten -> (mo ta, nhan mong doi, loai, so attacker dung)
+# ten -> (mo ta, nhan mong doi, loai, so attacker dung, pps moi nguon)
+# pps: dieu tiet toc do (kiem soat tai); voi spoof thi pps cao -> nhieu nguon gia hon.
 SCEN = {
-    "A": dict(desc="1 nguon SYN (khong spoof)", truth="DoS",  mode="syn",  spoof=False, n=1),
-    "B": dict(desc="3 nguon SYN + spoof IP",     truth="DDoS", mode="syn",  spoof=True,  n=3),
-    "C": dict(desc="3 nguon HTTP flood (L7)",    truth="DDoS", mode="http", spoof=False, n=3),
+    "A": dict(desc="1 nguon SYN (khong spoof)", truth="DoS",  mode="syn",  spoof=False, n=1, pps=150),
+    "B": dict(desc="6 nguon SYN + spoof IP",     truth="DDoS", mode="syn",  spoof=True,  n=6, pps=400),
+    "C": dict(desc="6 nguon HTTP flood (L7)",    truth="DDoS", mode="http", spoof=False, n=6, pps=0),
 }
 
 
@@ -56,6 +57,8 @@ def run_one(name, baseline, duration, cooldown):
     for a in used:
         if s["mode"] == "syn":
             cmd = ["timeout", str(duration), "python3", "/app/syn_flood.py", VICTIM, "-p", "80"]
+            if s.get("pps"):
+                cmd += ["--pps", str(s["pps"])]
             if s["spoof"]:
                 cmd.append("--spoof")
         else:
