@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`mitigation/demo_mitigation.py`) that turns the IDS into IPS-style protection. In the lab a
   3-source HTTP flood drops from 30,430 to 240 served requests (~99% blocked) with no impact on a
   legitimate client. Optional permanent mount documented in `docker-compose.yml`.
+- `detector.py --stream`: emit one JSON object per window to stdout (for the dashboard), keeping the
+  existing human-readable table and CSV output unchanged.
+- Local-only realtime dashboard (`dashboard/`, Node + Express + WebSocket): network-topology view,
+  attack control (A/B/C scenarios), and an L7 defense toggle + before/after benchmark, all driven by
+  the detector's live stream. Binds to 127.0.0.1 only; control actions are fixed `docker exec`
+  argument arrays (no shell interpolation of client input).
 
 ## [1.0.0] - 2026-09-30
 

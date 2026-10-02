@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DoS/DDoS Defense Console</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>DoS/DDoS Defense Console</h1>
+        <p class="sub">Isolated lab &middot; localhost only &middot; PBL3</p>
+      </div>
+    </div>
+    <div class="status" role="status" aria-live="polite">
+      <span class="pill" id="pill-docker"><span class="dot"></span> Docker</span>
+      <span class="pill" id="pill-detector"><span class="dot"></span> Detector</span>
+      <span class="pill" id="pill-ws"><span class="dot"></span> Link</span>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- ATTACK PANEL -->
+    <section class="panel" id="attack-panel" aria-labelledby="h-attack">
+      <h2 id="h-attack" class="panel-title attack">Attack</h2>
+
+      <div class="verdict" id="verdict">
+        <span class="verdict-label" id="verdict-label">SAFE</span>
+        <span class="verdict-sub" id="verdict-sub">no attack detected</span>
+      </div>
+
+      <div class="btn-col">
+        <button class="btn btn-attack" data-scenario="A">
+          <b>A</b> DoS &middot; 1 source SYN
+        </button>
+        <button class="btn btn-attack" data-scenario="B">
+          <b>B</b> DDoS &middot; 3 source SYN + spoof
+        </button>
+        <button class="btn btn-attack" data-scenario="C">
+          <b>C</b> DDoS &middot; 3 source HTTP (L7)
+        </button>
+        <button class="btn btn-stop" id="btn-stop" disabled>&#9632; Stop attack</button>
+      </div>
+
+      <div class="metrics">
+        <div class="tile"><span class="tile-k">pps</span><span class="tile-v" id="m-pps">0</span></div>
+        <div class="tile"><span class="tile-k">syn/s</span><span class="tile-v" id="m-syn">0</span></div>
+        <div class="tile"><span class="tile-k">ack/s</span><span class="tile-v" id="m-ack">0</span></div>
+        <div class="tile"><span class="tile-k">n_src</span><span class="tile-v" id="m-nsrc">0</span></div>
+        <div class="tile"><span class="tile-k">H(src)</span><span class="tile-v" id="m-hsrc">0.00</span></div>
+        <div class="tile"><span class="tile-k">thr pps/syn</span><span class="tile-v small" id="m-thr">40/25</span></div>
+      </div>
+    </section>
+
+    <!-- NETWORK VIEW -->
+    <section class="panel center" id="network-panel" aria-labelledby="h-net">
+      <h2 id="h-net" class="panel-title">Network View</h2>
+      <div class="net-wrap">
+        <svg id="net" viewBox="0 0 600 360" preserveAspectRatio="xMidYMid meet" aria-label="Lab network topology">
+          <defs>
+            <radialGradient id="glowGreen" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#22c55e" stop-opacity="0.9"/>
+              <stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <!-- links (attacker -> victim) -->
+          <g id="links" stroke-linecap="round">
+            <line class="link" id="link-attacker1" x1="120" y1="70"  x2="410" y2="150"/>
+            <line class="link" id="link-attacker2" x1="120" y1="180" x2="410" y2="150"/>
+            <line class="link" id="link-attacker3" x1="120" y1="290" x2="410" y2="150"/>
+          </g>
+          <g id="packets"></g>
+          <!-- detector link -->
+          <line class="watchlink" x1="440" y1="186" x2="440" y2="262"/>
+
+          <!-- nodes -->
+          <g class="node attacker" id="node-attacker1" transform="translate(90,70)">
+            <circle r="26"/><text class="nlabel" y="-34">attacker1</text><text class="nip" y="4">.21</text>
+          </g>
+          <g class="node attacker" id="node-attacker2" transform="translate(90,180)">
+            <circle r="26"/><text class="nlabel" y="-34">attacker2</text><text class="nip" y="4">.22</text>
+          </g>
+          <g class="node attacker" id="node-attacker3" transform="translate(90,290)">
+            <circle r="26"/><text class="nlabel" y="-34">attacker3</text><text class="nip" y="4">.23</text>
+          </g>
+          <g class="node victim" id="node-victim" transform="translate(440,150)">
+            <circle class="vhalo" r="46"/>
+            <circle class="vcore" r="34"/>
+            <text class="nlabel" y="-44">victim (nginx)</text>
+            <text class="nip" y="-2">.10</text>
+            <text class="vstate" id="victim-state" y="14">idle</text>
+            <path class="shield" id="victim-shield" d="M0,-16 L14,-10 L14,4 Q14,16 0,22 Q-14,16 -14,4 L-14,-10 Z"/>
+          </g>
+          <g class="node detector" id="node-detector" transform="translate(440,290)">
+            <circle class="dring" r="24"/>
+            <circle r="18"/>
+            <text class="nlabel" y="34">detector</text>
+          </g>
+        </svg>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-head">
+          <span>Traffic to victim (last 60s)</span>
+          <span class="legend">
+            <i class="lg pps"></i>pps <i class="lg syn"></i>syn/s <i class="lg ack"></i>ack/s
+          </span>
+        </div>
+        <canvas id="chart" width="900" height="150"></canvas>
+      </div>
+    </section>
+
+    <!-- DEFENSE PANEL -->
+    <section class="panel" id="defense-panel" aria-labelledby="h-def">
+      <h2 id="h-def" class="panel-title defense">Defense</h2>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-title">L7 rate-limit</div>
+          <div class="toggle-sub">nginx per-IP (10 r/s)</div>
+        </div>
+        <button class="switch" id="sw-mitigation" role="switch" aria-checked="false" aria-label="Toggle mitigation">
+          <span class="knob"></span>
+        </button>
+      </div>
+
+      <div class="health">
+        <div class="health-title">Legitimate client</div>
+        <div class="metrics two">
+          <div class="tile"><span class="tile-k">status</span><span class="tile-v small" id="h-ok">-</span></div>
+          <div class="tile"><span class="tile-k">latency</span><span class="tile-v" id="h-ms">-</span></div>
+        </div>
+      </div>
+
+      <div class="bench">
+        <button class="btn btn-bench" id="btn-bench">Run benchmark (before/after)</button>
+        <div class="bench-result" id="bench-result" hidden>
+          <div class="bars">
+            <div class="bar-col"><div class="bar before" id="bar-before"></div><span class="bar-cap">before</span><b id="bench-before">-</b></div>
+            <div class="bar-col"><div class="bar after" id="bar-after"></div><span class="bar-cap">after</span><b id="bench-after">-</b></div>
+          </div>
+          <div class="bench-note" id="bench-note"></div>
+        </div>
+        <div class="bench-hint" id="bench-hint">Served HTTP requests with vs without rate-limit.</div>
+      </div>
+    </section>
+  </main>
+
+  <section class="logbar" aria-label="Event log">
+    <div class="log-head">Event log</div>
+    <ul id="log"></ul>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

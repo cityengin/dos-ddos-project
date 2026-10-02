@@ -25,6 +25,11 @@ ml/models/
 *.pkl
 *.joblib
 
+# ===== Dashboard (Node) =====
+dashboard/node_modules/
+dashboard/*.log
+npm-debug.log*
+
 # ===== Local tooling / IDE / editors =====
 .claude/settings.local.json
 .vscode/

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Phat hien DoS/DDoS realtime: threshold + entropy. Chi dung trong lab."""
-import argparse, time, math, collections, threading
+import argparse, time, math, collections, threading, json
 from scapy.all import sniff, IP, TCP
 
 # ====== bo dem cho moi cua so thoi gian ======
@@ -66,19 +66,22 @@ def main():
     ap.add_argument("--alpha", type=float, default=0.2, help="he so lam min EWMA (0..1)")
     ap.add_argument("--k", type=float, default=4.0, help="do nhay: nguong = baseline + k*MAD")
     ap.add_argument("--warmup", type=int, default=8, help="so cua so hoc baseline truoc khi canh bao")
+    ap.add_argument("--stream", action="store_true",
+                    help="in 1 JSON/dong moi window ra stdout (cho dashboard); tat bang text")
     ap.add_argument("--csv", default="", help="ghi log ra file CSV neu co")
     args = ap.parse_args()
 
     global VICTIM
     VICTIM = args.victim or None
 
-    print("[*] Detector chay tren iface=%s, interval=%.1fs, nguong pps=%d syn=%d, victim=%s"
-          % (args.iface, args.interval, args.pps, args.syn, VICTIM or "(tat ca)"))
-    if args.adaptive:
-        print("[*] Che do NGUONG THICH NGHI (EWMA): alpha=%.2f k=%.1f warmup=%ds, san toi thieu pps>=%d syn>=%d"
-              % (args.alpha, args.k, args.warmup, args.pps, args.syn))
-    print("%-8s %8s %8s %8s %10s %10s   %s" %
-          ("time","pkts/s","syn/s","ack/s","H(src)","H(dport)","ALERT"))
+    if not args.stream:
+        print("[*] Detector chay tren iface=%s, interval=%.1fs, nguong pps=%d syn=%d, victim=%s"
+              % (args.iface, args.interval, args.pps, args.syn, VICTIM or "(tat ca)"))
+        if args.adaptive:
+            print("[*] Che do NGUONG THICH NGHI (EWMA): alpha=%.2f k=%.1f warmup=%ds, san toi thieu pps>=%d syn>=%d"
+                  % (args.alpha, args.k, args.warmup, args.pps, args.syn))
+        print("%-8s %8s %8s %8s %10s %10s   %s" %
+              ("time","pkts/s","syn/s","ack/s","H(src)","H(dport)","ALERT"))
     csvf = open(args.csv, "w") if args.csv else None
     if csvf:
         csvf.write("time,pps,syn_s,ack_s,h_src,h_dport,n_src,alert\n")
@@ -120,23 +123,37 @@ def main():
             triggered = pps >= thr_pps or syn_s >= thr_syn
 
         alert = ""
+        verdict = None
+        syn_flood = False
         if triggered:
             # co flood -> phan loai dua vao so nguon + entropy nguon
-            if n_src >= 2:
+            verdict = "DDoS" if n_src >= 2 else "DoS"
+            syn_flood = (syn_s >= thr_syn and ack_s < syn_s * 0.2)
+            if verdict == "DDoS":
                 alert = "!! DDoS (nhieu nguon, H_src=%.2f, n=%d)" % (h_src, n_src)
             else:
                 alert = "!! DoS  (it nguon, H_src=%.2f, n=%d)" % (h_src, n_src)
-            if syn_s >= thr_syn and ack_s < syn_s * 0.2:
+            if syn_flood:
                 alert += " [SYN flood]"
-                
+
         if csvf:
             csvf.write("%s,%.0f,%.0f,%.0f,%.3f,%.3f,%d,%s\n" %
                        (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, n_src,
                         alert.replace(","," ")))
             csvf.flush()
 
-        print("%-8s %8.0f %8.0f %8.0f %10.2f %10.2f   %s" %
-              (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, alert))
+        if args.stream:
+            # 1 JSON/dong cho dashboard (stdout sach, de backend parse)
+            print(json.dumps({
+                "time": time.strftime("%H:%M:%S"),
+                "pps": round(pps), "syn": round(syn_s), "ack": round(ack_s),
+                "h_src": round(h_src, 3), "h_dport": round(h_dport, 3), "n_src": n_src,
+                "triggered": bool(triggered), "verdict": verdict, "syn_flood": syn_flood,
+                "thr_pps": round(thr_pps, 1), "thr_syn": round(thr_syn, 1),
+            }), flush=True)
+        else:
+            print("%-8s %8.0f %8.0f %8.0f %10.2f %10.2f   %s" %
+                  (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, alert))
 
 if __name__ == "__main__":
     main()

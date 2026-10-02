@@ -239,6 +239,32 @@ latency *dropped* (16 ms → 6 ms) because the server no longer wastes work on t
 To make the limits permanent instead of applying them at runtime, mount the config into the victim
 (see the commented `volumes` block under `victim` in `docker-compose.yml`).
 
+## Dashboard (local demo)
+
+A local-only web dashboard ([`dashboard/`](dashboard/)) visualizes the lab in real time for
+presentations: live network topology, attack control, and the L7 defense, all driven by the
+detector's live stream over WebSocket. It binds to **127.0.0.1 only** and is never exposed to the
+network.
+
+Requirements: Node.js 18+ and the lab running (`docker compose up -d`).
+
+```bash
+cd dashboard
+npm install
+npm start            # serves http://127.0.0.1:3000
+```
+
+Three panels:
+- **Network View** - topology (victim, 3 attackers, detector) with animated packet flows; the victim
+  node changes color with load (green -> amber -> red) from the live detector verdict.
+- **Attack** - buttons launch the real A/B/C scenarios against the lab victim, with live
+  pps / syn/s / ack/s / n_src / H(src) and the DoS/DDoS verdict.
+- **Defense** - toggle the nginx rate-limit and run a before/after benchmark (served requests).
+
+The backend runs `detector.py --stream` (a new JSON-per-window mode that preserves the table/CSV
+behavior) inside the detector container and relays it over WebSocket. Every control action maps to a
+fixed `docker exec` argument array - no client input is interpolated into a shell.
+
 ## Project Structure
 
 ```

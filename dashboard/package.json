@@ -1,0 +1,14 @@
+{
+  "name": "dos-ddos-dashboard",
+  "version": "1.0.0",
+  "description": "Local-only realtime dashboard for the DoS/DDoS lab (demo).",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}
