@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Phat hien DoS/DDoS realtime: threshold + entropy. Chi dung trong lab."""
-import argparse, time, math, collections, threading, json
+import argparse, time, math, collections, threading, json, sys, os
 from scapy.all import sniff, IP, TCP
 
 # ====== bo dem cho moi cua so thoi gian ======
@@ -86,8 +86,19 @@ def main():
     if csvf:
         csvf.write("time,pps,syn_s,ack_s,h_src,h_dport,n_src,alert\n")
 
-    # sniff chay o thread rieng, main loop in bao cao moi interval
-    t = threading.Thread(target=lambda: sniff(iface=args.iface, prn=on_packet, store=0), daemon=True)
+    # sniff chay o thread rieng, main loop in bao cao moi interval.
+    # Neu sniff LOI (vd netns gay sau khi recreate victim) -> bao RO va thoat han,
+    # tranh im lang bao pps=0 mai (loi tung gap).
+    def sniff_loop():
+        try:
+            sniff(iface=args.iface, prn=on_packet, store=0)
+        except Exception as e:
+            sys.stderr.write("[X] sniff that bai tren iface=%s: %s\n"
+                             "    (netns co the da gay - hay 'docker compose up -d --force-recreate')\n"
+                             % (args.iface, e))
+            sys.stderr.flush()
+            os._exit(3)
+    t = threading.Thread(target=sniff_loop, daemon=True)
     t.start()
 
     ew = {"mu_pps": 0.0, "mad_pps": 0.0, "mu_syn": 0.0, "mad_syn": 0.0}  # trang thai EWMA

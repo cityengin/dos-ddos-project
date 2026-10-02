@@ -31,7 +31,6 @@
       case "state": onState(m); break;
       case "defense": applyMitigation(m.mitigation); break;
       case "health": onHealth(m); break;
-      case "bench": onBench(m); break;
       case "log": addLog(m); break;
     }
   }
@@ -110,20 +109,6 @@
     ms.textContent = (m.ms != null ? m.ms : "-") + "ms";
     serviceDown = !m.ok;      // host can't reach the service -> victim shows DOWN
     updateVictim();
-  }
-
-  function onBench(m) {
-    const btn = $("btn-bench");
-    if (m.status === "running") { btn.classList.add("running"); btn.textContent = "Benchmarking…"; return; }
-    btn.classList.remove("running"); btn.textContent = "Run benchmark (before/after)";
-    $("bench-hint").hidden = true;
-    $("bench-result").hidden = false;
-    $("bench-before").textContent = m.before;
-    $("bench-after").textContent = m.after;
-    const max = Math.max(m.before, 1);
-    $("bar-before").style.height = (100 * m.before / max) + "%";
-    $("bar-after").style.height = (100 * m.after / max) + "%";
-    $("bench-note").textContent = `~${m.blocked}% of attack requests blocked by rate-limit.`;
   }
 
   function addLog(m) {
@@ -217,7 +202,6 @@
     b.addEventListener("click", () => send({ action: "attack", scenario: b.dataset.scenario })));
   $("btn-stop").addEventListener("click", () => send({ action: "stop" }));
   $("sw-mitigation").addEventListener("click", () => send({ action: "mitigation", on: !mitigation }));
-  $("btn-bench").addEventListener("click", () => send({ action: "benchmark" }));
 
   // ---------- init ----------
   document.querySelector(".dring").classList.add("pulse");

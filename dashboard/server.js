@@ -56,6 +56,17 @@ async function startDetector() {
     setTimeout(startDetector, 5000); // retry
     return;
   }
+  // verify the detector actually SHARES the victim's network namespace (curl localhost -> nginx).
+  // If recreate-victim-without-detector broke it, fail loudly instead of streaming silent zeros.
+  const ns = await docker(["exec", "detector", "curl", "-s", "-m", "2", "-o", "/dev/null",
+    "-w", "%{http_code}", "http://localhost:80"], 6000);
+  if ((ns.stdout || "").trim() !== "200") {
+    broadcast({ type: "detector", up: false });
+    logEvent("Detector cannot reach the victim (shared netns broken). " +
+             "Run: docker compose up -d --force-recreate", "error");
+    setTimeout(startDetector, 6000);
+    return;
+  }
   await docker(["exec", "detector", "pkill", "-f", "detector.py"]).catch(() => {});
   detectorProc = spawn("docker",
     ["exec", "detector", "python3", "-u", "/app/detector.py",
@@ -132,42 +143,19 @@ async function setMitigation(on) {
   logEvent(`Mitigation ${on ? "ENABLED (nginx rate-limit)" : "disabled"}.`, on ? "ok" : "info");
 }
 
-// measure served HTTP requests (200) during a 5s flood from all attackers
-function floodMeasure() {
-  return Promise.all(ATTACKERS.map((a) => new Promise((res) => {
-    execFile("docker", ["exec", a, "python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", "6", "-d", "5"],
-      { timeout: 15000, windowsHide: true }, (e, so) => {
-        const m = /thanh cong:\s*(\d+)/.exec(so || "");
-        res(m ? parseInt(m[1], 10) : 0);
-      });
-  }))).then((arr) => arr.reduce((x, y) => x + y, 0));
-}
-
-async function benchmark() {
-  await stopAttack(true);
-  broadcast({ type: "bench", status: "running" });
-  logEvent("Defense benchmark running (before/after)...", "info");
-  await setMitigation(false);
-  const before = await floodMeasure();
-  await setMitigation(true);
-  const after = await floodMeasure();
-  await setMitigation(false);
-  const blocked = before > 0 ? Math.round(100 * (1 - after / before)) : 0;
-  broadcast({ type: "bench", status: "done", before, after, blocked });
-  logEvent(`Benchmark: served ${before} -> ${after} requests (~${blocked}% blocked).`, "ok");
-}
-
-// ---- legitimate-client health probe (from host) ----
+// ---- service-health probe (loopback, inside victim's netns) ----
+// Probing from the detector over localhost goes via `lo`, NOT eth0, so it does NOT
+// appear to the sniffer as an extra source (which previously made scenario A look like
+// DDoS). curl's %{time_total} is the real request latency, excluding docker-exec overhead.
 setInterval(async () => {
   if (!dockerOk) return;
-  const t0 = Date.now();
-  try {
-    const r = await fetch("http://localhost:8080/", { signal: AbortSignal.timeout(2000) });
-    broadcast({ type: "health", ok: r.ok, status: r.status, ms: Date.now() - t0 });
-  } catch {
-    broadcast({ type: "health", ok: false, ms: Date.now() - t0 });
-  }
-}, 2000);
+  const r = await docker(["exec", "detector", "curl", "-s", "-m", "2", "-o", "/dev/null",
+    "-w", "%{http_code} %{time_total}", "http://localhost:80"], 4000);
+  const parts = (r.stdout || "").trim().split(/\s+/);
+  const code = parts[0] || "000";
+  const ms = parts[1] ? Math.round(parseFloat(parts[1]) * 1000) : null;
+  broadcast({ type: "health", ok: code === "200", status: code, ms });
+}, 2500);
 
 // ---- http + ws server (127.0.0.1 only) ----
 const app = express();
@@ -190,7 +178,6 @@ wss.on("connection", (ws) => {
       if (msg.action === "attack" && typeof msg.scenario === "string") await startAttack(msg.scenario);
       else if (msg.action === "stop") await stopAttack(false);
       else if (msg.action === "mitigation") await setMitigation(!!msg.on);
-      else if (msg.action === "benchmark") await benchmark();
     } catch (e) {
       logEvent("Action failed: " + (e && e.message ? e.message : String(e)), "error");
     }
