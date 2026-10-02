@@ -156,7 +156,6 @@ body {
 .link.active { stroke: var(--red); stroke-width: 3; opacity: .95;
   stroke-dasharray: 10 8; animation: flow 0.6s linear infinite; }
 .link.active.http { stroke: var(--amber); }
-.link.active.slow { stroke: #a855f7; animation-duration: 1.6s; }   /* low-and-slow */
 .link.throttled { opacity: .3; stroke-dasharray: 3 12; animation-duration: 1.6s; }
 .watchlink { stroke: var(--blue); stroke-width: 1.5; stroke-dasharray: 2 5; opacity: .5; }
 @keyframes flow { to { stroke-dashoffset: -18; } }

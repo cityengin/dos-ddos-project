@@ -2,14 +2,14 @@ services:
   victim:
     image: nginx:alpine
     container_name: victim
-    volumes:
-      - ./victim/nginx.conf:/etc/nginx/nginx.conf:ro   # deliberately small server (low worker_connections)
     networks:
       dos-lab:
         ipv4_address: 172.30.0.10
     ports:
       - "8080:80"          # xem web từ Windows qua http://localhost:8080
-    # Mitigation is applied to conf.d/default.conf at runtime (dashboard toggle / mitigation demos).
+    # To enable L7 rate limiting permanently, uncomment (see mitigation/):
+    # volumes:
+    #   - ./mitigation/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
 
   attacker1:
     build: ./attacker

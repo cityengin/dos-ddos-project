@@ -42,9 +42,6 @@
         <button class="btn btn-attack" data-scenario="C">
           <b>C</b> DDoS &middot; 3 source HTTP (L7)
         </button>
-        <button class="btn btn-attack" data-scenario="D">
-          <b>D</b> Slowloris &middot; low-and-slow (L7)
-        </button>
         <button class="btn btn-stop" id="btn-stop" disabled>&#9632; Stop attack</button>
       </div>
 
@@ -138,8 +135,8 @@
       </div>
 
       <div class="def-note">
-        Rate-limit (L7) throttles an HTTP flood; header timeouts drop Slowloris connections.
-        Launch scenario <b>C</b> or <b>D</b>, then toggle this on to watch the service recover.
+        Rate-limit (L7) throttles an HTTP flood (excess requests get 429).
+        Launch scenario <b>C</b>, then toggle this on to see the attack capped per IP.
       </div>
     </section>
   </main>

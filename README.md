@@ -112,9 +112,6 @@ docker exec attacker1 python3 /app/syn_flood.py 172.30.0.10 -p 80 --spoof
 
 # HTTP flood (L7), 20 threads for 30 seconds
 docker exec attacker1 python3 /app/http_flood.py 172.30.0.10 -p 80 -t 20 -d 30
-
-# Slowloris (L7 low-and-slow): hold 150 connections open
-docker exec attacker1 python3 /app/slowloris.py 172.30.0.10 -p 80 -c 150
 ```
 
 **3. Launch a distributed attack** from all three sources:
@@ -222,10 +219,9 @@ On the sample, attack-detection F1 rises from **0.86** (single-threshold rule) t
 ## Defense / mitigation (L7)
 
 The detector is an IDS — it *sees* attacks. [`mitigation/`](mitigation/) adds an IPS-style defense:
-an nginx config ([`mitigation/nginx/default.conf`](mitigation/nginx/default.conf)) that defends two
-L7 attacks — per-IP rate limits against an **HTTP flood**, and short header/body timeouts against
-**Slowloris**. The victim is a deliberately small server (low `worker_connections`, see
-[`victim/nginx.conf`](victim/nginx.conf)) so the attacks have a visible effect.
+an nginx configuration with per-IP request and connection rate limits
+([`mitigation/nginx/default.conf`](mitigation/nginx/default.conf)) that caps an HTTP flood while
+leaving legitimate clients untouched.
 
 Run the before/after demo (applies the config at runtime, floods from the three attackers, measures
 a legitimate client from the host, then restores nginx):
@@ -240,19 +236,8 @@ latency *dropped* (16 ms → 6 ms) because the server no longer wastes work on t
 
 ![L7 mitigation before/after](assets/mitigation_demo.png)
 
-**Slowloris (low-and-slow)** is the strongest impact demo. Because the victim is small, holding a
-few dozen connections open exhausts its slots and the service becomes **unreachable** for a
-legitimate client — yet the rate-based detector stays *SAFE* (very low traffic: the low-and-slow
-blind spot). The defense's `client_header_timeout` drops the slow connections and the service
-recovers:
-
-```bash
-python mitigation/demo_slowloris.py
-```
-
-Lab result (legitimate-client success): **100% → 0% (service down) → 100% (recovered)**.
-
-![Slowloris before/after](assets/slowloris_demo.png)
+To make the limits permanent instead of applying them at runtime, mount the config into the victim
+(see the commented `volumes` block under `victim` in `docker-compose.yml`).
 
 ## Dashboard (local demo)
 
@@ -272,9 +257,10 @@ npm start            # serves http://127.0.0.1:3000
 Three panels:
 - **Network View** - topology (victim, 3 attackers, detector) with animated packet flows; the victim
   node changes color with load (green -> amber -> red) from the live detector verdict.
-- **Attack** - buttons launch the real A/B/C/D scenarios (incl. Slowloris) against the lab victim, with live
+- **Attack** - buttons launch the real A/B/C scenarios against the lab victim, with live
   pps / syn/s / ack/s / n_src / H(src) and the DoS/DDoS verdict.
-- **Defense** - toggle the nginx rate-limit and run a before/after benchmark (served requests).
+- **Defense** - toggle the nginx rate-limit on/off; a service-health probe shows whether the victim
+  can still serve requests.
 
 The backend runs `detector.py --stream` (a new JSON-per-window mode that preserves the table/CSV
 behavior) inside the detector container and relays it over WebSocket. Every control action maps to a
@@ -287,20 +273,15 @@ fixed `docker exec` argument array - no client input is interpolated into a shel
 ├── attacker/Dockerfile          # attacker/detector image (scapy + hping3 + tcpdump)
 ├── attacks/
 │   ├── syn_flood.py             # L4 SYN flood (scapy), optional --spoof
-│   ├── http_flood.py            # L7 HTTP flood (multi-threaded GET)
-│   └── slowloris.py             # L7 low-and-slow (holds connections open)
-├── detection/detector.py        # real-time detector (threshold + entropy + classification, --stream)
-├── victim/nginx.conf            # deliberately small victim (low worker_connections)
-├── mitigation/
-│   ├── nginx/default.conf       # L7 defense (rate-limit + anti-Slowloris timeouts)
-│   ├── demo_mitigation.py       # HTTP-flood before/after
-│   └── demo_slowloris.py        # Slowloris before/after
-├── experiments/                 # run_scenarios.py, adaptive_eval.py, demo.py
-├── analysis/                    # plot_attack.py, metrics.py
-├── ml/                          # train.py + make_synthetic.py (CICDDoS2019-style)
-├── dashboard/                   # local-only realtime web dashboard (Node + ws)
-├── results/final/               # finalized dataset + figures used in the report
-├── docs/                        # theory guide, TESTING.md
+│   └── http_flood.py            # L7 HTTP flood (multi-threaded GET)
+├── detection/detector.py        # real-time detector (threshold + entropy + classification)
+├── experiments/
+│   ├── run_scenarios.py         # reproducible A/B/C runs -> CSV + meta
+│   └── demo.py                  # narrated one-command demo with Docker preflight
+├── analysis/
+│   ├── plot_attack.py           # timeline plots from CSV
+│   └── metrics.py               # detection time / FP / FN / classification table
+├── results/final/               # finalized dataset + figures used in the report (committed)
 ├── docker-compose.yml           # isolated lab topology
 ├── run_ddos.ps1                 # PowerShell orchestrator (3 attackers in parallel)
 └── TaiLieu_LyThuyet_DoS_DDoS.docx
@@ -311,8 +292,7 @@ fixed `docker exec` argument array - no client input is interpolated into a shel
 - A single host spoofing many IPs is **indistinguishable** from many real hosts as seen by the
   victim (both look like "many sources").
 - Rate thresholds are sensitive to **flash crowds** (false positives) and miss **low-and-slow**
-  attacks such as Slowloris (false negatives) — demonstrated by scenario D, where the detector stays
-  SAFE while the service is actually down (the dashboard's service-health view catches it).
+  attacks such as Slowloris (false negatives).
 - Entropy values depend on the **baseline** and the observation window length.
 - Detection is **host-based** at the victim; truly volumetric attacks that saturate the uplink
   must be mitigated **upstream** (firewall / rate limiting / CDN / scrubbing).

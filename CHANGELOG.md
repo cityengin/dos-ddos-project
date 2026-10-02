@@ -30,17 +30,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `detector.py --stream`: emit one JSON object per window to stdout (for the dashboard), keeping the
   existing human-readable table and CSV output unchanged.
 - Local-only realtime dashboard (`dashboard/`, Node + Express + WebSocket): network-topology view,
-  attack control (A/B/C scenarios), and an L7 defense toggle + before/after benchmark, all driven by
-  the detector's live stream. Binds to 127.0.0.1 only; control actions are fixed `docker exec`
-  argument arrays (no shell interpolation of client input).
+  attack control (A/B/C scenarios), and an L7 defense toggle, all driven by the detector's live
+  stream. Binds to 127.0.0.1 only; control actions are fixed `docker exec` argument arrays
+  (no shell interpolation of client input).
 - Testing & verification guide (`docs/TESTING.md`) covering every component with expected results.
-- Slowloris (L7 low-and-slow) attack (`attacks/slowloris.py`) and a deliberately small victim
-  (`victim/nginx.conf`, low `worker_connections`, mounted via compose) so attacks have a visible
-  effect. The combined defense (`mitigation/nginx/default.conf`) now also stops Slowloris via short
-  header/body timeouts. Before/after demo (`mitigation/demo_slowloris.py`): legit-client success
-  100% → 0% (service down) → 100% (recovered).
-- Dashboard scenario D (Slowloris) with a host service-health view: the victim shows DOWN even while
-  the rate-based detector stays SAFE — visualizing the low-and-slow blind spot.
+
+### Fixed
+
+- Detector exits loudly if its packet sniff fails (e.g. after recreating only the victim, which
+  breaks the `network_mode: service:victim` namespace) instead of silently streaming `pps=0`.
+- Dashboard service-health probe runs over the victim loopback, so it no longer appears on the
+  sniffed interface and inflates `n_src` — scenario A reads **DoS** again (not DDoS).
 
 ## [1.0.0] - 2026-09-30
 

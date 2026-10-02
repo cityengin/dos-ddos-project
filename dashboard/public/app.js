@@ -131,7 +131,6 @@
     const link = linkEls[name], node = $("node-" + name);
     link.classList.toggle("active", active);
     link.classList.toggle("http", active && type === "http");
-    link.classList.toggle("slow", active && type === "slowloris");
     link.classList.toggle("throttled", !!throttled);
     node.classList.toggle("active", active);
     if (active && !REDUCE) ensurePackets(name, type); else clearPackets(name);
@@ -142,7 +141,7 @@
     for (let i = 0; i < 4; i++) {
       const c = document.createElementNS(SVGNS, "circle");
       c.setAttribute("r", "3.2"); c.setAttribute("class", "packet");
-      c.style.fill = type === "slowloris" ? "#d8b4fe" : type === "http" ? "#fde68a" : "#fecaca";
+      c.style.fill = type === "http" ? "#fde68a" : "#fecaca";
       pktGroup.appendChild(c);
       dots.push({ el: c, phase: i / 4 });
     }
