@@ -23,6 +23,7 @@
     switch (m.type) {
       case "snapshot":
         setPill("pill-docker", m.dockerOk); applyMitigation(!!m.mitigation);
+        onState(m.running ? m : { running: null });
         break;
       case "docker": setPill("pill-docker", m.up); break;
       case "detector": setPill("pill-detector", m.up); break;

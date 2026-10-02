@@ -167,12 +167,13 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws) => {
-  ws.send(JSON.stringify({ type: "snapshot", running, mitigation, dockerOk,
-    scenarios: Object.fromEntries(Object.entries(SCENARIOS).map(([k, v]) => [k, { label: v.label }])) }));
+  const snap = { type: "snapshot", running, mitigation, dockerOk,
+    scenarios: Object.fromEntries(Object.entries(SCENARIOS).map(([k, v]) => [k, { label: v.label }])) };
   if (running && SCENARIOS[running]) {
     const s = SCENARIOS[running];
-    ws.send(JSON.stringify({ type: "state", running, label: s.label, attackers: s.srcs, attackType: s.type, spoof: s.spoof }));
+    Object.assign(snap, { label: s.label, attackers: s.srcs, attackType: s.type, spoof: s.spoof });
   }
+  ws.send(JSON.stringify(snap));
   ws.on("message", async (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
