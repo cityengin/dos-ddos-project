@@ -21,6 +21,7 @@ const SCENARIOS = {
   A: { label: "DoS - 1 source SYN", type: "syn", spoof: false, srcs: ["attacker1"] },
   B: { label: "DDoS - 3 source SYN + spoof", type: "syn", spoof: true, srcs: ATTACKERS },
   C: { label: "DDoS - 3 source HTTP (L7)", type: "http", spoof: false, srcs: ATTACKERS },
+  D: { label: "Slowloris - 3 source low-and-slow", type: "slowloris", spoof: false, srcs: ATTACKERS },
 };
 
 let running = null;        // active scenario id or null
@@ -87,10 +88,15 @@ async function startAttack(id) {
   if (!s) return;
   await stopAttack(true);
   for (const a of s.srcs) {
-    const cmd = s.type === "syn"
-      ? ["exec", "-d", a, "python3", "/app/syn_flood.py", VICTIM, "-p", "80"]
-      : ["exec", "-d", a, "python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", "6", "-d", "3600"];
-    if (s.type === "syn" && s.spoof) cmd.push("--spoof");
+    let cmd;
+    if (s.type === "syn") {
+      cmd = ["exec", "-d", a, "python3", "/app/syn_flood.py", VICTIM, "-p", "80"];
+      if (s.spoof) cmd.push("--spoof");
+    } else if (s.type === "http") {
+      cmd = ["exec", "-d", a, "python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", "6", "-d", "3600"];
+    } else { // slowloris
+      cmd = ["exec", "-d", a, "python3", "/app/slowloris.py", VICTIM, "-p", "80", "-c", "40", "-d", "3600"];
+    }
     await docker(cmd);
   }
   running = id;
@@ -99,7 +105,10 @@ async function startAttack(id) {
 }
 
 async function stopAttack(quiet) {
-  for (const a of ATTACKERS) await docker(["exec", a, "pkill", "-f", "flood.py"]).catch(() => {});
+  for (const a of ATTACKERS) {
+    await docker(["exec", a, "pkill", "-f", "flood.py"]).catch(() => {});
+    await docker(["exec", a, "pkill", "-f", "slowloris"]).catch(() => {});
+  }
   running = null;
   broadcast({ type: "state", running: null });
   if (!quiet) logEvent("Attack stopped.", "info");

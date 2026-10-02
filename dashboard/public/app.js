@@ -5,7 +5,7 @@
   const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const SVGNS = "http://www.w3.org/2000/svg";
 
-  let running = null, mitigation = false;
+  let running = null, mitigation = false, verdictLevel = "idle", serviceDown = false;
 
   // ---------- websocket ----------
   let ws;
@@ -51,22 +51,26 @@
       v.className = "verdict safe";
       lab.textContent = "SAFE";
       sub.textContent = "no attack detected";
-      setVictim("idle");
+      verdictLevel = "idle";
     } else {
       const ddos = d.verdict === "DDoS";
       v.className = "verdict " + (ddos ? "ddos" : "dos");
       lab.textContent = d.verdict + (d.syn_flood ? "  [SYN flood]" : "");
       sub.textContent = `n_src=${d.n_src} · H(src)=${(d.h_src || 0).toFixed(2)} · ${d.pps} pps`;
-      setVictim(ddos ? "crit" : "warn");
+      verdictLevel = ddos ? "crit" : "warn";
     }
+    updateVictim();
     pushChart(d);
   }
 
-  function setVictim(level) {
+  // victim color = worst of (detector load) and (service reachability from host probe).
+  // Slowloris keeps the detector at SAFE (low traffic) but the service goes DOWN -> shown here.
+  function updateVictim() {
     const n = $("node-victim"), halo = n.querySelector(".vhalo"), st = $("victim-state");
-    n.classList.remove("warn", "crit");
-    if (level === "warn") { n.classList.add("warn"); st.textContent = "under attack"; halo.classList.add("pulse"); }
-    else if (level === "crit") { n.classList.add("crit"); st.textContent = "overloaded"; halo.classList.add("pulse"); }
+    n.classList.remove("warn", "crit", "down");
+    if (serviceDown) { n.classList.add("down"); st.textContent = "DOWN"; halo.classList.add("pulse"); }
+    else if (verdictLevel === "crit") { n.classList.add("crit"); st.textContent = "overloaded"; halo.classList.add("pulse"); }
+    else if (verdictLevel === "warn") { n.classList.add("warn"); st.textContent = "under attack"; halo.classList.add("pulse"); }
     else { st.textContent = mitigation ? "protected" : "idle"; halo.classList.remove("pulse"); }
   }
 
@@ -82,7 +86,8 @@
       $("btn-stop").disabled = false;
     } else {
       $("btn-stop").disabled = true;
-      setVictim("idle");
+      verdictLevel = "idle";
+      updateVictim();
     }
   }
 
@@ -92,15 +97,19 @@
     $("node-victim").classList.toggle("protected", on);
     ATTACKERS.forEach((a) => {
       const L = linkEls[a];
-      if (L.classList.contains("active")) L.classList.toggle("throttled", on && L.classList.contains("http"));
+      if (L.classList.contains("active"))
+        L.classList.toggle("throttled", on && (L.classList.contains("http") || L.classList.contains("slow")));
     });
+    updateVictim();
   }
 
   function onHealth(m) {
     const ok = $("h-ok"), ms = $("h-ms");
-    ok.textContent = m.ok ? "200" : "down";
+    ok.textContent = m.ok ? "200" : "DOWN";
     ok.className = "tile-v small " + (m.ok ? "good" : "bad");
     ms.textContent = (m.ms != null ? m.ms : "-") + "ms";
+    serviceDown = !m.ok;      // host can't reach the service -> victim shows DOWN
+    updateVictim();
   }
 
   function onBench(m) {
@@ -137,6 +146,7 @@
     const link = linkEls[name], node = $("node-" + name);
     link.classList.toggle("active", active);
     link.classList.toggle("http", active && type === "http");
+    link.classList.toggle("slow", active && type === "slowloris");
     link.classList.toggle("throttled", !!throttled);
     node.classList.toggle("active", active);
     if (active && !REDUCE) ensurePackets(name, type); else clearPackets(name);
@@ -147,7 +157,7 @@
     for (let i = 0; i < 4; i++) {
       const c = document.createElementNS(SVGNS, "circle");
       c.setAttribute("r", "3.2"); c.setAttribute("class", "packet");
-      c.style.fill = type === "http" ? "#fde68a" : "#fecaca";
+      c.style.fill = type === "slowloris" ? "#d8b4fe" : type === "http" ? "#fde68a" : "#fecaca";
       pktGroup.appendChild(c);
       dots.push({ el: c, phase: i / 4 });
     }
