@@ -300,4 +300,5 @@ fixed `docker exec` argument array - no client input is interpolated into a shel
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the commit convention (Conventional Commits) and the
 edit → changelog → commit → push workflow. Notable changes are tracked in
-[CHANGELOG.md](CHANGELOG.md).
+[CHANGELOG.md](CHANGELOG.md). To verify every component works, follow
+[docs/TESTING.md](docs/TESTING.md).

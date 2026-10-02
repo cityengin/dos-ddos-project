@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attack control (A/B/C scenarios), and an L7 defense toggle + before/after benchmark, all driven by
   the detector's live stream. Binds to 127.0.0.1 only; control actions are fixed `docker exec`
   argument arrays (no shell interpolation of client input).
+- Testing & verification guide (`docs/TESTING.md`) covering every component with expected results.
 
 ## [1.0.0] - 2026-09-30
 
