@@ -29,7 +29,12 @@ Moi truong: Windows + Docker Desktop (WSL2). Lab co lap hoan toan, KHONG nham ta
 - Entropy: H(src) dinh luong muc phan tan (DoS=0, DDoS-spoof ~6, HTTP-3-nguon ~1.58)
 - --adaptive: nguong THICH NGHI EWMA (mu + k*MAD, san = --pps/--syn), dong bang hoc khi dang alert.
   Thi nghiem so sanh: experiments/adaptive_eval.py -> assets/adaptive_eval.png (fixed thua, adaptive thang)
-- ML: ml/train.py (RF + HistGB) vs luat nguong, F1 0.86->0.99 tren mau kieu-CICDDoS2019 (ml/make_synthetic.py)
+- ML: ml/train.py (RF + HistGB) vs luat nguong. CHAY TREN CICDDoS2019 THAT (tai qua kagglehub:
+  dhoogla/cicddos2019, ban parquet da lam sach, ~131k flow x 63 dac trung, 13 ho tan cong).
+  Phat hien tan cong (nhi phan): luat nguong F1 0.60 -> RF F1 0.999 (HistGB 0.996).
+  Phan loai da lop: accuracy 0.93, macro-F1 0.735 (da gom nhan DrDoS_X va X ve 1 ho; --raw-labels
+  giu 18 nhan goc -> macro-F1 0.535, chenh lech la do CICDDoS2019 dat nhan 2 kieu theo ngay chup).
+  Mau synthetic (ml/make_synthetic.py) van giu lam fallback khi khong tai dataset.
 - Phong thu L7: mitigation/ (nginx rate-limit) -> demo_mitigation.py: HTTP flood 30430 -> 240 (chan ~99%)
 
 ## Ket qua da co (so lieu that tu lab)
@@ -54,7 +59,8 @@ Moi truong: Windows + Docker Desktop (WSL2). Lab co lap hoan toan, KHONG nham ta
 - [x] Ve do thi tu CSV (analysis/plot_attack.py -> analysis/{A,B,C}.png, attack.png)
 - [x] Tinh metric: detection time, FP/FN, bang phan loai (analysis/metrics.py) -> 3/3
 - [x] Sua BUG phan loai (inbound-only) roi chay lai A/B/C de validate
-- [ ] (Tuy chon) ML voi dataset CICDDoS2019
+- [x] ML voi dataset CICDDoS2019 THAT (kagglehub dhoogla/cicddos2019): rule F1 0.60 -> RF 0.999;
+      phan loai ho tan cong accuracy 0.93 / macro-F1 0.735
 - [ ] Viet bao cao (da co: bang so lieu before/after, 4 do thi, cac gioi han)
 
 ## Gioi han da biet (de bao ve)

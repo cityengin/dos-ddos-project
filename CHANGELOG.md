@@ -18,11 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Markdown theory guide (`docs/LyThuyet_DoS_DDoS.md`) for on-GitHub study, including the
   adaptive-threshold and state-of-the-art sections.
 - Machine-learning pipeline (`ml/`): `train.py` trains RandomForest + HistGradientBoosting on
-  flow features, compares against a single-threshold rule, and plots F1 / confusion matrix;
-  auto-handles the CICDDoS2019 CSV schema. `make_synthetic.py` generates a CICDDoS2019-style
-  sample so it runs out of the box (attack-detection F1 0.86 rule → 0.99 ML on the sample).
+  flow features, compares against a single-threshold rule, and plots F1 / confusion matrix.
+  `make_synthetic.py` generates a CICDDoS2019-style sample so it runs out of the box.
 - `ml/train.py` reads large CSVs in chunks with size-estimated sampling and accepts a directory
-  of CSVs, so it scales to the full CICDDoS2019 flow files without exhausting memory.
+  of files, so it scales to the full CICDDoS2019 flow data without exhausting memory.
 - L7 mitigation (`mitigation/`): an nginx per-IP rate-limit config and a before/after demo
   (`mitigation/demo_mitigation.py`) that turns the IDS into IPS-style protection. In the lab a
   3-source HTTP flood drops from 30,430 to 240 served requests (~99% blocked) with no impact on a
@@ -34,6 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stream. Binds to 127.0.0.1 only; control actions are fixed `docker exec` argument arrays
   (no shell interpolation of client input).
 - Testing & verification guide (`docs/TESTING.md`) covering every component with expected results.
+- `ml/train.py` now reads **parquet** as well as CSV, and label canonicalization (`--raw-labels`
+  to disable) that merges CICDDoS2019's dual `DrDoS_X`/`X` labels for the same attack family into
+  one canonical family — the dataset labels the same families two ways across capture days.
+
+### Changed
+
+- Machine learning now runs on the **real CICDDoS2019** dataset (the cleaned parquet release
+  `dhoogla/cicddos2019`, fetched via `kagglehub`) instead of only the synthetic sample. On ~131k
+  flows / 63 features / 13 families, attack-detection F1 goes from **0.60** (single-threshold rule)
+  to **0.999** (RandomForest; 0.996 HistGradientBoosting); family classification reaches **0.93**
+  accuracy / **0.74** macro-F1. The synthetic sample stays as a zero-download fallback. Regenerated
+  `assets/ml_f1_compare.png`, `assets/ml_confusion.png`, and `ml/results/metrics.txt`.
 
 ### Fixed
 

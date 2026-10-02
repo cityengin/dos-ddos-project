@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Train + danh gia bo phan loai DDoS tren dac trung flow; so sanh ML vs luat nguong.
 
-Chay voi du lieu mau (mac dinh):
+Chay voi CICDDoS2019 THAT (khuyen nghi) - tai ban da lam sach qua Kaggle:
+    pip install kagglehub pyarrow         # can Kaggle API token (KAGGLE_API_TOKEN hoac ~/.kaggle)
+    python -c "import kagglehub; print(kagglehub.dataset_download('dhoogla/cicddos2019'))"
+    python ml/train.py --data <duong-dan-in-ra>     # thu muc nhieu file .parquet theo loai tan cong
+
+Chay voi du lieu mau (khong can tai gi):
     python ml/make_synthetic.py
     python ml/train.py
 
-Chay voi CICDDoS2019 THAT (sau khi tai ve, vd mot file CSV flow):
-    python ml/train.py --data path/to/CICDDoS2019.csv
-
-Pipeline tu: chuan hoa ten cot, bo cot dinh danh, thay inf/NaN, chia train/test phan tang,
-train RandomForest + HistGradientBoosting, va so sanh voi luat nguong 1 dac trung (baseline
+Nhan file CSV hoac PARQUET, 1 file hoac 1 THU MUC. Pipeline: chuan hoa ten cot, bo cot dinh danh,
+thay inf/NaN, gom nhan trung lap ve HO tan cong (--raw-labels de giu nhan goc), chia train/test
+phan tang, train RandomForest + HistGradientBoosting, so sanh voi luat nguong 1 dac trung (baseline
 giong detector luat cua project). Xuat bang metric + 2 do thi.
 """
 import argparse
@@ -29,10 +32,37 @@ ID_COLS = {"flow id", "source ip", "src ip", "destination ip", "dst ip", "source
            "simillarhttp", "unnamed: 0", "flow byts/s", "flow bytes/s"}
 RATE_HINTS = ["flow_pkts_s", "flow packets/s", "flow pkts/s", "pps"]
 
+# CICDDoS2019 chup cung mot HO tan cong o 2 ngay voi 2 cach dat nhan khac nhau:
+# ngay reflection ("DrDoS_X") va ngay con lai ("X") -> cung luu luong, khac nhan.
+# Gom ve ten ho chuan de phan loai da lop co y nghia (neu khong, model khong the
+# phan biet LDAP vs DrDoS_LDAP vi chung GIONG HET nhau -> macro-F1 bi keo xuong gia tao).
+FAMILY = {
+    "drdos_dns": "DNS", "dns": "DNS",
+    "drdos_ldap": "LDAP", "ldap": "LDAP",
+    "drdos_mssql": "MSSQL", "mssql": "MSSQL",
+    "drdos_ntp": "NTP", "ntp": "NTP",
+    "drdos_netbios": "NetBIOS", "netbios": "NetBIOS",
+    "drdos_snmp": "SNMP", "snmp": "SNMP",
+    "drdos_udp": "UDP", "udp": "UDP",
+    "udp-lag": "UDPLag", "udplag": "UDPLag",
+    "syn": "Syn", "tftp": "TFTP", "portmap": "Portmap",
+    "webddos": "WebDDoS", "benign": "Benign",
+}
+
+
+def canon_label(s):
+    return FAMILY.get(s.strip().lower(), s.strip())
+
 
 def _read_sampled(path, cap):
     """Doc 1 CSV theo chunk + lay mau de KHONG tran RAM voi file lon (vai GB).
     Uoc luong so dong tu kich thuoc file -> chon ti le lay mau ~ cap dong."""
+    if path.lower().endswith(".parquet"):
+        df = pd.read_parquet(path)
+        df.columns = [str(c).strip() for c in df.columns]
+        if cap and len(df) > cap:
+            df = df.sample(cap, random_state=42).reset_index(drop=True)
+        return df
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         f.readline()  # header
         lines = [f.readline() for _ in range(2000)]
@@ -49,14 +79,14 @@ def _read_sampled(path, cap):
     return df
 
 
-def load(path, label_col, max_rows):
+def load(path, label_col, max_rows, canon_labels=True):
     # ho tro ca FILE lan THU MUC (nhieu CSV cua CICDDoS2019)
     if os.path.isdir(path):
-        files = sorted(glob.glob(os.path.join(path, "*.csv")))
+        files = sorted(glob.glob(os.path.join(path, "*.csv")) + glob.glob(os.path.join(path, "*.parquet")))
         if not files:
-            raise SystemExit(f"Thu muc {path} khong co file .csv nao.")
+            raise SystemExit(f"Thu muc {path} khong co file .csv/.parquet nao.")
         per = max(3000, max_rows // len(files)) if max_rows else None
-        print(f"[*] Doc {len(files)} file CSV trong {path} ...")
+        print(f"[*] Doc {len(files)} file trong {path} ...")
         df = pd.concat([_read_sampled(f, per) for f in files], ignore_index=True)
         if max_rows and len(df) > max_rows:
             df = df.sample(max_rows, random_state=42).reset_index(drop=True)
@@ -67,6 +97,8 @@ def load(path, label_col, max_rows):
     if lc is None:
         raise SystemExit("Khong tim thay cot nhan (Label). Dung --label-col de chi dinh.")
     y = df[lc].astype(str).str.strip()
+    if canon_labels:
+        y = y.map(canon_label)                 # gom nhan trung lap ve ho tan cong chuan
     # chon dac trung so, bo cot dinh danh
     drop = {lc.lower()} | ID_COLS
     feats = [c for c in df.columns if c.lower() not in drop]
@@ -103,6 +135,9 @@ def main():
     ap.add_argument("--label-col", default=None)
     ap.add_argument("--max-rows", type=int, default=200000, help="gioi han dong (du lieu that rat lon)")
     ap.add_argument("--outdir", default="ml/results")
+    ap.add_argument("--raw-labels", action="store_true",
+                    help="giu nguyen nhan goc cua CICDDoS2019 (khong gom DrDoS_X va X ve 1 ho) "
+                         "- de tai hien ket qua 'truoc khi gom' cho so sanh")
     args = ap.parse_args()
 
     if not os.path.exists(args.data):
@@ -111,7 +146,7 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
     os.makedirs("assets", exist_ok=True)
 
-    X, y = load(args.data, args.label_col, args.max_rows)
+    X, y = load(args.data, args.label_col, args.max_rows, canon_labels=not args.raw_labels)
     yb = (y.str.upper() != "BENIGN").astype(int)          # nhan nhi phan: tan cong?
     print(f"[*] Du lieu: {X.shape[0]} dong x {X.shape[1]} dac trung | lop: {sorted(y.unique())}")
 

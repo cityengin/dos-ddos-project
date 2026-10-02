@@ -84,14 +84,28 @@ Figure: `assets/mitigation_demo.png`.
 
 ## 5. Machine learning
 
+Real dataset (recommended):
+
+```bash
+pip install kagglehub pyarrow                 # Kaggle API token in env KAGGLE_API_TOKEN or ~/.kaggle
+python -c "import kagglehub; print(kagglehub.dataset_download('dhoogla/cicddos2019'))"
+python ml/train.py --data <printed-path>      # a folder of per-attack .parquet files
+```
+
+Zero-setup fallback (no download):
+
 ```bash
 python ml/make_synthetic.py
 python ml/train.py
 ```
 
-**Expected:** attack-detection F1 rises from **~0.86** (single-threshold rule) to **~0.99**
-(RandomForest / HistGradientBoosting); multi-class macro-F1 ~0.98. Figures in `assets/ml_*.png`.
-(To use the real dataset: `python ml/train.py --data <CICDDoS2019 csv or folder>`.)
+**Expected (real CICDDoS2019, ~131k flows / 63 features / 13 families):** attack-detection F1
+**~0.60** (single-threshold rule) → **0.999** (RandomForest) / **0.996** (HistGradientBoosting);
+multi-class accuracy **~0.93**, macro-F1 **~0.74** (volumetric NTP/TFTP/Syn/MSSQL/UDP ≥0.92 F1;
+UDP-reflection DNS/LDAP/SNMP/Portmap/NetBIOS overlap and stay low — a documented limit). Figures in
+`assets/ml_*.png`, full report in `ml/results/metrics.txt`. Add `--raw-labels` to reproduce the
+un-merged 18-label result (macro-F1 ~0.54 — the drop is the dataset's dual `DrDoS_X`/`X` labeling,
+not the model).
 
 ---
 

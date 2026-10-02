@@ -1,17 +1,35 @@
 So sanh PHAT HIEN TAN CONG (nhi phan BENIGN vs tan cong) - F1:
-  Luat nguong 1 dac tr(flow_pkts_s > 322.8): F1 = 0.857
-  RandomForest          : F1 = 0.989   (macro-F1 da lop = 0.981)
-  HistGradientBoosting  : F1 = 0.989   (macro-F1 da lop = 0.981)
+  Luat nguong 1 dac tr(Flow Packets/s > 353.9): F1 = 0.597
+  RandomForest          : F1 = 0.999   (macro-F1 da lop = 0.735)
+  HistGradientBoosting  : F1 = 0.996   (macro-F1 da lop = 0.725)
 
-Bao cao chi tiet (HistGradientBoosting) - phan loai da lop:
+Bao cao chi tiet (RandomForest) - phan loai da lop:
               precision    recall  f1-score   support
 
-      BENIGN      0.981     0.994     0.987      1781
-  HTTP_FLOOD      0.983     0.972     0.977       754
-   SYN_FLOOD      0.982     0.983     0.982       758
-   UDP_FLOOD      0.992     0.964     0.977       607
+      Benign      0.997     0.998     0.998     12276
+         DNS      0.547     0.461     0.501      1101
+        LDAP      0.561     0.629     0.593      1004
+       MSSQL      0.896     0.934     0.915      4404
+         NTP      0.994     0.995     0.995      3184
+     NetBIOS      0.575     0.646     0.609       373
+     Portmap      0.452     0.341     0.389       205
+        SNMP      0.685     0.613     0.647       815
+         Syn      0.985     0.973     0.979      3880
+        TFTP      0.999     0.997     0.998      2855
+         UDP      0.917     0.949     0.932      6823
+      UDPLag      0.859     0.776     0.816      2527
+     WebDDoS      0.286     0.133     0.182        15
 
-    accuracy                          0.983      3900
-   macro avg      0.984     0.978     0.981      3900
-weighted avg      0.983     0.983     0.983      3900
+    accuracy                          0.926     39462
+   macro avg      0.750     0.727     0.735     39462
+weighted avg      0.925     0.926     0.925     39462
 
+Top dac trung quan trong:
+Avg Fwd Segment Size      0.061
+Packet Length Min         0.057
+Fwd Packet Length Min     0.049
+Fwd Packet Length Max     0.048
+Avg Packet Size           0.048
+Packet Length Mean        0.046
+Fwd Packet Length Mean    0.045
+Packet Length Max         0.042

@@ -199,20 +199,33 @@ research), [`ml/`](ml/) trains classifiers on flow features and compares them ag
 single-threshold rule — the baseline analogous to this project's rule-based detector.
 
 ```bash
-pip install pandas scikit-learn
-python ml/make_synthetic.py      # generate a CICDDoS2019-style sample (noisy, overlapping classes)
-python ml/train.py               # train RandomForest + HistGradientBoosting, evaluate, plot
-python ml/train.py --data path/to/CICDDoS2019.csv   # or point at the real dataset
+pip install pandas scikit-learn pyarrow
+
+# Real data (recommended) — download CICDDoS2019 (cleaned, ~35 MB parquet) via Kaggle:
+pip install kagglehub          # needs a Kaggle API token (env KAGGLE_API_TOKEN or ~/.kaggle)
+python -c "import kagglehub; print(kagglehub.dataset_download('dhoogla/cicddos2019'))"
+python ml/train.py --data <printed-path>      # train + evaluate + plot on the real dataset
+
+# Or zero-setup fallback (no download, synthetic sample):
+python ml/make_synthetic.py
+python ml/train.py
 ```
 
-`ml/make_synthetic.py` produces a **synthetic, CICDDoS2019-style** sample (not real data) so the
-pipeline runs out of the box with meaningful — not perfect — scores. `ml/train.py` auto-handles the
-CICDDoS2019 CSV schema (column stripping, inf/NaN cleanup, id-column removal), so pointing `--data`
-at the real CSVs just works.
+`ml/train.py` auto-handles the CICDDoS2019 schema (column stripping, inf/NaN cleanup, id-column
+removal) and reads **CSV or parquet**, a single file **or a directory** of per-attack files, with
+chunked/size-estimated sampling so it scales without exhausting memory. `ml/make_synthetic.py`
+produces a **synthetic, CICDDoS2019-style** sample so the pipeline still runs out of the box when
+the real dataset is not downloaded.
 
-On the sample, attack-detection F1 rises from **0.86** (single-threshold rule) to **0.99**
-(RandomForest / HistGradientBoosting), and the models additionally identify the attack *type*
-(SYN / HTTP / UDP) at ~0.98 macro-F1 — something a single threshold cannot do.
+**On the real CICDDoS2019** (~131k flows, 63 features, 13 attack families), attack-detection F1
+rises from **0.60** (single-threshold rule on the best single feature) to **0.999** (RandomForest;
+0.996 HistGradientBoosting) — the project's core result: a single threshold is weak on real mixed
+DDoS traffic, a multi-feature model is not. The models additionally classify the attack *family*
+at **0.93 accuracy** / **0.74 macro-F1**; volumetric attacks with distinct signatures (NTP, TFTP,
+Syn, MSSQL, UDP all ≥ 0.92 F1) are easy, while UDP reflection/amplification variants
+(DNS, LDAP, SNMP, Portmap, NetBIOS) overlap at the flow level and stay hard — a documented limit.
+CICDDoS2019 labels the same families two ways across capture days (`DrDoS_X` vs `X`); `train.py`
+canonicalizes them to families by default (`--raw-labels` reproduces the un-merged result).
 
 ![ML vs rule F1](assets/ml_f1_compare.png)
 
