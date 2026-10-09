@@ -37,7 +37,7 @@ MATRIX = [
     ("C", 20, None), ("C", 15, None),
 ]
 
-OUT_HEADER = ["time", "scenario", "pps", "syn_s", "ack_s", "h_src", "h_dport", "n_src",
+OUT_HEADER = ["time", "scenario", "run", "pps", "syn_s", "ack_s", "h_src", "h_dport", "n_src",
               "syn_ratio", "ack_syn_ratio", "label"]
 
 # nguong luat cua project (de dem window attack duoi nguong)
@@ -53,7 +53,7 @@ def run_scenario(name, duration, pps, baseline, cooldown):
     subprocess.run(cmd, cwd=ROOT, check=True)
 
 
-def label_file(csv_path, meta_path, scenario, writer):
+def label_file(csv_path, meta_path, scenario, run, writer):
     """Doc 1 CSV detector, gan nhan tung dong, ghi ra writer. Tra (so_dong, dict dem nhan)."""
     with open(meta_path) as f:
         truth = json.load(f).get("truth", "?")
@@ -67,7 +67,7 @@ def label_file(csv_path, meta_path, scenario, writer):
             label = "BENIGN" if pps == 0 else truth
             syn_ratio = syn / max(pps, 1.0)
             ack_syn_ratio = ack / max(syn, 1.0)
-            writer.writerow([row["time"], scenario, int(pps), int(syn), int(ack),
+            writer.writerow([row["time"], scenario, run, int(pps), int(syn), int(ack),
                              row["h_src"], row["h_dport"], row["n_src"],
                              "%.4f" % syn_ratio, "%.4f" % ack_syn_ratio, label])
             counts[label] = counts.get(label, 0) + 1
@@ -92,7 +92,8 @@ def main():
             if fn.endswith(".csv"):
                 meta = os.path.join(RAW_DIR, fn[:-4] + ".meta.json")
                 if os.path.exists(meta):
-                    raw_items.append((os.path.join(RAW_DIR, fn), meta, fn.split("_")[0]))
+                    run = fn[:-4]
+                    raw_items.append((os.path.join(RAW_DIR, fn), meta, run.split("_")[0], run))
         if not raw_items:
             raise SystemExit("[X] ml/data/raw rong - bo --skip-run de chay lab truoc.")
     else:
@@ -103,15 +104,15 @@ def main():
             dst_meta = os.path.join(RAW_DIR, "%s_%s.meta.json" % (name, tag))
             shutil.copy(os.path.join(DET_DIR, name + ".csv"), dst_csv)
             shutil.copy(os.path.join(DET_DIR, name + ".meta.json"), dst_meta)
-            raw_items.append((dst_csv, dst_meta, name))
+            raw_items.append((dst_csv, dst_meta, name, "%s_%s" % (name, tag)))
 
     # gom + gan nhan
     total, agg = 0, {}
     with open(OUT_CSV, "w", newline="") as out:
         w = csv.writer(out, lineterminator="\n")   # LF kieu Unix (tranh \r dinh vao cot cuoi)
         w.writerow(OUT_HEADER)
-        for csv_path, meta_path, scenario in raw_items:
-            n, counts = label_file(csv_path, meta_path, scenario, w)
+        for csv_path, meta_path, scenario, run in raw_items:
+            n, counts = label_file(csv_path, meta_path, scenario, run, w)
             total += n
             for k, v in counts.items():
                 agg[k] = agg.get(k, 0) + v

@@ -59,7 +59,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   duration/pps), labels each 1-second window `BENIGN` (pps==0) or the run's ground truth (DoS/DDoS),
   adds derived features `syn_ratio` and `ack_syn_ratio`, and writes `ml/data/windows.csv` with a
   class-balance report. In the lab: 225 windows (BENIGN 90 / DDoS 80 / DoS 55), with ~31% of attack
-  windows below the rule threshold (pps<40 and syn<25) — the cases the fixed rule misses.
+  windows below the rule threshold (pps<40 and syn<25) — the cases the fixed rule misses. A `run`
+  column records the originating run so evaluation can hold out whole runs.
+- `ml/train_window.py`: trains a single multiclass RandomForest (BENIGN/DoS/DDoS) on the detector's
+  own per-window features and saves it to `detection/window_model.joblib` (bundled with feature
+  order, label order and the sklearn version) for the detector to use live. It compares against the
+  project rule (pps>=40 or syn>=25; n_src>=2 => DDoS) on a 70/30 split and with leave-one-run-out.
+  On the lab dataset: attack-detection F1 is **0.76 (rule) vs 1.00 (RF)**, and on the attack windows
+  below the rule threshold the rule catches **0%** while the RF catches **100%**; leave-one-run-out
+  F1 (binary) is **0.70 +/- 0.45 (rule) vs 1.00 +/- 0.00 (RF)**. The RF scores are high because the
+  lab's benign traffic is all-zero and the classes are cleanly separable — the RF effectively learns
+  a lower, data-driven threshold the fixed rule lacks, rather than solving a hard problem.
 
 ### Changed
 

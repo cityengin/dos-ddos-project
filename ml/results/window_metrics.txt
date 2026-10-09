@@ -1,0 +1,38 @@
+Du lieu: 225 window x 8 dac trung | lop: {'BENIGN': 90, 'DDoS': 80, 'DoS': 55}
+Dac trung (thu tu co dinh): ['pps', 'syn_s', 'ack_s', 'h_src', 'h_dport', 'n_src', 'syn_ratio', 'ack_syn_ratio']
+
+===== (a) Split phan tang 70/30 (test = 68 window) =====
+Phat hien tan cong (nhi phan BENIGN vs attack) - F1:
+  Luat nguong (pps>=40 or syn>=25): F1 = 0.758
+  RandomForest (window)           : F1 = 1.000
+Phan loai da lop (BENIGN/DoS/DDoS) - macro-F1:
+  Luat nguong : macro-F1 = 0.760
+  RandomForest: macro-F1 = 1.000
+
+Confusion matrix RandomForest (hang=that, cot=du doan; nhan=['BENIGN', 'DDoS', 'DoS']):
+[[27  0  0]
+ [ 0 24  0]
+ [ 0  0 17]]
+Confusion matrix Luat nguong:
+[[27  0  0]
+ [ 9 15  0]
+ [ 7  0 10]]
+
+Bao cao chi tiet RandomForest:
+              precision    recall  f1-score   support
+
+      BENIGN      1.000     1.000     1.000        27
+        DDoS      1.000     1.000     1.000        24
+         DoS      1.000     1.000     1.000        17
+
+    accuracy                          1.000        68
+   macro avg      1.000     1.000     1.000        68
+weighted avg      1.000     1.000     1.000        68
+
+Window ATTACK duoi nguong trong test (pps<40 va syn<25): 16
+  Luat bat dung 'attack': 0/16 (0%)
+  ML   bat dung 'attack': 16/16 (100%)  <-- diem ML hon luat
+
+===== (b) Leave-one-run-out (7 fold) =====
+  ML   : F1_bin = 1.000 +/- 0.000 | accuracy da lop = 1.000 +/- 0.000
+  Luat : F1_bin = 0.704 +/- 0.446 | accuracy da lop = 0.819 +/- 0.264
