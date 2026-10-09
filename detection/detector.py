@@ -73,10 +73,23 @@ def main():
                     help="duong dan model .joblib (train_window.py) de phan loai ML SONG SONG voi luat")
     ap.add_argument("--engine", choices=["scapy", "ebpf"], default="scapy",
                     help="backend dem goi: scapy (mac dinh) hoac ebpf (XDP, chinh xac o line-rate)")
+    ap.add_argument("--block", action="store_true",
+                    help="BAT closed-loop chan goi (chi voi --engine ebpf). Mac dinh TAT = detect-only")
+    ap.add_argument("--block-pps", type=int, default=300,
+                    help="nguong goi/giay/nguon de dua nguon vao blocklist (XDP_DROP co TTL)")
+    ap.add_argument("--block-ttl", type=float, default=5.0,
+                    help="TTL (giay) cua muc blocklist -> tu het han, khong chan vinh vien")
+    ap.add_argument("--block-syn-rate", type=int, default=0,
+                    help="token-bucket SYN toan cuc: drop SYN vuot N/giay (0=tat). De cat SYN spoof")
     args = ap.parse_args()
 
     global VICTIM
     VICTIM = args.victim or None
+
+    if args.block and args.engine != "ebpf":
+        sys.stderr.write("[X] --block chi dung voi --engine ebpf (scapy khong the drop goi).\n")
+        sys.stderr.flush()
+        os._exit(6)
 
     # Nap model ML neu co --ml. Fail RO (thoat han) neu thieu file / thieu sklearn-joblib / bundle sai,
     # de khong chay nham che do "co --ml nhung ML im lang".
@@ -101,12 +114,16 @@ def main():
                   % (args.alpha, args.k, args.warmup, args.pps, args.syn))
         if ml:
             print("[*] ML song song: model=%s | lop=%s" % (args.ml, ml["labels"]))
+        if args.block:
+            print("[*] CHAN (closed-loop IPS): block-pps=%d ttl=%.0fs syn-rate=%s"
+                  % (args.block_pps, args.block_ttl, args.block_syn_rate or "tat"))
         print("%-8s %8s %8s %8s %10s %10s   %s" %
               ("time","pkts/s","syn/s","ack/s","H(src)","H(dport)","ALERT (luat) | ML" if ml else "ALERT"))
     csvf = open(args.csv, "w") if args.csv else None
     if csvf:
         csvf.write("time,pps,syn_s,ack_s,h_src,h_dport,n_src,alert" +
-                   (",ml_verdict,ml_conf" if ml else "") + "\n")
+                   (",ml_verdict,ml_conf" if ml else "") +
+                   (",blocked_src,blocked_pps" if args.block else "") + "\n")
 
     # ====== chon BACKEND dem goi ======
     # Hai backend cung tra ve (packets, syn, ack, src_counter, dport_counter) cho moi cua so,
@@ -154,6 +171,9 @@ def main():
     signal.signal(signal.SIGTERM, _cleanup)
     signal.signal(signal.SIGINT, _cleanup)
 
+    if args.block and ebpf:
+        ebpf.set_syn_rate(args.block_syn_rate)   # token-bucket SYN (0=tat)
+
     ew = {"mu_pps": 0.0, "mad_pps": 0.0, "mu_syn": 0.0, "mad_syn": 0.0}  # trang thai EWMA
     wcount = 0
 
@@ -195,6 +215,17 @@ def main():
             if syn_flood:
                 alert += " [SYN flood]"
 
+        # ====== closed-loop CHAN (neu --block; chi engine ebpf) ======
+        blocked_src, blocked_pps = 0, 0
+        if args.block and ebpf:
+            # nguon nao vuot nguong trong cua so nay -> dua vao blocklist (TTL); roi don muc het han.
+            hot = [ip for ip, c in snap_src.items() if c / args.interval > args.block_pps]
+            if hot:
+                ebpf.block_sources(hot, args.block_ttl)
+            ebpf.expire_blocklist()
+            blocked_src = ebpf.blocked_src_count()
+            blocked_pps = ebpf.last_blocked / args.interval
+
         # ====== ML song song (neu co --ml) ======
         # Dung vector dac trung DUNG THU TU model da luu; tinh 2 ty le dan xuat giong luc train.
         ml_verdict, ml_conf = None, None
@@ -214,6 +245,8 @@ def main():
                 time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, n_src, alert.replace(","," "))
             if ml:
                 row += ",%s,%s" % (ml_verdict or "", ("%.3f" % ml_conf) if ml_conf is not None else "")
+            if args.block:
+                row += ",%d,%.0f" % (blocked_src, blocked_pps)
             csvf.write(row + "\n")
             csvf.flush()
 
@@ -226,13 +259,15 @@ def main():
                 "triggered": bool(triggered), "verdict": verdict, "syn_flood": syn_flood,
                 "thr_pps": round(thr_pps, 1), "thr_syn": round(thr_syn, 1),
                 "ml_verdict": ml_verdict, "ml_conf": round(ml_conf, 3) if ml_conf is not None else None,
+                "blocked_src": blocked_src, "blocked_pps": round(blocked_pps),
             }), flush=True)
         else:
             ml_txt = ""
             if ml:
                 ml_txt = ("  | ML:%s(%.2f)" % (ml_verdict, ml_conf)) if ml_conf is not None else ("  | ML:%s" % ml_verdict)
-            print("%-8s %8.0f %8.0f %8.0f %10.2f %10.2f   %s%s" %
-                  (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, alert, ml_txt))
+            blk_txt = ("  | BLOCK src=%d drop=%.0fpps" % (blocked_src, blocked_pps)) if args.block else ""
+            print("%-8s %8.0f %8.0f %8.0f %10.2f %10.2f   %s%s%s" %
+                  (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, alert, ml_txt, blk_txt))
 
 if __name__ == "__main__":
     main()

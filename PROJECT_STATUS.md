@@ -33,6 +33,18 @@ reload nhom docker (hoac re-login / `newgrp docker`).
   So sanh (gui chinh xac 120000 goi toc do cao): scapy DEM 67917/120000 (57%, dinh 6.9k pps) vs
   eBPF 113764/120000 (95%, dinh 30.1k pps). Test 5000 goi toc do thap: eBPF 4986 (~dung, khong trung).
   Moi output giu nguyen (pps/syn_s/ack_s/h_src/h_dport/n_src + luat + --adaptive + --ml + --stream + --csv).
+- CLOSED-LOOP IPS (phat hien -> tu chan, chi engine ebpf): cac co --block (mac dinh TAT = detect-only),
+  --block-pps (vd 200), --block-ttl (vd 5s), --block-syn-rate (vd 2000; 0=tat). eBPF DEM TRUOC roi moi
+  chan: blocklist[src]=expire_ns -> XDP_DROP (co TTL, tu het han); token-bucket SYN toan cuc (bpf_spin_lock)
+  cat SYN vuot rate (xu SYN spoof). Userspace moi window: nguon vuot --block-pps -> vao blocklist; don muc
+  het han; report blocked_src/blocked_pps. An toan: TTL tu het han, client hop le + health-probe toc do
+  thap (<< block-pps) khong bi chan nham. Demo before/after (drop live):
+  - C (6 nguon HTTP, co trang thai): KHONG chan pps ~136000 -> CO chan pps sup con ~242 (6 nguon bi chan;
+    drop SYN -> bat tay khong xong -> attacker treo). Client hop le 200=12/12, latency ~0-1ms ca 2 (nginx
+    van tru; gia tri la go tai tan cong).
+  - B (SYN spoof): per-source KHONG an (0 nguon bi chan, moi goi 1 IP moi) -> dung giOi han. Bat
+    --block-syn-rate 2000: drop ~22000/25866 pps (~85%) SYN spoof, con ~3800 toi nginx (cap ~rate+burst);
+    danh doi: rot mot it SYN hop le. (Luu y: SIGKILL khong go XDP; khi detector khoi dong lai tu go XDP cu.)
 - Cua so 1 giay. Nguong dang dung: --pps 40 --syn 25
 - --victim 172.30.0.10: CHI dem goi inbound toi victim (bo goi victim tu tra ve) -> n_src/ack chinh xac
 - Threshold: alert khi pps>=nguong HOAC syn>=nguong

@@ -183,7 +183,35 @@ at line-rate and XDP does not. (`--engine ebpf` needs the detector image's `pyth
 
 ---
 
-## 8. Quick full-system checklist
+## 8. Closed-loop blocking (XDP drop, `--block`)
+
+Detect-only by default; `--block` (needs `--engine ebpf`) turns the detector into an IPS that drops
+flagged sources at XDP. It counts first, then drops, so the detector still reports the true intensity.
+
+```bash
+# per-source blocking (works on real-source floods A / C):
+docker exec -d detector python3 -u /app/detector.py --iface eth0 --pps 40 --syn 25 --victim 172.30.0.10 \
+    --engine ebpf --block --block-pps 200 --block-ttl 5 --csv /app/blk.csv
+for a in attacker1 attacker2 attacker3 attacker4 attacker5 attacker6; do \
+    docker exec -d $a python3 /app/http_flood.py 172.30.0.10 -p 80 -t 20 -d 16; done
+# watch detection/blk.csv: blocked_src rises to 6, pps-to-victim collapses. Stop: pkill detector + floods.
+
+# spoofed SYN (B) needs the global SYN rate limiter instead (per-source is useless): add --block-syn-rate 2000
+```
+
+**Expected:**
+- C (6-source HTTP, stateful): with `--block`, the 6 sources are blocked (`blocked_src`=6) and the
+  attack rate collapses (**~136k → ~242 pps** — dropping SYNs stalls the attacker's TCP handshakes); a
+  low-rate legit client stays 200 OK.
+- B (spoofed SYN): per-source blocking does nothing (`blocked_src`≈0 — every packet is a fresh IP);
+  `--block-syn-rate 2000` drops **~85%** of the flood (trade-off: some legitimate SYNs dropped too).
+
+Safety: blocklist entries carry a TTL (auto-expire — no permanent block); a low-rate client / health
+probe (≪ `--block-pps`) is never blocked; `--block` is off by default.
+
+---
+
+## 9. Quick full-system checklist
 
 - [ ] 8 containers Up; `http://localhost:8080` serves the nginx page.
 - [ ] Baseline: 0 alerts, 0 false positives.
@@ -194,4 +222,5 @@ at line-rate and XDP does not. (`--engine ebpf` needs the detector image's `pyth
 - [ ] Window ML: the rule misses D and false-alarms on E; the RF gets both right (F1 ~0.58 -> ~0.99).
 - [ ] Detector `--ml` prints both rule and ML verdicts; dashboard shows both lines.
 - [ ] `--engine ebpf` observes ~95% of a 120k high-rate flood vs scapy ~57% (detect-only, no drop).
+- [ ] `--block` collapses a real-source flood (C: ~136k → ~242 pps); `--block-syn-rate` cuts a spoofed SYN flood (~85%).
 - [ ] Dashboard reflects every scenario live and binds to 127.0.0.1 only.

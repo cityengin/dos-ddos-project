@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Detection-driven blocking (closed-loop IPS) via **eBPF `XDP_DROP`** (`detection/detector.py --block`,
+  default off, requires `--engine ebpf`). The XDP program **counts first, then drops**: sources whose
+  per-window rate exceeds `--block-pps` are added to a `blocklist` BPF map with a TTL (`--block-ttl`,
+  auto-expiring — no permanent block) and dropped; `--block-syn-rate N` adds a global SYN token-bucket
+  (`bpf_spin_lock`) that drops SYNs above `N`/s to handle spoofed floods where per-source blocking is
+  useless. Reports `blocked_src`/`blocked_pps` in the table / `--stream` / `--csv`. Lab demo: a stateful
+  HTTP flood (C) collapses from **~136k to ~242 pps** once its 6 sources are blocked; a spoofed SYN
+  flood (B) is unaffected by per-source blocking but `--block-syn-rate 2000` drops **~85%** of it
+  (trade-off: some legitimate SYNs dropped). Safety: TTL auto-expiry, bounded map, low-rate clients and
+  the health probe stay under the threshold; `--block` is off by default so detect-only is unchanged.
 - eBPF/XDP counting engine for the detector (`detection/detector.py --engine scapy|ebpf`, default
   `scapy`). `detection/ebpf_counter.py` (BCC) attaches an **XDP ingress** program to the victim's
   `eth0` that counts packets/syn/ack and per-source-IP / per-dest-port histograms into BPF maps and

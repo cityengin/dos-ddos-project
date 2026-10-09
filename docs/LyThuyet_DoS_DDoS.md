@@ -16,8 +16,9 @@
 6. [Kết quả minh họa](#6-kết-quả-minh-họa)
 7. [Ngưỡng thích nghi (nâng cao)](#7-ngưỡng-thích-nghi-nâng-cao)
 8. [So sánh với state-of-the-art](#8-so-sánh-với-state-of-the-art)
-9. [Giới hạn & hướng phát triển](#9-giới-hạn--hướng-phát-triển)
-10. [Thuật ngữ nhanh](#10-thuật-ngữ-nhanh)
+9. [Phòng thủ: closed-loop (XDP drop)](#9-phòng-thủ-closed-loop-xdp-drop)
+10. [Giới hạn & hướng phát triển](#10-giới-hạn--hướng-phát-triển)
+11. [Thuật ngữ nhanh](#11-thuật-ngữ-nhanh)
 
 ---
 
@@ -315,7 +316,34 @@ ML (`ml_verdict` kèm độ tin `ml_conf`). Dashboard cũng hiển thị hai dò
 tô màu theo từng bên nên thấy ngay khi chúng khác nhau. (Container detector đã cài sẵn
 `scikit-learn 1.9.1 + joblib` trong `attacker/Dockerfile` để nạp được mô hình.)
 
-## 9. Giới hạn & hướng phát triển
+## 9. Phòng thủ: closed-loop (XDP drop)
+
+Dựa trên engine eBPF (mục 5.1), detector có thể **tự chặn** theo vòng kín "phát hiện → chặn"
+(`--block`, mặc định tắt = chỉ phát hiện). Chương trình XDP **đếm trước rồi mới chặn** nên detector vẫn
+thấy đúng cường độ tấn công đến.
+
+- **Chặn theo nguồn (per-source):** mỗi cửa sổ, nguồn nào vượt `--block-pps` (vd 200) được ghi vào BPF
+  map `blocklist` kèm **TTL** (`--block-ttl`, vd 5s — tự hết hạn, **không** chặn vĩnh viễn); gói từ nguồn
+  đó trả `XDP_DROP`. Hiệu quả với tấn công **nguồn thật** (A, C).
+- **Chặn theo tốc độ SYN toàn cục (`--block-syn-rate N`):** một token-bucket (`bpf_spin_lock`) drop SYN
+  vượt `N`/giây bất kể nguồn — cách duy nhất cắt được **SYN spoof** (mỗi gói một IP ⇒ chặn per-source vô
+  dụng).
+
+**An toàn:** blocklist luôn có TTL tự hết hạn + giới hạn kích thước; client hợp lệ và health-probe (tốc
+độ thấp ≪ `--block-pps`) không bị chặn nhầm; mặc định `--block` tắt.
+
+**Kết quả demo (bật drop thật trong lab):**
+
+| Kịch bản | Không chặn | Có chặn |
+|---|---|---|
+| C – 6 nguồn HTTP (có trạng thái) | ~136.000 pps vào victim | **~242 pps** (6 nguồn bị chặn; drop SYN → bắt tay không xong → attacker treo) |
+| B – SYN spoof, chặn per-source | ~19.000 pps | **không đổi** (0 nguồn bị chặn — đúng giới hạn) |
+| B – SYN spoof, `--block-syn-rate 2000` | ~25.900 pps | **drop ~85%** (còn ~3.800 pps tới nginx) |
+
+Đánh đổi của chặn theo tốc độ SYN: một phần **SYN hợp lệ cũng bị rớt** khi tổng vượt ngưỡng — giới hạn
+cố hữu khi phía victim không phân biệt được nguồn thật/giả.
+
+## 10. Giới hạn & hướng phát triển
 
 **Giới hạn:**
 - Một máy giả mạo nhiều IP **không phân biệt được** với nhiều máy thật từ phía victim.
@@ -324,10 +352,10 @@ tô màu theo từng bên nên thấy ngay khi chúng khác nhau. (Container det
   lớn phải chặn ở thượng nguồn (firewall/CDN/scrubbing).
 
 **Hướng phát triển:** (1) CUSUM/change-point; (2) **ML với CICDDoS2019** (đã làm mục 8.1);
-(3) thêm vector low-and-slow; (4) phòng thủ theo hướng **closed-loop** (detector tự kích hoạt chặn)
-— rate-limit L7 / SYN cookies / giới hạn tầng 4 — sẽ làm sau.
+(3) thêm vector low-and-slow; (4) phòng thủ **closed-loop XDP drop** đã làm (mục 9) — còn SYN cookies
+và chặn ở thượng nguồn (upstream/CDN) để xử spoof triệt để hơn.
 
-## 10. Thuật ngữ nhanh
+## 11. Thuật ngữ nhanh
 
 | Thuật ngữ | Giải thích |
 |---|---|

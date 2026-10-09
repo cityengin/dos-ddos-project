@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Bo dem goi bang eBPF/XDP (dung BCC) cho detector - CHI DEM, khong drop. Chi dung trong lab.
+"""Bo dem + chan goi bang eBPF/XDP (dung BCC) cho detector. Chi dung trong lab.
 
-Y tuong: gan 1 chuong trinh XDP vao eth0 (trong netns cua victim). XDP ingress chi thay goi
-DI VAO victim (inbound) nen tu nhien bo qua goi victim tu tra ve. Chuong trinh dem vao BPF maps:
-  - counters[0..3] = packets / syn / ack / udp  (percpu de nhanh, userspace cong lai)
+DEM (mac dinh): gan XDP vao eth0 (netns victim), dem goi inbound toi victim vao BPF maps:
+  - counters[0..4] = packets / syn / ack / udp / blocked
   - src_ips[saddr] = so goi theo IP nguon   -> n_src + H(src)
-  - dports[dport]  = so goi theo cong dich (chi TCP, khop ban scapy) -> H(dport)
-Luon tra XDP_PASS (detect-only). Userspace doc + XOA maps moi 1 giay.
+  - dports[dport]  = so goi theo cong dich (chi TCP) -> H(dport)
 
-Can: BCC (python3-bpfcc), kernel headers, quyen CAP_BPF + CAP_NET_ADMIN (xem docker-compose).
+CHAN (closed-loop IPS, chi kich hoat khi userspace ghi vao - mac dinh TRO):
+  - blocklist[saddr] = expire_ns: neu src bi chan & chua het han -> XDP_DROP (++blocked)
+  - token-bucket SYN toan cuc (synb + cfg[0]=rate pps): drop SYN vuot rate (xu SYN spoof)
+Luon DEM TRUOC roi moi chan -> detector van thay dung cuong do tan cong. Khong chan => XDP_PASS.
+
+Can: BCC (python3-bpfcc), kernel headers, CAP_BPF + CAP_NET_ADMIN (xem docker-compose).
 """
 import ctypes
 import socket
 import struct
+import time
 from collections import Counter
 
-# Chuong trinh eBPF (C, bien dich boi BCC luc chay). VICTIM_IP la hang so (network byte order)
-# chen tu userspace; =0 nghia la dem moi goi inbound (khong loc theo dst).
+# Chuong trinh eBPF (C). VICTIM_IP la hang so (network byte order) chen tu userspace; 0 = dem tat ca.
 BPF_TEXT = r"""
 #include <uapi/linux/bpf.h>
 #include <uapi/linux/if_ether.h>
@@ -25,31 +28,38 @@ BPF_TEXT = r"""
 #include <uapi/linux/udp.h>
 #include <uapi/linux/in.h>
 
-BPF_PERCPU_ARRAY(counters, u64, 4);          // 0=packets 1=syn 2=ack 3=udp
+BPF_PERCPU_ARRAY(counters, u64, 5);          // 0=packets 1=syn 2=ack 3=udp 4=blocked
 BPF_HASH(src_ips, u32, u64, 65536);          // key = saddr (network order)
 BPF_HASH(dports,  u16, u64, 65536);          // key = TCP dport (host order)
 
+// ----- closed-loop IPS (tro neu userspace khong ghi) -----
+BPF_HASH(blocklist, u32, u64, 65536);                 // key=saddr, val=expire_ns (bpf_ktime_get_ns)
+struct synb_t { struct bpf_spin_lock lock; u64 tokens; u64 last_ns; };
+BPF_ARRAY(synb, struct synb_t, 1);                    // token-bucket SYN toan cuc (nano-token)
+BPF_ARRAY(cfg,  u64, 1);                              // cfg[0] = syn_rate (pps); 0 = tat
+
+static __always_inline void bump(int k) {
+    u64 *v = counters.lookup(&k); if (v) *v += 1;
+}
+
 int xdp_count(struct xdp_md *ctx) {
-    void *data     = (void *)(long)ctx->data;
-    void *data_end = (void *)(long)ctx->data_end;
+    void *data = (void *)(long)ctx->data, *data_end = (void *)(long)ctx->data_end;
 
     struct ethhdr *eth = data;
     if ((void *)(eth + 1) > data_end) return XDP_PASS;
     if (eth->h_proto != htons(ETH_P_IP)) return XDP_PASS;
-
     struct iphdr *ip = (void *)(eth + 1);
     if ((void *)(ip + 1) > data_end) return XDP_PASS;
-
-    // Chi dem goi DI VAO victim (neu VICTIM_IP != 0). XDP ingress von da la inbound.
     if (VICTIM_IP != 0 && ip->daddr != VICTIM_IP) return XDP_PASS;
 
     u32 saddr = ip->saddr;
     u64 one = 1, *v;
-    int k;
 
-    k = 0; v = counters.lookup(&k); if (v) *v += 1;                 // packets (percpu)
+    // ===== DEM TRUOC (giu nguyen hanh vi cu) =====
+    bump(0);                                                     // packets
     v = src_ips.lookup(&saddr); if (v) lock_xadd(v, 1); else src_ips.update(&saddr, &one);
 
+    int is_syn = 0;
     if (ip->protocol == IPPROTO_TCP) {
         u32 ihl = ip->ihl * 4;
         if (ihl < sizeof(struct iphdr)) return XDP_PASS;
@@ -57,10 +67,40 @@ int xdp_count(struct xdp_md *ctx) {
         if ((void *)(tcp + 1) > data_end) return XDP_PASS;
         u16 dport = ntohs(tcp->dest);
         v = dports.lookup(&dport); if (v) lock_xadd(v, 1); else dports.update(&dport, &one);
-        if (tcp->syn) { k = 1; v = counters.lookup(&k); if (v) *v += 1; }
-        if (tcp->ack) { k = 2; v = counters.lookup(&k); if (v) *v += 1; }
+        if (tcp->syn) { bump(1); is_syn = 1; }
+        if (tcp->ack) bump(2);
     } else if (ip->protocol == IPPROTO_UDP) {
-        k = 3; v = counters.lookup(&k); if (v) *v += 1;
+        bump(3);
+    }
+
+    // ===== ROI MOI CHAN (detect-only neu cac map rong) =====
+    u64 now = bpf_ktime_get_ns();
+
+    // (1) blocklist theo nguon
+    u64 *exp = blocklist.lookup(&saddr);
+    if (exp && now < *exp) { bump(4); return XDP_DROP; }
+
+    // (2) token-bucket SYN toan cuc: cat SYN vuot rate (xu tan cong SYN spoof)
+    if (is_syn) {
+        int zero = 0;
+        u64 *rate = cfg.lookup(&zero);
+        if (rate && *rate > 0) {
+            struct synb_t *s = synb.lookup(&zero);
+            if (s) {
+                int drop = 0;
+                u64 cap = (*rate) * 1000000000ULL;            // burst = 1 giay
+                bpf_spin_lock(&s->lock);
+                if (s->last_ns == 0) { s->last_ns = now; s->tokens = cap; }
+                u64 elapsed = now - s->last_ns;
+                s->last_ns = now;
+                u64 tok = s->tokens + elapsed * (*rate);       // moi ns nap (rate) nano-token
+                if (tok > cap) tok = cap;
+                if (tok >= 1000000000ULL) { tok -= 1000000000ULL; } else { drop = 1; }
+                s->tokens = tok;
+                bpf_spin_unlock(&s->lock);
+                if (drop) { bump(4); return XDP_DROP; }
+            }
+        }
     }
     return XDP_PASS;
 }
@@ -68,22 +108,20 @@ int xdp_count(struct xdp_md *ctx) {
 
 
 class EbpfCounter:
-    """Backend dem goi bang XDP, cung interface voi backend scapy: snapshot() + stop()."""
+    """Backend dem (+ chan) bang XDP. Interface dem giong scapy: snapshot() + stop().
+    Phan chan (closed-loop) la cac ham phu, chi detector goi khi bat --block."""
 
     def __init__(self, iface, victim_ip):
         from bcc import BPF  # import tre: chi can khi dung engine ebpf
         self._BPF = BPF
         self.iface = iface
-        # VICTIM_IP: chuyen "a.b.c.d" -> u32 network byte order; rong/None -> 0 (dem tat ca)
         vip = 0
         if victim_ip:
-            vip = struct.unpack("I", socket.inet_aton(victim_ip))[0]  # da la network order
+            vip = struct.unpack("I", socket.inet_aton(victim_ip))[0]  # network order
         text = BPF_TEXT.replace("VICTIM_IP", str(vip))
         self.b = BPF(text=text)
         fn = self.b.load_func("xdp_count", BPF.XDP)
-        # SKB_MODE (generic XDP): chay duoc tren veth khong can driver ho tro native.
         self.flags = BPF.XDP_FLAGS_SKB_MODE
-        # go chuong trinh XDP cu (neu lan truoc chet ma chua kip go) roi moi attach, tranh loi "busy".
         try:
             self.b.remove_xdp(iface, self.flags)
         except Exception:
@@ -92,18 +130,20 @@ class EbpfCounter:
         self._counters = self.b["counters"]
         self._src = self.b["src_ips"]
         self._dports = self.b["dports"]
+        self._blocklist = self.b["blocklist"]
+        self._cfg = self.b["cfg"]
+        self.last_blocked = 0   # so goi drop trong cua so vua roi (userspace doc tu counters[4])
 
     def snapshot(self):
-        """Doc + XOA maps cho cua so vua roi. Tra (packets, syn, ack, src_counter, dport_counter)."""
+        """Doc + XOA maps cho cua so vua roi. Tra (packets, syn, ack, src_counter, dport_counter).
+        Dong thoi luu so goi da chan (counters[4]) vao self.last_blocked."""
         def total(idx):
-            # BPF_PERCPU_ARRAY: moi key tra ve list gia tri tung CPU -> cong lai
-            per_cpu = self._counters[ctypes.c_int(idx)]
-            return int(sum(x for x in per_cpu))
+            return int(sum(x for x in self._counters[ctypes.c_int(idx)]))
 
         packets = total(0)
         syn = total(1)
         ack = total(2)
-        # udp = total(3)  # hien chua dung trong luat, giu de mo rong
+        self.last_blocked = total(4)
 
         src_counter = Counter()
         for k, v in self._src.items():
@@ -112,11 +152,34 @@ class EbpfCounter:
         for k, v in self._dports.items():
             dport_counter[k.value] = v.value
 
-        # reset cho cua so ke tiep
         self._counters.clear()
         self._src.clear()
         self._dports.clear()
         return packets, syn, ack, src_counter, dport_counter
+
+    # ----- closed-loop IPS (chi goi khi --block) -----
+    def block_sources(self, src_ints, ttl_s):
+        """Chan cac IP nguon (int network-order) voi TTL giay."""
+        expire = time.monotonic_ns() + int(ttl_s * 1e9)   # bpf_ktime_get_ns = CLOCK_MONOTONIC
+        for ip in src_ints:
+            self._blocklist[ctypes.c_uint(ip)] = ctypes.c_ulonglong(expire)
+
+    def expire_blocklist(self):
+        """Xoa cac muc het han -> khong chan vinh vien, chan kich thuoc map."""
+        now = time.monotonic_ns()
+        dead = [k for k, v in self._blocklist.items() if v.value < now]
+        for k in dead:
+            try:
+                del self._blocklist[k]
+            except Exception:
+                pass
+
+    def blocked_src_count(self):
+        return sum(1 for _ in self._blocklist.items())
+
+    def set_syn_rate(self, rate):
+        """Dat rate (pps) cho token-bucket SYN toan cuc; 0 = tat."""
+        self._cfg[ctypes.c_int(0)] = ctypes.c_ulonglong(int(rate))
 
     def stop(self):
         try:
