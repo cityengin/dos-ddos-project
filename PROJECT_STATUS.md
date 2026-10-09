@@ -2,7 +2,10 @@
 
 ## De tai
 Thuc hien tan cong DoS/DDoS va phat hien tan cong DoS/DDoS. Do an cuoi ki.
-Moi truong: Windows + Docker Desktop (WSL2). Lab co lap hoan toan, KHONG nham target that.
+Moi truong: Ubuntu native (Docker khong qua WSL2 -> nhanh/on dinh hon). Truoc day chay tren
+Windows + Docker Desktop (WSL2); cac so lieu "before" van giu de so sanh. Lab co lap hoan toan,
+KHONG nham target that. Luu y: `docker` can chay qua `sg docker -c '...'` neu phien dang nhap chua
+reload nhom docker (hoac re-login / `newgrp docker`).
 
 ## Kien truc lab (docker-compose.yml)
 - victim: nginx:alpine, IP 172.30.0.10, map ra localhost:8080
@@ -14,7 +17,9 @@ Moi truong: Windows + Docker Desktop (WSL2). Lab co lap hoan toan, KHONG nham ta
 - attacker/Dockerfile        : image tan cong (python3-slim + hping3 + scapy + tcpdump)
 - attacks/syn_flood.py        : SYN flood L4, co --spoof (random source IP)
 - attacks/http_flood.py       : HTTP flood L7, multi-thread GET
-- run_ddos.ps1                : orchestrator PowerShell, chay 6 attacker song song (mode syn|http)
+- run_ddos.ps1                : orchestrator PowerShell (Windows), chay 6 attacker song song (mode syn|http)
+- run_ddos.sh                 : orchestrator bash (Linux), tuong duong run_ddos.ps1 (tu re-exec qua sg docker)
+- experiments/bench_syn_throughput.sh: do pps sinh goi SYN (2 diem, khu khoi dong) 1 va 6 nguon
 - detection/detector.py       : sniffer realtime, tinh pps/syn/ack + entropy(src IP) + entropy(dport), phan loai DoS/DDoS, option --csv, --victim
 - experiments/run_scenarios.py: chay lai A/B/C tu dong -> detection/{A,B,C}.csv + {A,B,C}.meta.json
 - analysis/plot_attack.py     : ve do thi tu CSV (pps/syn/ack symlog + H_src/n_src), to vung tan cong A/B/C
@@ -39,6 +44,14 @@ Moi truong: Windows + Docker Desktop (WSL2). Lab co lap hoan toan, KHONG nham ta
 
 ## Ket qua da co (so lieu that tu lab)
 - Baseline (baseline.csv, 62s idle): pps=syn=ack=0, 0 episode, 0 false positive -> nguong an toan
+  - Ubuntu native: xac nhan lai 63s idle -> pps=syn=ack=0, 0 episode, 0 FP (nguong 40/25 van an toan)
+- Validate lai tren Ubuntu (experiments/run_scenarios.py): A=DoS, B=DDoS, C=DDoS -> 3/3 dung,
+  detect=0s, FP=0, FN=0. So lieu C trung gan nhu tung chu so voi ban Windows (pps 1811, ack 1428,
+  H_src 2.58) -> lab tai lap on dinh tren Ubuntu.
+- Throughput sinh goi SYN (bench_syn_throughput.sh, tha rong --pps 0, co spoof, do 2 diem 6s/16s):
+  1 nguon ~1470 pps; 6 nguon ~9460 pps tong (~1576 pps/nguon). => kich ban B (pacing 400x6=2400 pps)
+  bi gioi han boi PACING, khong phai tran phan cung. (Chua co so Windows "tha rong" tuong duong de
+  tinh % chenh lech chinh xac; chay cung script tren may Windows/WSL de co so sanh cong bang.)
 - BEFORE fix (attack.csv, detector cu dem ca 2 chieu) -> phan loai chi 2/3, A bi nham DDoS. Giu lam bang chung.
 - AFTER fix (detector --victim, moi kich ban 1 file, detection=0s, FP=0, do thi analysis/{A,B,C}.png):
   - A) DoS 1 nguon SYN       : pps ~300  syn ~150  ack 0     n_src=1     H_src=0.00  -> DoS  [SYN flood]  (DUNG)
