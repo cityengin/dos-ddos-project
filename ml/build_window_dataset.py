@@ -29,12 +29,14 @@ OUT_CSV = os.path.join(ROOT, "ml", "data", "windows.csv")
 RUNNER = os.path.join(ROOT, "experiments", "run_scenarios.py")
 
 # Ma tran chay mac dinh: (kich ban, duration, pps|None).
-# Cac dong pps thap (A pps15/20, B pps3) co tinh TAO window tan cong DUOI nguong luat (40/25)
-# -> day la cho ML co co hoi hon luat o Phase 2.
+# A pps15, B pps3, D (low-rate SYN spoof): TAO window tan cong DUOI nguong luat (40/25) -> luat BO SOT.
+# E (benign HTTP 1 nguon tai cao): pps VUOT nguong -> luat BAO NHAM, nhung n_src=1 + ack>>syn.
 MATRIX = [
-    ("A", 20, 150), ("A", 20, 15), ("A", 15, 20),
+    ("A", 20, 150), ("A", 20, 15),
     ("B", 20, 400), ("B", 20, 3),
     ("C", 20, None), ("C", 15, None),
+    ("D", 20, None), ("D", 15, None),
+    ("E", 20, None), ("E", 15, None),
 ]
 
 OUT_HEADER = ["time", "scenario", "run", "pps", "syn_s", "ack_s", "h_src", "h_dport", "n_src",
@@ -107,7 +109,7 @@ def main():
             raw_items.append((dst_csv, dst_meta, name, "%s_%s" % (name, tag)))
 
     # gom + gan nhan
-    total, agg = 0, {}
+    total, agg, empty_runs = 0, {}, []
     with open(OUT_CSV, "w", newline="") as out:
         w = csv.writer(out, lineterminator="\n")   # LF kieu Unix (tranh \r dinh vao cot cuoi)
         w.writerow(OUT_HEADER)
@@ -116,7 +118,11 @@ def main():
             total += n
             for k, v in counts.items():
                 agg[k] = agg.get(k, 0) + v
-            print("    %-34s -> %4d dong  %s" % (os.path.basename(csv_path), n, dict(sorted(counts.items()))))
+            # guard: 1 run ra 0 window = detector khong ghi duoc (vd bi tranh chap/chet) -> bao RO
+            flag = "  [!] 0 WINDOW - detector loi/tranh chap?" if n == 0 else ""
+            if n == 0:
+                empty_runs.append(os.path.basename(csv_path))
+            print("    %-34s -> %4d dong  %s%s" % (os.path.basename(csv_path), n, dict(sorted(counts.items())), flag))
 
     # thong ke can bang lop
     print("\n[*] Tong: %d window -> %s" % (total, OUT_CSV))
@@ -130,6 +136,9 @@ def main():
             print("[!] CANH BAO: lop mat can bang (ty le %.1fx). Nen chay them kich ban cho lop thieu." % ratio)
         else:
             print("[*] Can bang o muc chap nhan duoc (ty le %.1fx)." % ratio)
+    if empty_runs:
+        print("[!] CANH BAO NGHIEM TRONG: %d run ra 0 window: %s" % (len(empty_runs), ", ".join(empty_runs)))
+        print("    -> dataset KHONG day du (detector co the bi tranh chap, vd node dashboard respawn --stream). Chay lai!")
 
     # dem window ATTACK duoi nguong luat -> cho ML co the hon luat o Phase 2
     sub = att = 0

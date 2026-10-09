@@ -17,7 +17,12 @@ OUT_DIR = "detection"   # bind-mount /app cua detector -> ./detection tren host
 SCEN = {
     "A": dict(desc="1 nguon SYN (khong spoof)", truth="DoS",  mode="syn",  spoof=False, n=1, pps=150),
     "B": dict(desc="6 nguon SYN + spoof IP",     truth="DDoS", mode="syn",  spoof=True,  n=6, pps=400),
-    "C": dict(desc="6 nguon HTTP flood (L7)",    truth="DDoS", mode="http", spoof=False, n=6, pps=0),
+    "C": dict(desc="6 nguon HTTP flood (L7)",    truth="DDoS", mode="http", spoof=False, n=6, pps=0, threads=20),
+    # D va E la kich ban "gan nguong" de tao vung chong lan (luat de sai, ML phai hoc):
+    # D: spoof toc do THAP -> pps/syn TONG < nguong 40/25 nhung nhieu nguon + ack~0 -> luat BO SOT.
+    "D": dict(desc="low-rate SYN spoof (duoi nguong)", truth="DDoS", mode="syn", spoof=True, n=2, pps=12),
+    # E: benign 1 nguon nhung tai cao -> pps VUOT ~40 (luat BAO NHAM) nhung n_src=1 + ack>>syn -> ML hoc benign.
+    "E": dict(desc="benign HTTP 1 nguon tai cao (flash-crowd nhe)", truth="BENIGN", mode="http", spoof=False, n=1, threads=6),
 }
 
 
@@ -64,7 +69,8 @@ def run_one(name, baseline, duration, cooldown, pps_override=None):
             if s["spoof"]:
                 cmd.append("--spoof")
         else:
-            cmd = ["python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", "20", "-d", str(duration)]
+            cmd = ["python3", "/app/http_flood.py", VICTIM, "-p", "80",
+                   "-t", str(s.get("threads", 20)), "-d", str(duration)]
         dexec(a, *cmd, detach=True)
 
     time.sleep(duration + 1)

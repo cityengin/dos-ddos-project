@@ -113,9 +113,13 @@ def main():
         te = runs == r
         c = new_rf(args.n_estimators); c.fit(X[~te], y[~te])
         p = c.predict(X[te]); rp = rule_predict(X[te])
-        ml_b.append(f1_score(binof(y[te]), binof(p), zero_division=0)); ml_a.append(accuracy_score(y[te], p))
-        ru_b.append(f1_score(binof(y[te]), binof(rp), zero_division=0)); ru_a.append(accuracy_score(y[te], rp))
-    L.append("\n===== (b) Leave-one-run-out (%d fold) =====" % len(ml_b))
+        ml_a.append(accuracy_score(y[te], p)); ru_a.append(accuracy_score(y[te], rp))
+        # F1 nhi phan chi co nghia khi fold CO mau tan cong (fold benign-only -> bo qua, tranh F1=0 gia tao)
+        if binof(y[te]).sum() > 0:
+            ml_b.append(f1_score(binof(y[te]), binof(p), zero_division=0))
+            ru_b.append(f1_score(binof(y[te]), binof(rp), zero_division=0))
+    L.append("\n===== (b) Leave-one-run-out (%d fold; F1_bin tren %d fold co tan cong) ====="
+             % (len(ml_a), len(ml_b)))
     L.append("  ML   : F1_bin = %.3f +/- %.3f | accuracy da lop = %.3f +/- %.3f" %
              (np.mean(ml_b), np.std(ml_b), np.mean(ml_a), np.std(ml_a)))
     L.append("  Luat : F1_bin = %.3f +/- %.3f | accuracy da lop = %.3f +/- %.3f" %

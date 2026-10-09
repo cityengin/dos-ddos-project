@@ -45,27 +45,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   aggregate pps for 1 and 6 sources — the number to compare host platforms with. On the Ubuntu
   native host it reaches **~1,470 pps per source** and **~9,460 pps aggregate** (6 sources), showing
   the paced scenario B (`--pps 400` ×6 = 2,400 pps) is pacing-limited, not hardware-limited.
-- `experiments/run_scenarios.py --pps`: optional override of the per-source SYN rate for the SYN
-  scenarios (A/B); backward-compatible (omit = keep the built-in rates), HTTP unaffected. The
-  effective pps is recorded in each scenario's `.meta.json`. Used to generate sub-threshold attack
-  windows for the ML dataset.
+- `experiments/run_scenarios.py`: `--pps` optionally overrides the per-source SYN rate for the SYN
+  scenarios; backward-compatible (omit = keep the built-in rates). Two **near-threshold scenarios**
+  were added to make the ML-vs-rule comparison non-trivial: **D** (low-rate spoofed SYN, 2 sources,
+  ~24 pps total — below the 40/25 rule threshold, so the rule misses a real attack) and **E** (a
+  benign single-source HTTP flash-crowd whose rate exceeds the threshold, so the rule false-alarms).
+  HTTP scenarios take a `threads` field to set their rate; the effective pps is recorded in each
+  scenario's `.meta.json`.
 - `ml/build_window_dataset.py`: builds a **window-level** labeled dataset from the detector's own
   per-window features (the detector has window features, not the flow features CICDDoS2019 needs, so
-  the live ML model is trained on these instead). It orchestrates repeated scenario runs (varying
-  duration/pps), labels each 1-second window `BENIGN` (pps==0) or the run's ground truth (DoS/DDoS),
-  adds derived features `syn_ratio` and `ack_syn_ratio`, and writes `ml/data/windows.csv` with a
-  class-balance report. In the lab: 225 windows (BENIGN 90 / DDoS 80 / DoS 55), with ~31% of attack
-  windows below the rule threshold (pps<40 and syn<25) — the cases the fixed rule misses. A `run`
-  column records the originating run so evaluation can hold out whole runs.
+  the live ML model is trained on these instead). It orchestrates repeated scenario runs (A/B/C plus
+  the near-threshold D/E, varying duration/pps), labels each 1-second window `BENIGN` (pps==0) or the
+  run's ground truth, adds derived features `syn_ratio` and `ack_syn_ratio`, records the originating
+  `run` (for leave-one-run-out), and writes `ml/data/windows.csv` with a class-balance report. It
+  warns loudly if any run yields 0 windows (a sign the detector sniff was disrupted). Lab dataset:
+  316 windows (BENIGN 162 / DDoS 114 / DoS 40), with ~48% of attack windows below the rule threshold.
 - `ml/train_window.py`: trains a single multiclass RandomForest (BENIGN/DoS/DDoS) on the detector's
   own per-window features and saves it to `detection/window_model.joblib` (bundled with feature
   order, label order and the sklearn version) for the detector to use live. It compares against the
-  project rule (pps>=40 or syn>=25; n_src>=2 => DDoS) on a 70/30 split and with leave-one-run-out.
-  On the lab dataset: attack-detection F1 is **0.76 (rule) vs 1.00 (RF)**, and on the attack windows
-  below the rule threshold the rule catches **0%** while the RF catches **100%**; leave-one-run-out
-  F1 (binary) is **0.70 +/- 0.45 (rule) vs 1.00 +/- 0.00 (RF)**. The RF scores are high because the
-  lab's benign traffic is all-zero and the classes are cleanly separable — the RF effectively learns
-  a lower, data-driven threshold the fixed rule lacks, rather than solving a hard problem.
+  project rule (pps>=40 or syn>=25; n_src>=2 => DDoS) on a 70/30 split and with leave-one-run-out
+  (binary F1 averaged only over folds that contain attack windows). The near-threshold D/E make the
+  rule fail both ways (false negatives on D, false positives on E): attack-detection F1 is
+  **0.58 (rule) vs 0.99 (RF)**, multiclass macro-F1 **0.59 (rule) vs 0.99 (RF)**; on attack windows
+  below the rule threshold the rule catches **0%** vs the RF's **100%**; leave-one-run-out F1 is
+  **0.52 (rule) vs 0.99 (RF)**. The RF is no longer perfect (it misses ~1 near-threshold window);
+  pushing it lower would need a multi-source benign flash-crowd overlapping the HTTP-DDoS class.
 
 ### Changed
 

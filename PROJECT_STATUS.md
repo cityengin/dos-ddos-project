@@ -40,6 +40,15 @@ reload nhom docker (hoac re-login / `newgrp docker`).
   Phan loai da lop: accuracy 0.93, macro-F1 0.735 (da gom nhan DrDoS_X va X ve 1 ho; --raw-labels
   giu 18 nhan goc -> macro-F1 0.535, chenh lech la do CICDDoS2019 dat nhan 2 kieu theo ngay chup).
   Mau synthetic (ml/make_synthetic.py) van giu lam fallback khi khong tai dataset.
+- ML MUC-CUA-SO (cho detector ML live): ml/build_window_dataset.py sinh dataset tu chinh dac trung
+  detector (pps,syn,ack,H(src),H(dport),n_src + syn_ratio,ack_syn_ratio), ml/train_window.py train
+  1 RandomForest da lop (BENIGN/DoS/DDoS) -> detection/window_model.joblib (sklearn 1.9.1).
+  Them 2 kich ban GAN NGUONG: D (SYN spoof cham ~24pps, duoi nguong -> luat bo sot) va E (HTTP 1 nguon
+  tai cao -> luat bao nham). Dataset 316 window (BENIGN 162/DDoS 114/DoS 40), 48% window tan cong duoi
+  nguong. Ket qua (70/30): F1 phat hien luat 0.58 vs RF 0.99; macro-F1 luat 0.59 vs RF 0.99; window
+  duoi nguong luat bat 0% vs RF 100%. LORO: F1 luat 0.52 vs RF 0.99. RF khong con 1.000 (sai ~1 window
+  gan nguong); muon RF tut sau hon can E flash-crowd NHIEU nguon (trung voi HTTP-DDoS). Phase 3 (nap
+  model vao detector --ml live) chua lam.
 - Phong thu: DA GO phan mitigation L7 (rate-limit) roi, se lam lai theo huong closed-loop
   (phat hien -> tu dong chan) sau. Hien detector chi phat hien (IDS).
 
