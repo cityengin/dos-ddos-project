@@ -49,6 +49,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   aggregate pps for 1 and 6 sources — the number to compare host platforms with. On the Ubuntu
   native host it reaches **~1,470 pps per source** and **~9,460 pps aggregate** (6 sources), showing
   the paced scenario B (`--pps 400` ×6 = 2,400 pps) is pacing-limited, not hardware-limited.
+- `experiments/run_scenarios.py --pps`: optional override of the per-source SYN rate for the SYN
+  scenarios (A/B); backward-compatible (omit = keep the built-in rates), HTTP unaffected. The
+  effective pps is recorded in each scenario's `.meta.json`. Used to generate sub-threshold attack
+  windows for the ML dataset.
+- `ml/build_window_dataset.py`: builds a **window-level** labeled dataset from the detector's own
+  per-window features (the detector has window features, not the flow features CICDDoS2019 needs, so
+  the live ML model is trained on these instead). It orchestrates repeated scenario runs (varying
+  duration/pps), labels each 1-second window `BENIGN` (pps==0) or the run's ground truth (DoS/DDoS),
+  adds derived features `syn_ratio` and `ack_syn_ratio`, and writes `ml/data/windows.csv` with a
+  class-balance report. In the lab: 225 windows (BENIGN 90 / DDoS 80 / DoS 55), with ~31% of attack
+  windows below the rule threshold (pps<40 and syn<25) — the cases the fixed rule misses.
 
 ### Changed
 

@@ -32,8 +32,10 @@ def kill_all():
         dexec(a, "pkill", "-f", "flood.py")
 
 
-def run_one(name, baseline, duration, cooldown):
+def run_one(name, baseline, duration, cooldown, pps_override=None):
     s = SCEN[name]
+    # pps hieu luc: uu tien override tu CLI (chi co tac dung voi SYN), nguoc lai giu mac dinh kich ban
+    eff_pps = pps_override if pps_override is not None else s.get("pps")
     csv = f"/app/{name}.csv"
     host_csv = os.path.join(OUT_DIR, f"{name}.csv")
     print(f"\n=== Kich ban {name}: {s['desc']}  (mong doi: {s['truth']}) ===")
@@ -57,8 +59,8 @@ def run_one(name, baseline, duration, cooldown):
     for a in used:
         if s["mode"] == "syn":
             cmd = ["timeout", str(duration), "python3", "/app/syn_flood.py", VICTIM, "-p", "80"]
-            if s.get("pps"):
-                cmd += ["--pps", str(s["pps"])]
+            if eff_pps:
+                cmd += ["--pps", str(eff_pps)]
             if s["spoof"]:
                 cmd.append("--spoof")
         else:
@@ -75,7 +77,7 @@ def run_one(name, baseline, duration, cooldown):
     time.sleep(1)
 
     meta = dict(name=name, desc=s["desc"], truth=s["truth"], mode=s["mode"],
-                spoof=s["spoof"], sources=used, victim=VICTIM,
+                spoof=s["spoof"], sources=used, victim=VICTIM, pps=eff_pps,
                 attack_start=t_start, attack_end=t_end, csv=host_csv)
     with open(os.path.join(OUT_DIR, f"{name}.meta.json"), "w") as f:
         json.dump(meta, f, indent=2)
@@ -88,11 +90,13 @@ def main():
     ap.add_argument("--baseline", type=int, default=6)
     ap.add_argument("--duration", type=int, default=20)
     ap.add_argument("--cooldown", type=int, default=5)
+    ap.add_argument("--pps", type=int, default=None,
+                    help="override pps/nguon cho kich ban SYN (A/B); khong truyen = giu mac dinh SCEN")
     args = ap.parse_args()
 
     names = [args.only] if args.only else list(SCEN)
     for n in names:
-        run_one(n, args.baseline, args.duration, args.cooldown)
+        run_one(n, args.baseline, args.duration, args.cooldown, args.pps)
     print("\n[*] HOAN TAT. CSV + meta trong thu muc detection/")
 
 
