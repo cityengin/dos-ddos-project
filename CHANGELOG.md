@@ -70,6 +70,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   below the rule threshold the rule catches **0%** vs the RF's **100%**; leave-one-run-out F1 is
   **0.52 (rule) vs 0.99 (RF)**. The RF is no longer perfect (it misses ~1 near-threshold window);
   pushing it lower would need a multi-source benign flash-crowd overlapping the HTTP-DDoS class.
+- `detection/detector.py --ml PATH`: load a window-model `.joblib` (from `train_window.py`) at
+  startup and classify every 1-second window with it **in parallel with the threshold rule**, so the
+  table, `--stream` JSON (`ml_verdict`/`ml_conf`) and `--csv` (two extra columns, only when `--ml`)
+  all show both verdicts. It fails loudly (exits) if the model/scikit-learn/joblib is missing or the
+  bundle is malformed. The rule stays the default; `--ml` is additive. Verified live in the lab:
+  baseline -> `BENIGN`, scenario A -> `DoS`, B/C -> `DDoS`; the first partial HTTP window (a single
+  source, ACK-heavy) reads `BENIGN` at low confidence — the flash-crowd behavior learned from
+  scenario E.
+- `attacker/Dockerfile`: install `scikit-learn==1.9.1` + `joblib==1.6.0` (pinned to the training
+  version) so the detector container can load the window model for `--ml`.
 
 ### Changed
 

@@ -47,8 +47,11 @@ reload nhom docker (hoac re-login / `newgrp docker`).
   tai cao -> luat bao nham). Dataset 316 window (BENIGN 162/DDoS 114/DoS 40), 48% window tan cong duoi
   nguong. Ket qua (70/30): F1 phat hien luat 0.58 vs RF 0.99; macro-F1 luat 0.59 vs RF 0.99; window
   duoi nguong luat bat 0% vs RF 100%. LORO: F1 luat 0.52 vs RF 0.99. RF khong con 1.000 (sai ~1 window
-  gan nguong); muon RF tut sau hon can E flash-crowd NHIEU nguon (trung voi HTTP-DDoS). Phase 3 (nap
-  model vao detector --ml live) chua lam.
+  gan nguong); muon RF tut sau hon can E flash-crowd NHIEU nguon (trung voi HTTP-DDoS).
+  Phase 3 DA XONG: detector.py co co --ml PATH (nap window_model.joblib, phan loai moi window SONG SONG
+  voi luat; hien ca 2 o bang/--stream/--csv; fail RO neu thieu model/sklearn). Da them scikit-learn
+  1.9.1 + joblib vao attacker/Dockerfile. Kiem tra live: baseline->BENIGN, A->DoS, B/C->DDoS (khop);
+  window HTTP 1-nguon dau pha C doc BENIGN do tin thap (hanh vi hoc tu E).
 - Phong thu: DA GO phan mitigation L7 (rate-limit) roi, se lam lai theo huong closed-loop
   (phat hien -> tu dong chan) sau. Hien detector chi phat hien (IDS).
 

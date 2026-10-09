@@ -69,10 +69,27 @@ def main():
     ap.add_argument("--stream", action="store_true",
                     help="in 1 JSON/dong moi window ra stdout (cho dashboard); tat bang text")
     ap.add_argument("--csv", default="", help="ghi log ra file CSV neu co")
+    ap.add_argument("--ml", default="",
+                    help="duong dan model .joblib (train_window.py) de phan loai ML SONG SONG voi luat")
     args = ap.parse_args()
 
     global VICTIM
     VICTIM = args.victim or None
+
+    # Nap model ML neu co --ml. Fail RO (thoat han) neu thieu file / thieu sklearn-joblib / bundle sai,
+    # de khong chay nham che do "co --ml nhung ML im lang".
+    ml = None
+    if args.ml:
+        try:
+            import joblib
+            b = joblib.load(args.ml)
+            ml = {"model": b["model"], "features": list(b["features"]), "labels": list(b["labels"])}
+        except Exception as e:
+            sys.stderr.write("[X] Khong nap duoc model ML tu '%s': %s\n"
+                             "    (thieu file? chua cai scikit-learn/joblib trong container? bundle sai?)\n"
+                             % (args.ml, e))
+            sys.stderr.flush()
+            os._exit(4)
 
     if not args.stream:
         print("[*] Detector chay tren iface=%s, interval=%.1fs, nguong pps=%d syn=%d, victim=%s"
@@ -80,11 +97,14 @@ def main():
         if args.adaptive:
             print("[*] Che do NGUONG THICH NGHI (EWMA): alpha=%.2f k=%.1f warmup=%ds, san toi thieu pps>=%d syn>=%d"
                   % (args.alpha, args.k, args.warmup, args.pps, args.syn))
+        if ml:
+            print("[*] ML song song: model=%s | lop=%s" % (args.ml, ml["labels"]))
         print("%-8s %8s %8s %8s %10s %10s   %s" %
-              ("time","pkts/s","syn/s","ack/s","H(src)","H(dport)","ALERT"))
+              ("time","pkts/s","syn/s","ack/s","H(src)","H(dport)","ALERT (luat) | ML" if ml else "ALERT"))
     csvf = open(args.csv, "w") if args.csv else None
     if csvf:
-        csvf.write("time,pps,syn_s,ack_s,h_src,h_dport,n_src,alert\n")
+        csvf.write("time,pps,syn_s,ack_s,h_src,h_dport,n_src,alert" +
+                   (",ml_verdict,ml_conf" if ml else "") + "\n")
 
     # sniff chay o thread rieng, main loop in bao cao moi interval.
     # Neu sniff LOI (vd netns gay sau khi recreate victim) -> bao RO va thoat han,
@@ -147,10 +167,26 @@ def main():
             if syn_flood:
                 alert += " [SYN flood]"
 
+        # ====== ML song song (neu co --ml) ======
+        # Dung vector dac trung DUNG THU TU model da luu; tinh 2 ty le dan xuat giong luc train.
+        ml_verdict, ml_conf = None, None
+        if ml:
+            feat = {"pps": pps, "syn_s": syn_s, "ack_s": ack_s, "h_src": h_src,
+                    "h_dport": h_dport, "n_src": n_src,
+                    "syn_ratio": syn_s / max(pps, 1.0), "ack_syn_ratio": ack_s / max(syn_s, 1.0)}
+            vec = [[feat[k] for k in ml["features"]]]
+            ml_verdict = str(ml["model"].predict(vec)[0])
+            try:
+                ml_conf = float(max(ml["model"].predict_proba(vec)[0]))
+            except Exception:
+                ml_conf = None
+
         if csvf:
-            csvf.write("%s,%.0f,%.0f,%.0f,%.3f,%.3f,%d,%s\n" %
-                       (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, n_src,
-                        alert.replace(","," ")))
+            row = "%s,%.0f,%.0f,%.0f,%.3f,%.3f,%d,%s" % (
+                time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, n_src, alert.replace(","," "))
+            if ml:
+                row += ",%s,%s" % (ml_verdict or "", ("%.3f" % ml_conf) if ml_conf is not None else "")
+            csvf.write(row + "\n")
             csvf.flush()
 
         if args.stream:
@@ -161,10 +197,14 @@ def main():
                 "h_src": round(h_src, 3), "h_dport": round(h_dport, 3), "n_src": n_src,
                 "triggered": bool(triggered), "verdict": verdict, "syn_flood": syn_flood,
                 "thr_pps": round(thr_pps, 1), "thr_syn": round(thr_syn, 1),
+                "ml_verdict": ml_verdict, "ml_conf": round(ml_conf, 3) if ml_conf is not None else None,
             }), flush=True)
         else:
-            print("%-8s %8.0f %8.0f %8.0f %10.2f %10.2f   %s" %
-                  (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, alert))
+            ml_txt = ""
+            if ml:
+                ml_txt = ("  | ML:%s(%.2f)" % (ml_verdict, ml_conf)) if ml_conf is not None else ("  | ML:%s" % ml_verdict)
+            print("%-8s %8.0f %8.0f %8.0f %10.2f %10.2f   %s%s" %
+                  (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, alert, ml_txt))
 
 if __name__ == "__main__":
     main()
