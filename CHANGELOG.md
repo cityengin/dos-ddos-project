@@ -22,15 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `make_synthetic.py` generates a CICDDoS2019-style sample so it runs out of the box.
 - `ml/train.py` reads large CSVs in chunks with size-estimated sampling and accepts a directory
   of files, so it scales to the full CICDDoS2019 flow data without exhausting memory.
-- L7 mitigation (`mitigation/`): an nginx per-IP rate-limit config and a before/after demo
-  (`mitigation/demo_mitigation.py`) that turns the IDS into IPS-style protection. In the lab a
-  3-source HTTP flood drops from 30,430 to 240 served requests (~99% blocked) with no impact on a
-  legitimate client. Optional permanent mount documented in `docker-compose.yml`.
 - `detector.py --stream`: emit one JSON object per window to stdout (for the dashboard), keeping the
   existing human-readable table and CSV output unchanged.
-- Local-only realtime dashboard (`dashboard/`, Node + Express + WebSocket): network-topology view,
-  attack control (A/B/C scenarios), and an L7 defense toggle, all driven by the detector's live
-  stream. Binds to 127.0.0.1 only; control actions are fixed `docker exec` argument arrays
+- Local-only realtime dashboard (`dashboard/`, Node + Express + WebSocket): network-topology view
+  (with a service-health probe) and attack control (A/B/C scenarios), all driven by the detector's
+  live stream. Binds to 127.0.0.1 only; control actions are fixed `docker exec` argument arrays
   (no shell interpolation of client input).
 - Testing & verification guide (`docs/TESTING.md`) covering every component with expected results.
 - `ml/train.py` now reads **parquet** as well as CSV, and label canonicalization (`--raw-labels`
@@ -95,6 +91,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sniffed interface and inflates `n_src` — scenario A reads **DoS** again (not DDoS).
 - Dashboard event log appends the newest entry at the bottom (chronological, terminal-style) and
   auto-scrolls only when already near the bottom, so reading history is not yanked down.
+
+### Removed
+
+- L7 mitigation (nginx per-IP rate-limit): the `mitigation/` directory (`demo_mitigation.py`,
+  `nginx/default.conf`), its figure, the dashboard Defense panel / toggle, and all docs references.
+  Defense will be rebuilt as detection-driven blocking (closed-loop: the detector triggers the
+  block) rather than a standalone rate-limit. The dashboard keeps the Service health probe (an
+  impact indicator), moved into the Network panel.
 
 ## [1.0.0] - 2026-09-30
 

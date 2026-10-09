@@ -40,7 +40,8 @@ reload nhom docker (hoac re-login / `newgrp docker`).
   Phan loai da lop: accuracy 0.93, macro-F1 0.735 (da gom nhan DrDoS_X va X ve 1 ho; --raw-labels
   giu 18 nhan goc -> macro-F1 0.535, chenh lech la do CICDDoS2019 dat nhan 2 kieu theo ngay chup).
   Mau synthetic (ml/make_synthetic.py) van giu lam fallback khi khong tai dataset.
-- Phong thu L7: mitigation/ (nginx rate-limit) -> demo_mitigation.py: HTTP flood 30430 -> 240 (chan ~99%)
+- Phong thu: DA GO phan mitigation L7 (rate-limit) roi, se lam lai theo huong closed-loop
+  (phat hien -> tu dong chan) sau. Hien detector chi phat hien (IDS).
 
 ## Ket qua da co (so lieu that tu lab)
 - Baseline (baseline.csv, 62s idle): pps=syn=ack=0, 0 episode, 0 false positive -> nguong an toan

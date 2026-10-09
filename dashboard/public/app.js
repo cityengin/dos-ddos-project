@@ -5,7 +5,7 @@
   const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const SVGNS = "http://www.w3.org/2000/svg";
 
-  let running = null, mitigation = false, verdictLevel = "idle", serviceDown = false;
+  let running = null, verdictLevel = "idle", serviceDown = false;
 
   // ---------- websocket ----------
   let ws;
@@ -22,14 +22,13 @@
   function handle(m) {
     switch (m.type) {
       case "snapshot":
-        setPill("pill-docker", m.dockerOk); applyMitigation(!!m.mitigation);
+        setPill("pill-docker", m.dockerOk);
         onState(m.running ? m : { running: null });
         break;
       case "docker": setPill("pill-docker", m.up); break;
       case "detector": setPill("pill-detector", m.up); break;
       case "metric": onMetric(m.data); break;
       case "state": onState(m); break;
-      case "defense": applyMitigation(m.mitigation); break;
       case "health": onHealth(m); break;
       case "log": addLog(m); break;
     }
@@ -70,7 +69,7 @@
     if (serviceDown) { n.classList.add("down"); st.textContent = "DOWN"; halo.classList.add("pulse"); }
     else if (verdictLevel === "crit") { n.classList.add("crit"); st.textContent = "overloaded"; halo.classList.add("pulse"); }
     else if (verdictLevel === "warn") { n.classList.add("warn"); st.textContent = "under attack"; halo.classList.add("pulse"); }
-    else { st.textContent = mitigation ? "protected" : "idle"; halo.classList.remove("pulse"); }
+    else { st.textContent = "idle"; halo.classList.remove("pulse"); }
   }
 
   // ---------- attack state / topology ----------
@@ -79,7 +78,7 @@
     ATTACKERS.forEach((a) => setLinkActive(a, false));
     document.querySelectorAll(".btn-attack").forEach((b) => b.classList.remove("running"));
     if (m.running) {
-      (m.attackers || []).forEach((a) => setLinkActive(a, true, m.attackType, mitigation && m.attackType === "http"));
+      (m.attackers || []).forEach((a) => setLinkActive(a, true, m.attackType));
       const btn = document.querySelector(`.btn-attack[data-scenario="${m.running}"]`);
       if (btn) btn.classList.add("running");
       $("btn-stop").disabled = false;
@@ -88,18 +87,6 @@
       verdictLevel = "idle";
       updateVictim();
     }
-  }
-
-  function applyMitigation(on) {
-    mitigation = on;
-    $("sw-mitigation").setAttribute("aria-checked", on ? "true" : "false");
-    $("node-victim").classList.toggle("protected", on);
-    ATTACKERS.forEach((a) => {
-      const L = linkEls[a];
-      if (L.classList.contains("active"))
-        L.classList.toggle("throttled", on && (L.classList.contains("http") || L.classList.contains("slow")));
-    });
-    updateVictim();
   }
 
   function onHealth(m) {
@@ -131,11 +118,10 @@
   ATTACKERS.forEach((a) => { linkEls[a] = $("link-" + a); });   // one line per attacker node
   const pktState = {};
 
-  function setLinkActive(name, active, type, throttled) {
+  function setLinkActive(name, active, type) {
     const link = linkEls[name], node = $("node-" + name);
     link.classList.toggle("active", active);
     link.classList.toggle("http", active && type === "http");
-    link.classList.toggle("throttled", !!throttled);
     node.classList.toggle("active", active);
     if (active && !REDUCE) ensurePackets(name, type); else clearPackets(name);
   }
@@ -158,16 +144,15 @@
   let lastT = 0;
   function animate(ts) {
     const dt = Math.min((ts - lastT) / 1000 || 0, 0.1); lastT = ts;
-    const factor = mitigation ? 0.3 : 1;
     for (const name in pktState) {
       const st = pktState[name], L = st.link;
       const x1 = +L.getAttribute("x1"), y1 = +L.getAttribute("y1");
       const x2 = +L.getAttribute("x2"), y2 = +L.getAttribute("y2");
       st.dots.forEach((d) => {
-        d.phase = (d.phase + dt * 0.55 * factor) % 1;
+        d.phase = (d.phase + dt * 0.55) % 1;
         d.el.setAttribute("cx", x1 + (x2 - x1) * d.phase);
         d.el.setAttribute("cy", y1 + (y2 - y1) * d.phase);
-        d.el.style.opacity = mitigation ? 0.3 : 0.95;
+        d.el.style.opacity = 0.95;
       });
     }
     requestAnimationFrame(animate);
@@ -204,7 +189,6 @@
   document.querySelectorAll(".btn-attack").forEach((b) =>
     b.addEventListener("click", () => send({ action: "attack", scenario: b.dataset.scenario })));
   $("btn-stop").addEventListener("click", () => send({ action: "stop" }));
-  $("sw-mitigation").addEventListener("click", () => send({ action: "mitigation", on: !mitigation }));
 
   // ---------- init ----------
   document.querySelector(".dring").classList.add("pulse");

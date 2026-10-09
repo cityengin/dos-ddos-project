@@ -14,7 +14,6 @@ const HOST = "127.0.0.1";
 const PORT = 3000;
 const VICTIM = "172.30.0.10";
 const ATTACKERS = ["attacker1", "attacker2", "attacker3", "attacker4", "attacker5", "attacker6"];
-const NGINX_CONF = path.join(__dirname, "..", "mitigation", "nginx", "default.conf");
 
 // Fixed scenario definitions. The client only sends the KEY ("A"/"B"/"C").
 // `pps` paces each SYN sender (per container) so the combined load stays controlled while
@@ -26,7 +25,6 @@ const SCENARIOS = {
 };
 
 let running = null;        // active scenario id or null
-let mitigation = false;    // nginx rate-limit on/off
 let detectorProc = null;   // child process streaming detector JSON
 let dockerOk = false;
 
@@ -122,24 +120,6 @@ async function stopAttack(quiet) {
   if (!quiet) logEvent("Attack stopped.", "info");
 }
 
-// ---- defense (nginx rate-limit) ----
-async function setMitigation(on) {
-  if (on === mitigation) return;
-  if (on) {
-    await docker(["exec", "victim", "sh", "-c",
-      "test -f /tmp/orig.conf || cp /etc/nginx/conf.d/default.conf /tmp/orig.conf"]);
-    await docker(["cp", NGINX_CONF, "victim:/etc/nginx/conf.d/default.conf"]);
-    await docker(["exec", "victim", "nginx", "-s", "reload"]);
-  } else {
-    await docker(["exec", "victim", "sh", "-c",
-      "test -f /tmp/orig.conf && cp /tmp/orig.conf /etc/nginx/conf.d/default.conf"]);
-    await docker(["exec", "victim", "nginx", "-s", "reload"]);
-  }
-  mitigation = on;
-  broadcast({ type: "defense", mitigation: on });
-  logEvent(`Mitigation ${on ? "ENABLED (nginx rate-limit)" : "disabled"}.`, on ? "ok" : "info");
-}
-
 // ---- service-health probe (loopback, inside victim's netns) ----
 // Probing from the detector over localhost goes via `lo`, NOT eth0, so it does NOT
 // appear to the sniffer as an extra source (which previously made scenario A look like
@@ -161,7 +141,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws) => {
-  const snap = { type: "snapshot", running, mitigation, dockerOk,
+  const snap = { type: "snapshot", running, dockerOk,
     scenarios: Object.fromEntries(Object.entries(SCENARIOS).map(([k, v]) => [k, { label: v.label }])) };
   if (running && SCENARIOS[running]) {
     const s = SCENARIOS[running];
@@ -174,7 +154,6 @@ wss.on("connection", (ws) => {
     try {
       if (msg.action === "attack" && typeof msg.scenario === "string") await startAttack(msg.scenario);
       else if (msg.action === "stop") await stopAttack(false);
-      else if (msg.action === "mitigation") await setMitigation(!!msg.on);
     } catch (e) {
       logEvent("Action failed: " + (e && e.message ? e.message : String(e)), "error");
     }
@@ -186,11 +165,10 @@ server.listen(PORT, HOST, () => {
   startDetector();
 });
 
-// ---- cleanup on exit: stop attacks, restore nginx ----
+// ---- cleanup on exit: stop attacks ----
 async function cleanup() {
   try { if (detectorProc) detectorProc.kill(); } catch { /* */ }
   try { await stopAttack(true); } catch { /* */ }
-  try { await setMitigation(false); } catch { /* */ }
 }
 process.on("SIGINT", async () => { await cleanup(); process.exit(0); });
 process.on("SIGTERM", async () => { await cleanup(); process.exit(0); });

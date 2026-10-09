@@ -16,9 +16,8 @@
 6. [Kết quả minh họa](#6-kết-quả-minh-họa)
 7. [Ngưỡng thích nghi (nâng cao)](#7-ngưỡng-thích-nghi-nâng-cao)
 8. [So sánh với state-of-the-art](#8-so-sánh-với-state-of-the-art)
-9. [Phòng thủ L7 (mitigation)](#9-phòng-thủ-l7-mitigation)
-10. [Giới hạn & hướng phát triển](#10-giới-hạn--hướng-phát-triển)
-11. [Thuật ngữ nhanh](#11-thuật-ngữ-nhanh)
+9. [Giới hạn & hướng phát triển](#9-giới-hạn--hướng-phát-triển)
+10. [Thuật ngữ nhanh](#10-thuật-ngữ-nhanh)
 
 ---
 
@@ -270,29 +269,7 @@ chứng minh bằng dữ liệu thật rằng cách phát hiện bằng luật n
 rệt, và chỉ ra hướng đi mạnh hơn (phát hiện theo flow + học máy). Tái lập: tải dữ liệu rồi
 `python ml/train.py --data <thư mục parquet>` (hoặc `python ml/make_synthetic.py && python ml/train.py`).
 
-## 9. Phòng thủ L7 (mitigation)
-
-Detector mới chỉ **phát hiện** (IDS). Để **ngăn chặn** (IPS), đã thêm phòng thủ tầng 7: cấu hình
-nginx **giới hạn tốc độ/kết nối theo từng IP** ([`mitigation/nginx/default.conf`](../mitigation/nginx/default.conf)):
-mỗi IP tối đa ~10 request/giây (burst 20), vượt thì trả **429**. Client hợp lệ (tốc độ thấp) không
-bị ảnh hưởng; flood từ một IP bị chặn gần hết nên server gần như không tốn sức.
-
-**Demo before/after** (`python mitigation/demo_mitigation.py`) — HTTP flood 3 nguồn + 1 client hợp
-lệ đo từ host:
-
-| | BEFORE (không giới hạn) | AFTER (rate-limit) |
-|---|---|---|
-| Request tấn công được phục vụ (200) | 30,430 | **240** (~99% bị chặn) |
-| Client hợp lệ: tỉ lệ 200 | 100% | 100% |
-| Client hợp lệ: độ trễ | 16 ms | **6 ms** |
-
-![Phòng thủ L7](../assets/mitigation_demo.png)
-
-Điểm hay: sau khi bật phòng thủ, không chỉ chặn ~99% tấn công mà độ trễ của client hợp lệ còn
-**giảm** (server không phí sức xử lý flood). Lưu ý: rate-limit theo IP **không** chống được SYN flood
-có giả mạo IP (mỗi gói một IP khác) — loại đó cần SYN cookies / giới hạn ở tầng 4 / chặn thượng nguồn.
-
-## 10. Giới hạn & hướng phát triển
+## 9. Giới hạn & hướng phát triển
 
 **Giới hạn:**
 - Một máy giả mạo nhiều IP **không phân biệt được** với nhiều máy thật từ phía victim.
@@ -301,10 +278,10 @@ có giả mạo IP (mỗi gói một IP khác) — loại đó cần SYN cookies
   lớn phải chặn ở thượng nguồn (firewall/CDN/scrubbing).
 
 **Hướng phát triển:** (1) CUSUM/change-point; (2) **ML với CICDDoS2019** (đã làm mục 8.1);
-(3) thêm vector low-and-slow; (4) mitigation L7 đã làm (mục 9) — còn SYN cookies/giới hạn L4 và
-closed-loop (detector tự kích hoạt chặn).
+(3) thêm vector low-and-slow; (4) phòng thủ theo hướng **closed-loop** (detector tự kích hoạt chặn)
+— rate-limit L7 / SYN cookies / giới hạn tầng 4 — sẽ làm sau.
 
-## 11. Thuật ngữ nhanh
+## 10. Thuật ngữ nhanh
 
 | Thuật ngữ | Giải thích |
 |---|---|

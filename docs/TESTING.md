@@ -71,19 +71,7 @@ prints: fixed-low threshold = detects but many false positives; fixed-high = mis
 
 ---
 
-## 4. Mitigation (L7 defense)
-
-```bash
-python mitigation/demo_mitigation.py
-```
-
-**Expected:** served attack requests drop from tens of thousands to ~a few hundred
-(**~99% blocked**), while the legitimate client stays at 100% success (its latency even drops).
-Figure: `assets/mitigation_demo.png`.
-
----
-
-## 5. Machine learning
+## 4. Machine learning
 
 Real dataset (recommended):
 
@@ -110,7 +98,7 @@ not the model).
 
 ---
 
-## 6. Dashboard (end-to-end, visual)
+## 5. Dashboard (end-to-end, visual)
 
 ```bash
 cd dashboard && npm install && npm start      # http://127.0.0.1:3000
@@ -125,20 +113,18 @@ Open the page, then verify each case:
 | Click **B** (DDoS SYN+spoof) | Verdict `DDoS [SYN flood]`, n_src ~2300, H(src) ~11, all 6 links active, victim red "overloaded" |
 | Click **C** (DDoS HTTP) | Verdict `DDoS`, ack/s >> syn/s, n_src=6, 6 links active |
 | **Stop attack** | Returns to SAFE / idle within ~2 s |
-| **L7 rate-limit** toggle ON | Victim shows a shield; on an HTTP flood the attack is throttled |
 
 Security check: the server listens on `127.0.0.1:3000` only (run `netstat` / `Get-NetTCPConnection
 -LocalPort 3000` — the local address must be 127.0.0.1, never 0.0.0.0).
 
 ---
 
-## 7. Quick full-system checklist
+## 6. Quick full-system checklist
 
 - [ ] 5 containers Up; `http://localhost:8080` serves the nginx page.
 - [ ] Baseline: 0 alerts, 0 false positives.
 - [ ] A -> DoS, B -> DDoS, C -> DDoS (classification 3/3).
 - [ ] SYN floods: `ack≈0`; HTTP flood: `ack >> syn`.
 - [ ] Adaptive mode detects and avoids false positives on drifting load.
-- [ ] Mitigation blocks ~99% of an HTTP flood; legit client unaffected.
 - [ ] ML beats the single-threshold rule (F1 ~0.86 -> ~0.99).
 - [ ] Dashboard reflects every scenario live and binds to 127.0.0.1 only.

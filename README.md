@@ -228,33 +228,10 @@ canonicalizes them to families by default (`--raw-labels` reproduces the un-merg
 
 ![ML vs rule F1](assets/ml_f1_compare.png)
 
-## Defense / mitigation (L7)
-
-The detector is an IDS — it *sees* attacks. [`mitigation/`](mitigation/) adds an IPS-style defense:
-an nginx configuration with per-IP request and connection rate limits
-([`mitigation/nginx/default.conf`](mitigation/nginx/default.conf)) that caps an HTTP flood while
-leaving legitimate clients untouched.
-
-Run the before/after demo (applies the config at runtime, floods from the three attackers, measures
-a legitimate client from the host, then restores nginx):
-
-```bash
-python mitigation/demo_mitigation.py
-```
-
-Lab result: a 3-source HTTP flood was served **30,430** requests without protection vs **240** with
-rate limiting (**~99% blocked**), while a legitimate client kept a **100%** success rate — and its
-latency *dropped* (16 ms → 6 ms) because the server no longer wastes work on the flood.
-
-![L7 mitigation before/after](assets/mitigation_demo.png)
-
-To make the limits permanent instead of applying them at runtime, mount the config into the victim
-(see the commented `volumes` block under `victim` in `docker-compose.yml`).
-
 ## Dashboard (local demo)
 
 A local-only web dashboard ([`dashboard/`](dashboard/)) visualizes the lab in real time for
-presentations: live network topology, attack control, and the L7 defense, all driven by the
+presentations: live network topology and attack control, all driven by the
 detector's live stream over WebSocket. It binds to **127.0.0.1 only** and is never exposed to the
 network.
 
@@ -266,13 +243,12 @@ npm install
 npm start            # serves http://127.0.0.1:3000
 ```
 
-Three panels:
+Two panels:
 - **Network View** - topology (victim, 6 attackers, detector) with animated packet flows; the victim
-  node changes color with load (green -> amber -> red) from the live detector verdict.
+  node changes color with load (green -> amber -> red) from the live detector verdict. A
+  **Service health** probe shows whether the victim can still serve requests.
 - **Attack** - buttons launch the real A/B/C scenarios against the lab victim, with live
   pps / syn/s / ack/s / n_src / H(src) and the DoS/DDoS verdict.
-- **Defense** - toggle the nginx rate-limit on/off; a service-health probe shows whether the victim
-  can still serve requests.
 
 The backend runs `detector.py --stream` (a new JSON-per-window mode that preserves the table/CSV
 behavior) inside the detector container and relays it over WebSocket. Every control action maps to a
