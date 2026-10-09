@@ -90,6 +90,15 @@ victim**, nên thấy đúng lưu lượng victim thấy (dẫn tới lưu ý qu
 Detector chia thời gian thành **cửa sổ 1 giây**, đếm đặc trưng lưu lượng, so ngưỡng để quyết định có
 tấn công không và thuộc loại nào.
 
+**Bộ đếm cắm được (`--engine`).** Mặc định dùng **scapy** (`sniff` trong một luồng nền) — đơn giản nhưng
+ở tốc độ gói cao thì **userspace Python xử lý không kịp và rớt gói**. Tùy chọn **`--engine ebpf`** gắn một
+chương trình **XDP ingress** (BCC, `detection/ebpf_counter.py`) vào `eth0` trong netns victim: nó đếm thẳng
+trong nhân vào các BPF maps (packets/syn/ack + bảng băm `src_ip`, `dport`) và **luôn trả `XDP_PASS` — chỉ
+đếm, KHÔNG chặn gói**. Hai backend trả về cùng bộ số cho mỗi cửa sổ nên phần còn lại (ngưỡng, entropy,
+`--adaptive`, `--ml`) giữ nguyên. Thử nghiệm bắn 120.000 gói tốc độ cao: scapy chỉ quan sát được **~57%**
+(trần xử lý ~6.9k pps), còn XDP quan sát **~95%** và thấy đúng đỉnh thật ~30k pps — bằng chứng eBPF đếm
+chính xác ở line-rate. (Cần quyền `CAP_BPF`/`CAP_NET_ADMIN` + kernel headers; xem `docker-compose.yml`.)
+
 ### 5.2. Các đặc trưng
 - **pps** (packets/s): mức tải chung.
 - **syn/s**: cao bất thường → dấu hiệu SYN flood.

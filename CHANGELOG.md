@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- eBPF/XDP counting engine for the detector (`detection/detector.py --engine scapy|ebpf`, default
+  `scapy`). `detection/ebpf_counter.py` (BCC) attaches an **XDP ingress** program to the victim's
+  `eth0` that counts packets/syn/ack and per-source-IP / per-dest-port histograms into BPF maps and
+  always returns `XDP_PASS` (**detect-only, never drops**); userspace reads and clears the maps every
+  second. Both engines return the same per-window counters, so the rule, `--adaptive`, `--ml`,
+  `--stream`, `--csv` are unchanged. The detector now builds from its own `detection/Dockerfile`
+  (ubuntu + scapy + `python3-bpfcc`) and `docker-compose.yml` grants it `CAP_BPF`/`CAP_PERFMON`/
+  `CAP_NET_ADMIN` + read-only mounts of `/lib/modules`, `/usr/src`, `/sys/kernel/debug`. On a
+  120,000-packet high-rate flood the scapy engine observed only **57%** (peak ~6.9k pps, its
+  processing ceiling) while the XDP engine observed **95%** and captured the true ~30k pps peak; at
+  low rate both are exact (5,000-packet test: eBPF 4,986). Detect-only — no packets are dropped.
 - SVG project banner (`banner.svg`), displayed at the top of the README.
 - Adaptive EWMA thresholding in the detector (`--adaptive`): dynamic threshold
   `μ + k·MAD` with `--pps/--syn` as a floor, and baseline learning frozen during alerts.

@@ -26,6 +26,13 @@ reload nhom docker (hoac re-login / `newgrp docker`).
 - analysis/metrics.py         : tach episode, tinh detection time / FP / FN / bang phan loai vs ground truth
 
 ## Detector - logic phat hien
+- Backend dem goi: --engine scapy (mac dinh) | ebpf. eBPF/XDP dem chinh xac o line-rate (scapy rot
+  goi khi pps cao). Code: detection/ebpf_counter.py (BCC, XDP ingress tren eth0 netns victim, chi dem
+  KHONG drop, maps packets/syn/ack + src_ip + dport). Detector image rieng (detection/Dockerfile,
+  ubuntu+python3-bpfcc) + cap_add CAP_BPF/PERFMON/NET_ADMIN + mount /lib/modules,/usr/src,/sys/kernel/debug.
+  So sanh (gui chinh xac 120000 goi toc do cao): scapy DEM 67917/120000 (57%, dinh 6.9k pps) vs
+  eBPF 113764/120000 (95%, dinh 30.1k pps). Test 5000 goi toc do thap: eBPF 4986 (~dung, khong trung).
+  Moi output giu nguyen (pps/syn_s/ack_s/h_src/h_dport/n_src + luat + --adaptive + --ml + --stream + --csv).
 - Cua so 1 giay. Nguong dang dung: --pps 40 --syn 25
 - --victim 172.30.0.10: CHI dem goi inbound toi victim (bo goi victim tu tra ve) -> n_src/ack chinh xac
 - Threshold: alert khi pps>=nguong HOAC syn>=nguong

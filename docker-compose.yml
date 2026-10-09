@@ -69,12 +69,17 @@ services:
         ipv4_address: 172.30.0.26
 
   detector:
-    build: ./attacker              # tai su dung image co scapy san
+    build: ./detection             # image rieng co scapy + eBPF/BCC (xem detection/Dockerfile)
     container_name: detector
-    cap_add: [NET_RAW, NET_ADMIN]
-    network_mode: "service:victim" # dung chung mang voi victim -> sniff traffic cua victim
+    # NET_ADMIN: attach XDP; BPF+PERFMON: nap chuong trinh + maps eBPF (kernel >= 5.8).
+    cap_add: [NET_RAW, NET_ADMIN, BPF, PERFMON]
+    network_mode: "service:victim" # dung chung mang voi victim -> sniff/XDP tren eth0 cua victim
     volumes:
       - ./detection:/app
+      # BCC can kernel headers + debugfs de bien dich chuong trinh eBPF (container dung chung kernel host):
+      - /lib/modules:/lib/modules:ro
+      - /usr/src:/usr/src:ro
+      - /sys/kernel/debug:/sys/kernel/debug
     command: ["sleep", "infinity"]
 
 networks:

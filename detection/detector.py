@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Phat hien DoS/DDoS realtime: threshold + entropy. Chi dung trong lab."""
-import argparse, time, math, collections, threading, json, sys, os
+import argparse, time, math, collections, threading, json, sys, os, signal
 from scapy.all import sniff, IP, TCP
 
 # ====== bo dem cho moi cua so thoi gian ======
@@ -71,6 +71,8 @@ def main():
     ap.add_argument("--csv", default="", help="ghi log ra file CSV neu co")
     ap.add_argument("--ml", default="",
                     help="duong dan model .joblib (train_window.py) de phan loai ML SONG SONG voi luat")
+    ap.add_argument("--engine", choices=["scapy", "ebpf"], default="scapy",
+                    help="backend dem goi: scapy (mac dinh) hoac ebpf (XDP, chinh xac o line-rate)")
     args = ap.parse_args()
 
     global VICTIM
@@ -92,8 +94,8 @@ def main():
             os._exit(4)
 
     if not args.stream:
-        print("[*] Detector chay tren iface=%s, interval=%.1fs, nguong pps=%d syn=%d, victim=%s"
-              % (args.iface, args.interval, args.pps, args.syn, VICTIM or "(tat ca)"))
+        print("[*] Detector chay tren iface=%s, interval=%.1fs, nguong pps=%d syn=%d, victim=%s, engine=%s"
+              % (args.iface, args.interval, args.pps, args.syn, VICTIM or "(tat ca)", args.engine))
         if args.adaptive:
             print("[*] Che do NGUONG THICH NGHI (EWMA): alpha=%.2f k=%.1f warmup=%ds, san toi thieu pps>=%d syn>=%d"
                   % (args.alpha, args.k, args.warmup, args.pps, args.syn))
@@ -106,36 +108,62 @@ def main():
         csvf.write("time,pps,syn_s,ack_s,h_src,h_dport,n_src,alert" +
                    (",ml_verdict,ml_conf" if ml else "") + "\n")
 
-    # sniff chay o thread rieng, main loop in bao cao moi interval.
-    # Neu sniff LOI (vd netns gay sau khi recreate victim) -> bao RO va thoat han,
-    # tranh im lang bao pps=0 mai (loi tung gap).
-    def sniff_loop():
+    # ====== chon BACKEND dem goi ======
+    # Hai backend cung tra ve (packets, syn, ack, src_counter, dport_counter) cho moi cua so,
+    # phan con lai cua detector (luat, --adaptive, --ml, --stream, --csv) GIU NGUYEN.
+    ebpf = None
+    if args.engine == "ebpf":
+        # eBPF/XDP: dem chinh xac o line-rate (scapy rot goi khi pps cao). Fail RO neu nap/attach loi.
         try:
-            sniff(iface=args.iface, prn=on_packet, store=0)
+            from ebpf_counter import EbpfCounter
+            ebpf = EbpfCounter(args.iface, VICTIM)
         except Exception as e:
-            sys.stderr.write("[X] sniff that bai tren iface=%s: %s\n"
-                             "    (netns co the da gay - hay 'docker compose up -d --force-recreate')\n"
+            sys.stderr.write("[X] Khong khoi tao duoc engine eBPF tren iface=%s: %s\n"
+                             "    (thieu bcc/kernel headers? thieu CAP_BPF/NET_ADMIN? XDP-generic khong attach duoc?)\n"
                              % (args.iface, e))
             sys.stderr.flush()
-            os._exit(3)
-    t = threading.Thread(target=sniff_loop, daemon=True)
-    t.start()
+            os._exit(5)
+        def snapshot():
+            return ebpf.snapshot()
+    else:
+        # scapy: sniff o thread rieng. Fail RO neu sniff loi (vd netns gay sau khi recreate victim).
+        def sniff_loop():
+            try:
+                sniff(iface=args.iface, prn=on_packet, store=0)
+            except Exception as e:
+                sys.stderr.write("[X] sniff that bai tren iface=%s: %s\n"
+                                 "    (netns co the da gay - hay 'docker compose up -d --force-recreate')\n"
+                                 % (args.iface, e))
+                sys.stderr.flush()
+                os._exit(3)
+        threading.Thread(target=sniff_loop, daemon=True).start()
+        def snapshot():
+            with lock:
+                snap_src = win["src_ip"].copy()
+                snap_dport = win["dst_port"].copy()
+                pkts, syn, ack = win["packets"], win["syn"], win["ack"]
+                for k, v in reset_window().items():
+                    win[k] = v
+            return pkts, syn, ack, snap_src, snap_dport
+
+    # Don dep khi bi dung (SIGTERM/SIGINT): go XDP ra khoi eth0 de khong de lai chuong trinh treo.
+    def _cleanup(*_):
+        if ebpf:
+            ebpf.stop()
+        os._exit(0)
+    signal.signal(signal.SIGTERM, _cleanup)
+    signal.signal(signal.SIGINT, _cleanup)
 
     ew = {"mu_pps": 0.0, "mad_pps": 0.0, "mu_syn": 0.0, "mad_syn": 0.0}  # trang thai EWMA
     wcount = 0
 
     while True:
         time.sleep(args.interval)
-        with lock:
-            snap = win.copy()
-            snap_src = win["src_ip"].copy()
-            snap_dport = win["dst_port"].copy()
-            for k,v in reset_window().items():
-                win[k] = v
+        packets, syn, ack, snap_src, snap_dport = snapshot()
 
-        pps = snap["packets"] / args.interval
-        syn_s = snap["syn"] / args.interval
-        ack_s = snap["ack"] / args.interval
+        pps = packets / args.interval
+        syn_s = syn / args.interval
+        ack_s = ack / args.interval
         h_src = entropy(snap_src)
         h_dport = entropy(snap_dport)
         n_src = len(snap_src)

@@ -159,7 +159,31 @@ Security check: the server listens on `127.0.0.1:3000` only (run `netstat` / `Ge
 
 ---
 
-## 7. Quick full-system checklist
+## 7. Counting engine: scapy vs eBPF (line-rate accuracy)
+
+The detector counts via `--engine scapy` (default) or `--engine ebpf` (XDP, detect-only). To show eBPF
+does not drop at high pps, send a fixed number of packets and compare the total each engine observed:
+
+```bash
+# per engine: start the detector with --csv, send exactly 120000 spoofed SYNs from 6 sources,
+# wait for the flood to finish, stop the detector, then sum the pps column of the CSV.
+docker exec -d detector python3 -u /app/detector.py --pps 40 --syn 25 --victim 172.30.0.10 \
+    --engine ebpf --csv /app/bnd.csv
+for a in attacker1 attacker2 attacker3 attacker4 attacker5 attacker6; do \
+    docker exec -d $a python3 /app/syn_flood.py 172.30.0.10 -p 80 --spoof -c 20000; done
+# ... wait ~20s, then: docker exec detector pkill -f detector.py
+awk -F, 'NR>1{s+=$2} END{print s}' detection/bnd.csv      # total packets observed
+```
+
+**Expected:** of 120,000 packets sent, `--engine scapy` observes only **~57%** (peak ~6.9k pps, its own
+processing ceiling) while `--engine ebpf` observes **~95%** and captures the true peak (~30k pps). At low
+rate both are exact (a 5,000-packet test: eBPF 4,986). This is the quantitative evidence that scapy drops
+at line-rate and XDP does not. (`--engine ebpf` needs the detector image's `python3-bpfcc` plus the
+`CAP_BPF`/mounts in `docker-compose.yml`.)
+
+---
+
+## 8. Quick full-system checklist
 
 - [ ] 8 containers Up; `http://localhost:8080` serves the nginx page.
 - [ ] Baseline: 0 alerts, 0 false positives.
@@ -169,4 +193,5 @@ Security check: the server listens on `127.0.0.1:3000` only (run `netstat` / `Ge
 - [ ] CICDDoS2019 ML beats the single-threshold rule (F1 ~0.60 -> ~0.999).
 - [ ] Window ML: the rule misses D and false-alarms on E; the RF gets both right (F1 ~0.58 -> ~0.99).
 - [ ] Detector `--ml` prints both rule and ML verdicts; dashboard shows both lines.
+- [ ] `--engine ebpf` observes ~95% of a 120k high-rate flood vs scapy ~57% (detect-only, no drop).
 - [ ] Dashboard reflects every scenario live and binds to 127.0.0.1 only.

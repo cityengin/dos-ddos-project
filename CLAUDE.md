@@ -12,7 +12,7 @@ University end-of-term project (DUT PBL3): simulate DoS/DDoS attacks **and** det
 
 - `victim` — `nginx:alpine` at `172.30.0.10`, published to `localhost:8080`.
 - `attacker1..6` — built from `attacker/Dockerfile`, IPs `172.30.0.21..26`. Have `NET_RAW`+`NET_ADMIN` (required for scapy/hping3 raw packets and IP spoofing). Mount `./attacks` at `/app`. (6 containers so an L7/HTTP DDoS shows 6 real sources; SYN floods also spoof for thousands.)
-- `detector` — reuses the attacker image but runs `network_mode: service:victim`, so it shares the victim's network namespace and sniffs the victim's `eth0` directly. Mounts `./detection` at `/app`.
+- `detector` — built from its own `detection/Dockerfile` (ubuntu + scapy + `python3-bpfcc` for the eBPF engine), runs `network_mode: service:victim` so it shares the victim's network namespace and observes the victim's `eth0` directly. Mounts `./detection` at `/app`; has `CAP_BPF`/`CAP_PERFMON`/`CAP_NET_ADMIN` and read-only mounts of `/lib/modules`, `/usr/src`, `/sys/kernel/debug` so BCC can compile the XDP program at runtime.
 - Network `dos-lab`: bridge, subnet `172.30.0.0/24`.
 
 The attack/detection Python scripts are **bind-mounted**, so edits take effect on the next `docker exec` without rebuilding. Rebuild images only when changing `attacker/Dockerfile` (installed tools) or adding pip deps.
@@ -44,8 +44,9 @@ There is no build step, test suite, or linter — this is a set of standalone sc
 
 ## Detection logic (`detection/detector.py`)
 
-The whole point of the project lives here. A background thread runs scapy `sniff`; the main loop snapshots and resets a per-window counter every `--interval` (default 1s) and decides:
+The whole point of the project lives here. The main loop snapshots and resets a per-window counter every `--interval` (default 1s) and decides the verdict. The counter has a pluggable **backend** (`--engine`):
 
+- **Counting engine** (`--engine scapy|ebpf`, default `scapy`): `scapy` runs `sniff` in a background thread (simple, but drops packets at high pps). `ebpf` (`detection/ebpf_counter.py`, BCC) attaches an **XDP ingress** program to `eth0` in the victim's netns that counts into BPF maps (packets/syn/ack + `src_ip` + `dport` hashes) and always returns `XDP_PASS` — **detect-only, never drops**. Both backends return the same `(packets, syn, ack, src_counter, dport_counter)` per window, so the rule, `--adaptive`, `--ml`, `--stream`, `--csv` are all unchanged. In the lab, on a 120k-packet high-rate flood scapy observed only **57%** while XDP observed **95%** (and saw the true ~30k pps peak that scapy, capped near 7k pps, never sees).
 - **Inbound-only counting** (`--victim`, default `172.30.0.10`): because the detector shares the victim's netns it sees *both* directions on eth0. It counts only packets whose `dst == victim`, excluding the victim's own replies. This is critical — without it, the victim's SYN-ACK replies (`src = victim`) get counted as a second source, so a single-source DoS is misclassified as DDoS and `ack_s` is inflated enough to suppress the SYN-flood tag. Set `--victim ""` to count both directions (old buggy behavior; kept for the before/after comparison in `PROJECT_STATUS.md`).
 - **Trigger**: `pps >= --pps` OR `syn_s >= --syn`. Note the CLI *defaults* (200/100) are placeholders — the values actually used in the lab are `--pps 40 --syn 25` (see `PROJECT_STATUS.md`). Adjust via flags, not by editing defaults.
 - **DoS vs DDoS**: decided by **source count** `n_src` — `>= 2` distinct source IPs ⇒ DDoS, else DoS. `H(src)` (Shannon entropy of source IPs) is reported as a dispersion measure but is not the classifier.
