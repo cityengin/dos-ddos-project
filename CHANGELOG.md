@@ -41,6 +41,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `attacks/syn_flood.py` reuses one `conf.L3socket()` (far faster than per-packet `send()`) and takes
   `--pps` to pace the send rate; spoofing at a high rate now reaches **n_src ~2300** distinct source
   IPs per window (H(src) ~11) instead of ~66.
+- `run_ddos.sh`: Bash orchestrator for Linux (equivalent of the PowerShell `run_ddos.ps1`) that
+  launches all six attackers in parallel for `syn`/`http` mode. Self-elevates through `sg docker`
+  when the login session has not reloaded the `docker` group, so it runs without a prior re-login.
+- `experiments/bench_syn_throughput.sh`: SYN packet-generation benchmark. Uses a two-point
+  (short/long duration) measurement to cancel scapy start-up cost and reports per-source and
+  aggregate pps for 1 and 6 sources — the number to compare host platforms with. On the Ubuntu
+  native host it reaches **~1,470 pps per source** and **~9,460 pps aggregate** (6 sources), showing
+  the paced scenario B (`--pps 400` ×6 = 2,400 pps) is pacing-limited, not hardware-limited.
 
 ### Changed
 
