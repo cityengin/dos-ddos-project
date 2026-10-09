@@ -52,6 +52,8 @@ reload nhom docker (hoac re-login / `newgrp docker`).
   voi luat; hien ca 2 o bang/--stream/--csv; fail RO neu thieu model/sklearn). Da them scikit-learn
   1.9.1 + joblib vao attacker/Dockerfile. Kiem tra live: baseline->BENIGN, A->DoS, B/C->DDoS (khop);
   window HTTP 1-nguon dau pha C doc BENIGN do tin thap (hanh vi hoc tu E).
+  Phase 4 DA XONG: dashboard hien verdict ML canh verdict luat (server tu bat --ml khi co model;
+  o Attack panel: "rule: X" + dong "ML: Y . conf%", to mau theo verdict ML -> thay ngay khi 2 ben khac nhau).
 - Phong thu: DA GO phan mitigation L7 (rate-limit) roi, se lam lai theo huong closed-loop
   (phat hien -> tu dong chan) sau. Hien detector chi phat hien (IDS).
 

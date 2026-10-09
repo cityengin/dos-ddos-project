@@ -80,6 +80,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scenario E.
 - `attacker/Dockerfile`: install `scikit-learn==1.9.1` + `joblib==1.6.0` (pinned to the training
   version) so the detector container can load the window model for `--ml`.
+- Dashboard shows the **ML verdict beside the rule verdict**. The backend starts the detector with
+  `--ml` when `detection/window_model.joblib` exists (rule-only otherwise) and relays `ml_verdict`/
+  `ml_conf`; the Attack panel's verdict box now reads `rule: <X>` with an `ML: <Y> · <conf>%` line
+  below it, colored green/amber/red by the ML verdict so a rule-vs-ML disagreement is visible at a
+  glance. Styling reuses the existing tokens (no new colors).
 
 ### Changed
 

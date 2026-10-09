@@ -57,6 +57,16 @@
       sub.textContent = `n_src=${d.n_src} · H(src)=${(d.h_src || 0).toFixed(2)} · ${d.pps} pps`;
       verdictLevel = ddos ? "crit" : "warn";
     }
+    // Verdict ML song song (detector chay voi --ml). ml_verdict=null -> khong co model -> "off".
+    const mlVal = $("ml-val");
+    if (d.ml_verdict) {
+      const lvl = d.ml_verdict === "DDoS" ? "ddos" : (d.ml_verdict === "DoS" ? "dos" : "safe");
+      mlVal.className = "ml-val " + lvl;
+      mlVal.textContent = d.ml_verdict + (d.ml_conf != null ? ` · ${Math.round(d.ml_conf * 100)}%` : "");
+    } else {
+      mlVal.className = "ml-val";
+      mlVal.textContent = "off";
+    }
     updateVictim();
     pushChart(d);
   }

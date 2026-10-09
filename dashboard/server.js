@@ -7,6 +7,7 @@
 const express = require("express");
 const http = require("http");
 const path = require("path");
+const fs = require("fs");
 const { spawn, execFile } = require("child_process");
 const { WebSocketServer } = require("ws");
 
@@ -14,6 +15,9 @@ const HOST = "127.0.0.1";
 const PORT = 3000;
 const VICTIM = "172.30.0.10";
 const ATTACKERS = ["attacker1", "attacker2", "attacker3", "attacker4", "attacker5", "attacker6"];
+// Window ML model: host path (to check it exists) + in-container path (detector bind-mounts ./detection).
+const ML_MODEL_HOST = path.join(__dirname, "..", "detection", "window_model.joblib");
+const ML_MODEL_CONT = "/app/window_model.joblib";
 
 // Fixed scenario definitions. The client only sends the KEY ("A"/"B"/"C").
 // `pps` paces each SYN sender (per container) so the combined load stays controlled while
@@ -67,10 +71,13 @@ async function startDetector() {
     return;
   }
   await docker(["exec", "detector", "pkill", "-f", "detector.py"]).catch(() => {});
-  detectorProc = spawn("docker",
-    ["exec", "detector", "python3", "-u", "/app/detector.py",
-      "--iface", "eth0", "--pps", "40", "--syn", "25", "--victim", VICTIM, "--stream"],
-    { windowsHide: true });
+  // Bat ML neu co san model (train_window.py da sinh). Neu khong co -> chay luat thuan (ml_verdict=null).
+  let mlOn = false;
+  try { mlOn = fs.existsSync(ML_MODEL_HOST); } catch { mlOn = false; }
+  const detArgs = ["exec", "detector", "python3", "-u", "/app/detector.py",
+    "--iface", "eth0", "--pps", "40", "--syn", "25", "--victim", VICTIM, "--stream"];
+  if (mlOn) detArgs.push("--ml", ML_MODEL_CONT);
+  detectorProc = spawn("docker", detArgs, { windowsHide: true });
 
   let buf = "";
   detectorProc.stdout.on("data", (d) => {
@@ -89,7 +96,7 @@ async function startDetector() {
     setTimeout(startDetector, 4000); // auto-restart
   });
   broadcast({ type: "detector", up: true });
-  logEvent("Detector stream connected.", "ok");
+  logEvent(mlOn ? "Detector stream connected (rule + ML)." : "Detector stream connected (rule only; no ML model).", "ok");
 }
 
 // ---- attack control ----

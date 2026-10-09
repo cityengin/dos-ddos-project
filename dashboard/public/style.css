@@ -105,6 +105,13 @@ body {
 .verdict.ddos { border-color: rgba(239,68,68,.65); background: rgba(239,68,68,.10);
   box-shadow: 0 0 24px rgba(239,68,68,.18); }
 .verdict.ddos .verdict-label { color: var(--red); }
+/* verdict ML: dong phu duoi verdict luat, tai dung dung bang mau xanh/vang/do */
+.verdict-row { display: flex; align-items: baseline; gap: 8px; }
+.vtag { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.verdict-ml { display: flex; align-items: baseline; gap: 8px; margin-top: 4px;
+  border-top: 1px solid var(--border); padding-top: 8px; }
+.ml-val { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.ml-val.safe { color: var(--green); } .ml-val.dos { color: var(--amber); } .ml-val.ddos { color: var(--red); }
 
 /* ---------- buttons ---------- */
 .btn-col { display: flex; flex-direction: column; gap: 9px; }
