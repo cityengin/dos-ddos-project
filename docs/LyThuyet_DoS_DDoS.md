@@ -269,6 +269,43 @@ chứng minh bằng dữ liệu thật rằng cách phát hiện bằng luật n
 rệt, và chỉ ra hướng đi mạnh hơn (phát hiện theo flow + học máy). Tái lập: tải dữ liệu rồi
 `python ml/train.py --data <thư mục parquet>` (hoặc `python ml/make_synthetic.py && python ml/train.py`).
 
+### 8.2. ML trực tiếp trên đặc trưng của detector (ML "live")
+
+Mô hình CICDDoS2019 ở trên cần ~63 đặc trưng mức **flow**, trong khi detector chỉ có đặc trưng mức
+**cửa sổ 1 giây** (`pps, syn/s, ack/s, H(src), H(dport), n_src`). Vì vậy để chạy ML **ngay trong
+detector**, ta huấn luyện một mô hình mới trên **chính các đặc trưng đó**, dùng dữ liệu tự sinh từ lab:
+
+- `ml/build_window_dataset.py` chạy lại các kịch bản (A..E, nhiều lần) và gán nhãn từng cửa sổ
+  (`BENIGN` nếu `pps=0`, ngược lại là nhãn thật của kịch bản), thêm hai tỉ lệ dẫn xuất
+  `syn_ratio = syn/pps` và `ack_syn_ratio = ack/syn`, rồi xuất `ml/data/windows.csv`.
+- `ml/train_window.py` huấn luyện một **RandomForest đa lớp** (BENIGN/DoS/DDoS) và lưu vào
+  `detection/window_model.joblib`.
+
+**Hai kịch bản "gần ngưỡng" D và E** được thêm để phép so sánh có ý nghĩa (nếu chỉ có A/B/C thì ba lớp
+tách nhau quá rạch ròi, ML đạt F1 = 1.000 — bài toán quá dễ):
+
+- **D** — SYN spoof tốc độ thấp (~24 pps, dưới ngưỡng 40/25): là tấn công thật nhưng **luật bỏ sót**.
+- **E** — một khách HTTP tải cao (flash-crowd nhẹ): lành tính nhưng vượt ngưỡng nên **luật báo nhầm**.
+
+Kết quả trên tập 316 cửa sổ (chia 70/30): F1 phát hiện tấn công **luật 0.58 vs RF 0.99**; macro-F1 đa
+lớp **0.59 vs 0.99**; riêng các cửa sổ tấn công **dưới ngưỡng**, luật bắt **0%** còn RF **100%**. Đánh
+giá chặt hơn kiểu *leave-one-run-out* (mỗi lần giữ nguyên một lượt chạy làm test): F1 **luật 0.52 vs
+RF 0.99**. RF **không** còn hoàn hảo (sai ~1 cửa sổ ở vùng biên); muốn nó sai nhiều hơn phải cho E là
+flash-crowd **nhiều nguồn** trùng vùng với HTTP-DDoS — đúng bài toán kinh điển "flash crowd khó phân
+biệt với DDoS".
+
+Bật ML **trực tiếp** trong detector bằng cờ `--ml`:
+
+```bash
+docker exec -it detector python3 /app/detector.py --pps 40 --syn 25 \
+    --victim 172.30.0.10 --ml /app/window_model.joblib
+```
+
+Detector nạp mô hình một lần lúc khởi động và với mỗi cửa sổ in **cả hai** phán quyết: của luật và của
+ML (`ml_verdict` kèm độ tin `ml_conf`). Dashboard cũng hiển thị hai dòng `rule:` và `ML:` cạnh nhau,
+tô màu theo từng bên nên thấy ngay khi chúng khác nhau. (Container detector đã cài sẵn
+`scikit-learn 1.9.1 + joblib` trong `attacker/Dockerfile` để nạp được mô hình.)
+
 ## 9. Giới hạn & hướng phát triển
 
 **Giới hạn:**

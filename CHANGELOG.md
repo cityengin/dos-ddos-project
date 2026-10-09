@@ -88,6 +88,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Docs updated for the live-ML work: `README.md` (detector `--ml`, the window-ML pipeline, the
+  dashboard's dual rule/ML verdict, and a Linux `run_ddos.sh` usage example), `docs/TESTING.md`
+  (near-threshold scenarios D/E, a window-ML section, the dashboard ML line, refreshed checklist),
+  and `docs/LyThuyet_DoS_DDoS.md` (new section 8.2 on ML trained on the detector's own features).
 - Machine learning now runs on the **real CICDDoS2019** dataset (the cleaned parquet release
   `dhoogla/cicddos2019`, fetched via `kagglehub`) instead of only the synthetic sample. On ~131k
   flows / 63 features / 13 families, attack-detection F1 goes from **0.60** (single-threshold rule)

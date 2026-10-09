@@ -101,6 +101,11 @@ docker exec -it detector python3 /app/detector.py \
 
 # Adaptive thresholds (EWMA): learns the baseline; --pps/--syn act as a safety floor
 docker exec -it detector python3 /app/detector.py --adaptive --victim 172.30.0.10 --csv /app/attack.csv
+
+# Live ML alongside the rule: classify each window with a trained model, show both verdicts
+# (needs ml/train_window.py to have produced detection/window_model.joblib first)
+docker exec -it detector python3 /app/detector.py \
+  --pps 40 --syn 25 --victim 172.30.0.10 --ml /app/window_model.joblib
 ```
 
 **2. Launch a single attack** (another terminal):
@@ -114,6 +119,14 @@ docker exec attacker1 python3 /app/http_flood.py 172.30.0.10 -p 80 -t 20 -d 30
 ```
 
 **3. Launch a distributed attack** from all six sources:
+
+```bash
+# Linux (bash) orchestrator
+./run_ddos.sh syn        # or: ./run_ddos.sh http
+# Reproducible scenarios, writing detection/*.csv + ground-truth metadata:
+python experiments/run_scenarios.py                 # A, B, C
+python experiments/run_scenarios.py --only D        # near-threshold case (rule misses)
+```
 
 ```powershell
 # PowerShell orchestrator (Windows)
@@ -228,6 +241,17 @@ canonicalizes them to families by default (`--raw-labels` reproduces the un-merg
 
 ![ML vs rule F1](assets/ml_f1_compare.png)
 
+**Live ML on the detector's own features.** The CICDDoS2019 model needs ~63 flow features, which the
+live detector does not have — it only has per-window features. So
+[`ml/build_window_dataset.py`](ml/build_window_dataset.py) labels the detector's own 1-second windows
+from lab runs and [`ml/train_window.py`](ml/train_window.py) trains a RandomForest on them, saved to
+`detection/window_model.joblib` for the detector to load via `--ml`. Two near-threshold scenarios make
+the comparison non-trivial: **D** (a low-rate spoofed SYN flood *below* the rule threshold — the rule
+misses it) and **E** (a high-rate but *benign* HTTP flash-crowd *above* the threshold — the rule
+false-alarms). On the 316-window lab set, attack-detection F1 is **0.58 (rule) vs 0.99 (RF)**; on the
+below-threshold attack windows the rule catches **0%** while the RF catches **100%**. The detector
+runs this model live with `--ml`, and the dashboard shows the rule and ML verdicts side by side.
+
 ## Dashboard (local demo)
 
 A local-only web dashboard ([`dashboard/`](dashboard/)) visualizes the lab in real time for
@@ -248,7 +272,9 @@ Two panels:
   node changes color with load (green -> amber -> red) from the live detector verdict. A
   **Service health** probe shows whether the victim can still serve requests.
 - **Attack** - buttons launch the real A/B/C scenarios against the lab victim, with live
-  pps / syn/s / ack/s / n_src / H(src) and the DoS/DDoS verdict.
+  pps / syn/s / ack/s / n_src / H(src) and **two verdicts side by side**: the threshold rule
+  (`rule:`) and, when a trained window model is present, the ML model (`ML: <verdict> · <conf>%`),
+  each colored by its own verdict so a rule-vs-ML disagreement is obvious.
 
 The backend runs `detector.py --stream` (a new JSON-per-window mode that preserves the table/CSV
 behavior) inside the detector container and relays it over WebSocket. Every control action maps to a
