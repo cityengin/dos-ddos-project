@@ -134,6 +134,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Dashboard exit now stops the **in-container** detector (`docker exec detector pkill -f detector.py`),
+  not just the local `docker exec` client. Previously, stopping `node server.js` left the detector
+  running — and if blocking was on it kept dropping packets with its XDP program still attached, which
+  also made standalone detector runs intermittently fail to attach XDP.
 - The dedicated detector image (`detection/Dockerfile`) regained `scikit-learn==1.9.1` + `joblib==1.6.0`:
   the eBPF-engine rebuild moved the detector off the attacker image and silently dropped them, so
   `detector --ml` (and the dashboard's ML line) crashed with `No module named 'joblib'`.

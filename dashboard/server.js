@@ -199,9 +199,14 @@ server.listen(PORT, HOST, () => {
   startDetector();
 });
 
-// ---- cleanup on exit: stop attacks ----
+// ---- cleanup on exit: stop the detector (and its XDP) + stop attacks ----
 async function cleanup() {
+  detStarting = true;   // chan auto-restart trong luc dang thoat
   try { if (detectorProc) detectorProc.kill(); } catch { /* */ }
+  // Killing the local `docker exec` client does NOT stop the in-container detector, so it would
+  // keep running (and keep dropping packets if --block was on) after the dashboard exits. Send
+  // SIGTERM to the in-container process so it stops AND removes its XDP program.
+  try { await docker(["exec", "detector", "pkill", "-f", "detector.py"], 4000); } catch { /* */ }
   try { await stopAttack(true); } catch { /* */ }
 }
 process.on("SIGINT", async () => { await cleanup(); process.exit(0); });
