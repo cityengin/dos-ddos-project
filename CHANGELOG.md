@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Dashboard **Blocking ON/OFF** toggle and a `blocked/s` tile. Turning it on restarts the detector with
+  `--engine ebpf --block --block-pps 200 --block-ttl 5 --block-syn-rate 2000`; the stream's
+  `blocked_src`/`blocked_pps` are shown live. In the lab a 6-source HTTP flood's rate collapses
+  (~15k → ~36 pps) once blocking engages. Off by default (detect-only). A `detStarting` guard serializes
+  detector (re)starts so a toggle can't spawn overlapping detectors that kill each other.
 - Detection-driven blocking (closed-loop IPS) via **eBPF `XDP_DROP`** (`detection/detector.py --block`,
   default off, requires `--engine ebpf`). The XDP program **counts first, then drops**: sources whose
   per-window rate exceeds `--block-pps` are added to a `blocklist` BPF map with a TTL (`--block-ttl`,
@@ -129,6 +134,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The dedicated detector image (`detection/Dockerfile`) regained `scikit-learn==1.9.1` + `joblib==1.6.0`:
+  the eBPF-engine rebuild moved the detector off the attacker image and silently dropped them, so
+  `detector --ml` (and the dashboard's ML line) crashed with `No module named 'joblib'`.
 - Detector exits loudly if its packet sniff fails (e.g. after recreating only the victim, which
   breaks the `network_mode: service:victim` namespace) instead of silently streaming `pps=0`.
 - Dashboard service-health probe runs over the victim loopback, so it no longer appears on the

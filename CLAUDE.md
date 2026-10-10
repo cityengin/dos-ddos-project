@@ -12,7 +12,7 @@ University end-of-term project (DUT PBL3): simulate DoS/DDoS attacks **and** det
 
 - `victim` — `nginx:alpine` at `172.30.0.10`, published to `localhost:8080`.
 - `attacker1..6` — built from `attacker/Dockerfile`, IPs `172.30.0.21..26`. Have `NET_RAW`+`NET_ADMIN` (required for scapy/hping3 raw packets and IP spoofing). Mount `./attacks` at `/app`. (6 containers so an L7/HTTP DDoS shows 6 real sources; SYN floods also spoof for thousands.)
-- `detector` — built from its own `detection/Dockerfile` (ubuntu + scapy + `python3-bpfcc` for the eBPF engine), runs `network_mode: service:victim` so it shares the victim's network namespace and observes the victim's `eth0` directly. Mounts `./detection` at `/app`; has `CAP_BPF`/`CAP_PERFMON`/`CAP_NET_ADMIN` and read-only mounts of `/lib/modules`, `/usr/src`, `/sys/kernel/debug` so BCC can compile the XDP program at runtime.
+- `detector` — built from its own `detection/Dockerfile` (ubuntu + scapy + `python3-bpfcc` for the eBPF engine + pinned `scikit-learn`/`joblib` for `--ml`), runs `network_mode: service:victim` so it shares the victim's network namespace and observes the victim's `eth0` directly. Mounts `./detection` at `/app`; has `CAP_BPF`/`CAP_PERFMON`/`CAP_NET_ADMIN` and read-only mounts of `/lib/modules`, `/usr/src`, `/sys/kernel/debug` so BCC can compile the XDP program at runtime.
 - Network `dos-lab`: bridge, subnet `172.30.0.0/24`.
 
 The attack/detection Python scripts are **bind-mounted**, so edits take effect on the next `docker exec` without rebuilding. Rebuild images only when changing `attacker/Dockerfile` (installed tools) or adding pip deps.

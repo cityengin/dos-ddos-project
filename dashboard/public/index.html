@@ -45,6 +45,7 @@
           <b>C</b> DDoS &middot; 6 source HTTP (L7)
         </button>
         <button class="btn btn-stop" id="btn-stop" disabled>&#9632; Stop attack</button>
+        <button class="btn btn-block" id="btn-block" aria-pressed="false">Blocking: OFF</button>
       </div>
 
       <div class="metrics">
@@ -54,6 +55,7 @@
         <div class="tile"><span class="tile-k">n_src</span><span class="tile-v" id="m-nsrc">0</span></div>
         <div class="tile"><span class="tile-k">H(src)</span><span class="tile-v" id="m-hsrc">0.00</span></div>
         <div class="tile"><span class="tile-k">thr pps/syn</span><span class="tile-v small" id="m-thr">40/25</span></div>
+        <div class="tile"><span class="tile-k">blocked/s</span><span class="tile-v" id="m-blocked">0</span></div>
       </div>
     </section>
 

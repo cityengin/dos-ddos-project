@@ -5,7 +5,7 @@
   const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const SVGNS = "http://www.w3.org/2000/svg";
 
-  let running = null, verdictLevel = "idle", serviceDown = false;
+  let running = null, verdictLevel = "idle", serviceDown = false, blocking = false;
 
   // ---------- websocket ----------
   let ws;
@@ -23,12 +23,14 @@
     switch (m.type) {
       case "snapshot":
         setPill("pill-docker", m.dockerOk);
+        applyBlocking(!!m.blocking);
         onState(m.running ? m : { running: null });
         break;
       case "docker": setPill("pill-docker", m.up); break;
       case "detector": setPill("pill-detector", m.up); break;
       case "metric": onMetric(m.data); break;
       case "state": onState(m); break;
+      case "blocking": applyBlocking(m.on); break;
       case "health": onHealth(m); break;
       case "log": addLog(m); break;
     }
@@ -43,6 +45,7 @@
     $("m-nsrc").textContent = d.n_src;
     $("m-hsrc").textContent = (d.h_src || 0).toFixed(2);
     $("m-thr").textContent = `${Math.round(d.thr_pps)}/${Math.round(d.thr_syn)}`;
+    $("m-blocked").textContent = d.blocked_pps != null ? d.blocked_pps : 0;
 
     const v = $("verdict"), lab = $("verdict-label"), sub = $("verdict-sub");
     if (!d.triggered) {
@@ -106,6 +109,15 @@
     ms.textContent = (m.ms != null ? m.ms : "-") + "ms";
     serviceDown = !m.ok;      // host can't reach the service -> victim shows DOWN
     updateVictim();
+  }
+
+  // ---------- blocking toggle (closed-loop IPS) ----------
+  function applyBlocking(on) {
+    blocking = on;
+    const b = $("btn-block");
+    b.textContent = "Blocking: " + (on ? "ON" : "OFF");
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
   }
 
   function addLog(m) {
@@ -199,6 +211,7 @@
   document.querySelectorAll(".btn-attack").forEach((b) =>
     b.addEventListener("click", () => send({ action: "attack", scenario: b.dataset.scenario })));
   $("btn-stop").addEventListener("click", () => send({ action: "stop" }));
+  $("btn-block").addEventListener("click", () => send({ action: "blocking", on: !blocking }));
 
   // ---------- init ----------
   document.querySelector(".dring").classList.add("pulse");

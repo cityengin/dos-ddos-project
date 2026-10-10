@@ -31,6 +31,8 @@ const SCENARIOS = {
 let running = null;        // active scenario id or null
 let detectorProc = null;   // child process streaming detector JSON
 let dockerOk = false;
+let blocking = false;      // closed-loop IPS (eBPF XDP_DROP) on/off
+let detStarting = false;   // guard: chi 1 luong startDetector chay cung luc (tranh pkill cheo)
 
 // ---- docker helpers (execFile = no shell) ----
 function docker(args, timeout = 15000) {
@@ -51,11 +53,14 @@ function logEvent(msg, level = "info") {
 
 // ---- detector realtime stream ----
 async function startDetector() {
+  if (detStarting) return;   // tranh 2 luong khoi dong chong cheo (vd toggle luc dang start)
+  detStarting = true;
   const info = await docker(["info", "--format", "{{.ServerVersion}}"], 8000);
   dockerOk = !info.err;
   broadcast({ type: "docker", up: dockerOk });
   if (!dockerOk) {
     logEvent("Docker not reachable - start Docker Desktop, then 'docker compose up -d'.", "error");
+    detStarting = false;
     setTimeout(startDetector, 5000); // retry
     return;
   }
@@ -67,6 +72,7 @@ async function startDetector() {
     broadcast({ type: "detector", up: false });
     logEvent("Detector cannot reach the victim (shared netns broken). " +
              "Run: docker compose up -d --force-recreate", "error");
+    detStarting = false;
     setTimeout(startDetector, 6000);
     return;
   }
@@ -77,7 +83,11 @@ async function startDetector() {
   const detArgs = ["exec", "detector", "python3", "-u", "/app/detector.py",
     "--iface", "eth0", "--pps", "40", "--syn", "25", "--victim", VICTIM, "--stream"];
   if (mlOn) detArgs.push("--ml", ML_MODEL_CONT);
+  // Blocking ON -> chay engine eBPF + --block (XDP_DROP). OFF -> detect-only nhu cu.
+  if (blocking) detArgs.push("--engine", "ebpf", "--block", "--block-pps", "200",
+                             "--block-ttl", "5", "--block-syn-rate", "2000");
   detectorProc = spawn("docker", detArgs, { windowsHide: true });
+  detStarting = false;   // da spawn xong -> cho phep lan restart ke tiep
 
   let buf = "";
   detectorProc.stdout.on("data", (d) => {
@@ -96,7 +106,10 @@ async function startDetector() {
     setTimeout(startDetector, 4000); // auto-restart
   });
   broadcast({ type: "detector", up: true });
-  logEvent(mlOn ? "Detector stream connected (rule + ML)." : "Detector stream connected (rule only; no ML model).", "ok");
+  broadcast({ type: "blocking", on: blocking });
+  logEvent("Detector stream connected ("
+    + (blocking ? "eBPF + BLOCKING" : "detect-only")
+    + (mlOn ? " + ML" : "") + ").", "ok");
 }
 
 // ---- attack control ----
@@ -127,6 +140,19 @@ async function stopAttack(quiet) {
   if (!quiet) logEvent("Attack stopped.", "info");
 }
 
+// ---- closed-loop blocking toggle: restart the detector with/without --block (eBPF) ----
+async function setBlocking(on) {
+  if (on === blocking) return;
+  blocking = on;
+  broadcast({ type: "blocking", on });
+  logEvent(on ? "Blocking ENABLED - restarting detector with eBPF XDP_DROP (~a few seconds)..."
+              : "Blocking disabled - restarting detector (detect-only)...", on ? "ok" : "info");
+  // Kill the current detector; the exit handler restarts it with the new flags. startDetector()
+  // pkills the in-container process first (SIGTERM -> its cleanup removes the XDP program).
+  if (detectorProc) { try { detectorProc.kill(); } catch { /* */ } }
+  else startDetector();
+}
+
 // ---- service-health probe (loopback, inside victim's netns) ----
 // Probing from the detector over localhost goes via `lo`, NOT eth0, so it does NOT
 // appear to the sniffer as an extra source (which previously made scenario A look like
@@ -148,7 +174,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws) => {
-  const snap = { type: "snapshot", running, dockerOk,
+  const snap = { type: "snapshot", running, dockerOk, blocking,
     scenarios: Object.fromEntries(Object.entries(SCENARIOS).map(([k, v]) => [k, { label: v.label }])) };
   if (running && SCENARIOS[running]) {
     const s = SCENARIOS[running];
@@ -161,6 +187,7 @@ wss.on("connection", (ws) => {
     try {
       if (msg.action === "attack" && typeof msg.scenario === "string") await startAttack(msg.scenario);
       else if (msg.action === "stop") await stopAttack(false);
+      else if (msg.action === "blocking") await setBlocking(!!msg.on);
     } catch (e) {
       logEvent("Action failed: " + (e && e.message ? e.message : String(e)), "error");
     }

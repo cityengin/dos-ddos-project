@@ -73,6 +73,9 @@ reload nhom docker (hoac re-login / `newgrp docker`).
   window HTTP 1-nguon dau pha C doc BENIGN do tin thap (hanh vi hoc tu E).
   Phase 4 DA XONG: dashboard hien verdict ML canh verdict luat (server tu bat --ml khi co model;
   o Attack panel: "rule: X" + dong "ML: Y . conf%", to mau theo verdict ML -> thay ngay khi 2 ben khac nhau).
+  Dashboard cung co nut "Blocking ON/OFF" + tile blocked/s: bat -> server restart detector voi
+  --engine ebpf --block (XDP_DROP); demo C: pps sup ~15k -> ~36 khi chan. Mac dinh TAT (detect-only).
+  (Guard detStarting trong server.js: chi 1 luong startDetector chay -> tranh restart chong cheo khi toggle.)
 - Phong thu: DA GO phan mitigation L7 (rate-limit) roi, se lam lai theo huong closed-loop
   (phat hien -> tu dong chan) sau. Hien detector chi phat hien (IDS).
 
