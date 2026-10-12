@@ -37,21 +37,32 @@ def kill_all():
         dexec(a, "pkill", "-f", "flood.py")
 
 
-def run_one(name, baseline, duration, cooldown, pps_override=None):
+def run_one(name, baseline, duration, cooldown, pps_override=None,
+            intensity="paced", max_rate_us=0, max_conc=500):
     s = SCEN[name]
     # pps hieu luc: uu tien override tu CLI (chi co tac dung voi SYN), nguoc lai giu mac dinh kich ban
     eff_pps = pps_override if pps_override is not None else s.get("pps")
+    # intensity: paced = scapy co dieu tiet (mac dinh, dung cho dataset ML, giu nguyen).
+    #            max   = cuong do TOI DA (hping3/ab line-rate) -> CHI ho tro A/B/C; can engine eBPF
+    #            de dem kip (scapy rot goi nang o line-rate).
+    is_max = (intensity == "max" and name in ("A", "B", "C"))
+    if intensity == "max" and not is_max:
+        print(f"[!] intensity=max chi ho tro A/B/C; chay {name} o che do paced.")
     csv = f"/app/{name}.csv"
     host_csv = os.path.join(OUT_DIR, f"{name}.csv")
-    print(f"\n=== Kich ban {name}: {s['desc']}  (mong doi: {s['truth']}) ===")
+    print(f"\n=== Kich ban {name}: {s['desc']}  (mong doi: {s['truth']}, "
+          f"intensity={'max' if is_max else 'paced'}) ===")
 
     kill_all()
     time.sleep(1)
 
-    # 1) khoi dong detector (da sua: --victim = chi dem inbound)
-    dexec(DETECTOR, "python3", "/app/detector.py", "--iface", "eth0",
-          "--pps", "40", "--syn", "25", "--victim", VICTIM, "--csv", csv, detach=True)
-    time.sleep(2)  # cho sniff khoi dong
+    # 1) khoi dong detector (--victim = chi dem inbound). Che do max -> engine eBPF.
+    det_cmd = ["python3", "/app/detector.py", "--iface", "eth0",
+               "--pps", "40", "--syn", "25", "--victim", VICTIM, "--csv", csv]
+    if is_max:
+        det_cmd += ["--engine", "ebpf"]
+    dexec(DETECTOR, *det_cmd, detach=True)
+    time.sleep(3 if is_max else 2)  # cho backend khoi dong (eBPF can compile BCC runtime)
 
     # 2) baseline truoc tan cong
     print(f"[*] baseline {baseline}s (mang yen tinh)...")
@@ -62,7 +73,18 @@ def run_one(name, baseline, duration, cooldown, pps_override=None):
     used = ATTACKERS[:s["n"]]
     print(f"[*] TAN CONG {duration}s tu {len(used)} nguon: {', '.join(used)}")
     for a in used:
-        if s["mode"] == "syn":
+        if is_max and s["mode"] == "syn":
+            # SYN flood cuong do toi da bang hping3 (line-rate). --rand-source cho kich ban spoof.
+            # max_rate_us > 0 -> gioi han (-i uN) de ramp an toan; nguoc lai --flood (het toc luc).
+            cmd = ["timeout", str(duration), "hping3", "-S", "-p", "80", "-q"]
+            if s["spoof"]:
+                cmd.append("--rand-source")
+            cmd += (["-i", "u%d" % max_rate_us] if max_rate_us > 0 else ["--flood"])
+            cmd.append(VICTIM)
+        elif is_max:  # L7 cuong do cao bang ab (keep-alive + concurrency cao)
+            cmd = ["timeout", str(duration), "ab", "-k", "-c", str(max_conc),
+                   "-t", str(max(duration - 1, 1)), "-n", "100000000", "http://%s/" % VICTIM]
+        elif s["mode"] == "syn":
             cmd = ["timeout", str(duration), "python3", "/app/syn_flood.py", VICTIM, "-p", "80"]
             if eff_pps:
                 cmd += ["--pps", str(eff_pps)]
@@ -84,6 +106,7 @@ def run_one(name, baseline, duration, cooldown, pps_override=None):
 
     meta = dict(name=name, desc=s["desc"], truth=s["truth"], mode=s["mode"],
                 spoof=s["spoof"], sources=used, victim=VICTIM, pps=eff_pps,
+                intensity=("max" if is_max else "paced"),
                 attack_start=t_start, attack_end=t_end, csv=host_csv)
     with open(os.path.join(OUT_DIR, f"{name}.meta.json"), "w") as f:
         json.dump(meta, f, indent=2)
@@ -98,11 +121,19 @@ def main():
     ap.add_argument("--cooldown", type=int, default=5)
     ap.add_argument("--pps", type=int, default=None,
                     help="override pps/nguon cho kich ban SYN (A/B); khong truyen = giu mac dinh SCEN")
+    ap.add_argument("--intensity", choices=["paced", "max"], default="paced",
+                    help="paced = scapy co dieu tiet (mac dinh, cho dataset ML); "
+                         "max = cuong do toi da hping3/ab (chi A/B/C, dung engine eBPF)")
+    ap.add_argument("--max-rate", type=int, default=0, dest="max_rate_us",
+                    help="che do max SYN: gioi han hping3 -i u<MICROGIAY>/goi (0 = --flood het toc luc)")
+    ap.add_argument("--max-conc", type=int, default=500,
+                    help="che do max HTTP (C): so ket noi dong thoi moi nguon cho ab (-c)")
     args = ap.parse_args()
 
     names = [args.only] if args.only else list(SCEN)
     for n in names:
-        run_one(n, args.baseline, args.duration, args.cooldown, args.pps)
+        run_one(n, args.baseline, args.duration, args.cooldown, args.pps,
+                intensity=args.intensity, max_rate_us=args.max_rate_us, max_conc=args.max_conc)
     print("\n[*] HOAN TAT. CSV + meta trong thu muc detection/")
 
 

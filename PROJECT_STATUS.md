@@ -9,19 +9,19 @@ reload nhom docker (hoac re-login / `newgrp docker`).
 
 ## Kien truc lab (docker-compose.yml)
 - victim: nginx:alpine, IP 172.30.0.10, map ra localhost:8080
-- attacker1..6: IP 172.30.0.21..26, co scapy + hping3, cap NET_RAW+NET_ADMIN (6 nguon that cho L7)
+- attacker1..6: IP 172.30.0.21..26, co scapy + hping3 + ab (apache2-utils), cap NET_RAW+NET_ADMIN (6 nguon that cho L7)
 - detector: dung chung network namespace voi victim (network_mode: service:victim), sniff eth0
 - network dos-lab: bridge, subnet 172.30.0.0/24
 
 ## Cac file
-- attacker/Dockerfile        : image tan cong (python3-slim + hping3 + scapy + tcpdump)
+- attacker/Dockerfile        : image tan cong (python3-slim + hping3 + ab/apache2-utils + scapy + tcpdump)
 - attacks/syn_flood.py        : SYN flood L4, co --spoof (random source IP)
 - attacks/http_flood.py       : HTTP flood L7, multi-thread GET
 - run_ddos.ps1                : orchestrator PowerShell (Windows), chay 6 attacker song song (mode syn|http)
-- run_ddos.sh                 : orchestrator bash (Linux), tuong duong run_ddos.ps1 (tu re-exec qua sg docker)
+- run_ddos.sh                 : orchestrator bash (Linux), tuong duong run_ddos.ps1 (-i paced|max; tu re-exec qua sg docker)
 - experiments/bench_syn_throughput.sh: do pps sinh goi SYN (2 diem, khu khoi dong) 1 va 6 nguon
 - detection/detector.py       : sniffer realtime, tinh pps/syn/ack + entropy(src IP) + entropy(dport), phan loai DoS/DDoS, option --csv, --victim
-- experiments/run_scenarios.py: chay lai A/B/C tu dong -> detection/{A,B,C}.csv + {A,B,C}.meta.json
+- experiments/run_scenarios.py: chay lai A/B/C tu dong -> detection/{A,B,C}.csv + {A,B,C}.meta.json (--intensity paced|max)
 - analysis/plot_attack.py     : ve do thi tu CSV (pps/syn/ack symlog + H_src/n_src), to vung tan cong A/B/C
 - analysis/metrics.py         : tach episode, tinh detection time / FP / FN / bang phan loai vs ground truth
 
@@ -33,6 +33,9 @@ reload nhom docker (hoac re-login / `newgrp docker`).
   So sanh (gui chinh xac 120000 goi toc do cao): scapy DEM 67917/120000 (57%, dinh 6.9k pps) vs
   eBPF 113764/120000 (95%, dinh 30.1k pps). Test 5000 goi toc do thap: eBPF 4986 (~dung, khong trung).
   Moi output giu nguyen (pps/syn_s/ack_s/h_src/h_dport/n_src + luat + --adaptive + --ml + --stream + --csv).
+  LUU Y: map src_ips bi CAP 8192 (truoc 65536) -> readback+clear moi window khong con khung khi SYN spoof
+  --rand-source sinh hang chuc nghin IP/giay; counters packets/syn/ack o PERCPU van chinh xac, chi n_src
+  bao hoa ~8192 (van ro la "rat nhieu nguon" -> DDoS, H_src~13).
 - CLOSED-LOOP IPS (phat hien -> tu chan, chi engine ebpf): cac co --block (mac dinh TAT = detect-only),
   --block-pps (vd 200), --block-ttl (vd 5s), --block-syn-rate (vd 2000; 0=tat). eBPF DEM TRUOC roi moi
   chan: blocklist[src]=expire_ns -> XDP_DROP (co TTL, tu het han); token-bucket SYN toan cuc (bpf_spin_lock)
@@ -96,6 +99,23 @@ reload nhom docker (hoac re-login / `newgrp docker`).
   - C) DDoS 6 nguon HTTP L7  : pps ~1800 syn ~400  ack ~1400 (ACK>>SYN) n_src=6 H_src ~2.58 -> DDoS L7 (DUNG)
   (so lieu do qua dashboard sau khi nang len 6 attacker + syn_flood --pps; B spoof toc do cao -> n_src len hang nghin)
 - Do chinh xac phan loai: 3/3 (truoc khi sua la 2/3).
+
+## Cuong do toi da (intensity=max) + do tac dong that
+- Che do: paced (scapy, mac dinh, cho dataset ML - GIU NGUYEN) | max (hping3/ab line-rate, CHI A/B/C, can engine eBPF).
+  Wire: run_scenarios.py --intensity/--max-rate/--max-conc; run_ddos.sh -i paced|max; dashboard nut "Max intensity"
+  (detector dashboard gio LUON chay engine eBPF nen doi max khong can restart detector).
+- Do qua eth0 rx counter cua victim (detect-only, KHONG block; host 20 core, 10.5GB trong; 8s/trang thai):
+  - idle   : ~28 pps   |           | client 30/30 OK | p50/p95 = 1/1 ms
+  - A-max  : ~190k pps | rx drop 0 | client 37/37 OK | p95 1ms   (1 nguon SYN --flood; detector thay ~270k pps luc dinh)
+  - B-max  : ~123k pps | rx drop 0 | client 36/36 OK | p95 1ms   (6 nguon SYN --rand-source --flood)
+  - C-max  : ~693k pps | rx drop 0 | client 35/35 OK | p95 11ms  (6 nguon ab -k -c 500; ab ~330k req/s tong, 0 loi)
+- KET LUAN TRUNG THUC: mac dinh hien dai (SYN cookies + nginx tinh rat nhanh) HAP THU sach ca 3 -> 0 goi rot o eth0
+  ke ca 693k pps, client hop le 100% thanh cong; tac dong nang nhat chi la duoi latency C 1ms->11ms. Muon victim
+  SAP that can victim yeu hon / quy mo lon hon nhieu. Khong thoi phong = ket luan hop le.
+- Hoi phuc khi bat --block (phong thu = GIAM khoi luong + tai host + tra lai latency, khong phai cuu dich vu da chet):
+  - A-max: XDP drop ~100% (blocked_src=1, drop ~460k pps), client 39/39 OK, p95 1ms
+  - C-max: pps ~433k -> ~28 (blocked_src=6), client 41/41 OK, p95 11ms -> 1ms
+  - B-max (spoof): per-source vo dung -> --block-syn-rate cat ~85% (nhu phan closed-loop)
 
 ## Phat hien / loi da xac dinh (DA SUA)
 - BUG phan loai: detector sniff o netns cua victim nen thay CA goi victim tu tra ve (SYN-ACK, src=IP victim).

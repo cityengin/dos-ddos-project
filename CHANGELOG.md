@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Max-intensity attack mode** (`intensity=paced|max`) alongside the paced default. `max` drives
+  **line-rate** tools instead of the scapy/urllib scripts — `hping3 -S --flood` (SYN, `--rand-source`
+  to spoof) and `ab -k -c 500` (L7) — for scenarios **A/B/C only**, and forces `--engine ebpf` (scapy
+  can't count at line-rate). Wired into `experiments/run_scenarios.py` (`--intensity`, plus `--max-rate`
+  to cap hping3 for a safe ramp and `--max-conc` for ab), `run_ddos.sh` (`-i paced|max`), and the
+  dashboard (a **"Max intensity"** toggle). The paced path (scapy with rate limiting, used for the ML
+  dataset) is unchanged. `ab` is added to the attacker image (`apache2-utils`).
+- **Real-impact measurement** of the max floods (detect-only, no blocking), reported honestly in
+  `PROJECT_STATUS.md` / `docs/`: A-max ~190k pps, B-max ~123k pps, C-max ~693k pps, with **zero eth0 rx
+  drops** and a legit client staying **100% 200-OK** in every state (only C-max's p95 latency rises
+  ~1→11ms). Modern defaults (kernel SYN cookies + fast static nginx) absorb all three; downing this
+  victim would need a weaker target or far larger scale. With `--block` on, A-max is dropped ~100% at
+  XDP and C-max collapses (~433k→~28 pps) with the latency tail back to ~1ms.
+- The dashboard detector now **always runs the eBPF engine** (accurate at line-rate), so the new
+  Max-intensity toggle needs no detector restart; `--block` is still added only when Blocking is on.
+  `stopAttack`/`cleanup` now also kill `hping3`/`ab` (not just the `*_flood.py` scripts).
 - Dashboard **Blocking ON/OFF** toggle and a `blocked/s` tile. Turning it on restarts the detector with
   `--engine ebpf --block --block-pps 200 --block-ttl 5 --block-syn-rate 2000`; the stream's
   `blocked_src`/`blocked_pps` are shown live. In the lab a 6-source HTTP flood's rate collapses
@@ -134,6 +150,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- eBPF counter no longer stalls under a `--rand-source` SYN flood: the `src_ip` BPF hash is **capped at
+  8192** entries (was 65536), bounding the per-window userspace read/clear (tens of thousands of distinct
+  spoofed IPs/s previously froze window output). Packet/SYN/ACK counts (PERCPU) stay exact; only `n_src`
+  saturates (~8192), which still reads unambiguously as a highly dispersed DDoS (`H(src)`≈13).
 - Dashboard exit now stops the **in-container** detector (`docker exec detector pkill -f detector.py`),
   not just the local `docker exec` client. Previously, stopping `node server.js` left the detector
   running — and if blocking was on it kept dropping packets with its XDP program still attached, which

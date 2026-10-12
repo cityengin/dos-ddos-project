@@ -5,7 +5,7 @@
   const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const SVGNS = "http://www.w3.org/2000/svg";
 
-  let running = null, verdictLevel = "idle", serviceDown = false, blocking = false;
+  let running = null, verdictLevel = "idle", serviceDown = false, blocking = false, maxIntensity = false;
 
   // ---------- websocket ----------
   let ws;
@@ -24,6 +24,7 @@
       case "snapshot":
         setPill("pill-docker", m.dockerOk);
         applyBlocking(!!m.blocking);
+        applyMaxIntensity(!!m.maxIntensity);
         onState(m.running ? m : { running: null });
         break;
       case "docker": setPill("pill-docker", m.up); break;
@@ -31,6 +32,7 @@
       case "metric": onMetric(m.data); break;
       case "state": onState(m); break;
       case "blocking": applyBlocking(m.on); break;
+      case "intensity": applyMaxIntensity(m.max); break;
       case "health": onHealth(m); break;
       case "log": addLog(m); break;
     }
@@ -116,6 +118,15 @@
     blocking = on;
     const b = $("btn-block");
     b.textContent = "Blocking: " + (on ? "ON" : "OFF");
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+
+  // ---------- max-intensity toggle (hping3/ab line-rate vs scapy paced) ----------
+  function applyMaxIntensity(on) {
+    maxIntensity = on;
+    const b = $("btn-max");
+    b.textContent = "Max intensity: " + (on ? "ON" : "OFF");
     b.classList.toggle("on", on);
     b.setAttribute("aria-pressed", on ? "true" : "false");
   }
@@ -212,6 +223,7 @@
     b.addEventListener("click", () => send({ action: "attack", scenario: b.dataset.scenario })));
   $("btn-stop").addEventListener("click", () => send({ action: "stop" }));
   $("btn-block").addEventListener("click", () => send({ action: "blocking", on: !blocking }));
+  $("btn-max").addEventListener("click", () => send({ action: "intensity", on: !maxIntensity }));
 
   // ---------- init ----------
   document.querySelector(".dring").classList.add("pulse");

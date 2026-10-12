@@ -17,8 +17,9 @@
 7. [Ngưỡng thích nghi (nâng cao)](#7-ngưỡng-thích-nghi-nâng-cao)
 8. [So sánh với state-of-the-art](#8-so-sánh-với-state-of-the-art)
 9. [Phòng thủ: closed-loop (XDP drop)](#9-phòng-thủ-closed-loop-xdp-drop)
-10. [Giới hạn & hướng phát triển](#10-giới-hạn--hướng-phát-triển)
-11. [Thuật ngữ nhanh](#11-thuật-ngữ-nhanh)
+10. [Cường độ tối đa & tác động thật lên dịch vụ](#10-cường-độ-tối-đa--tác-động-thật-lên-dịch-vụ)
+11. [Giới hạn & hướng phát triển](#11-giới-hạn--hướng-phát-triển)
+12. [Thuật ngữ nhanh](#12-thuật-ngữ-nhanh)
 
 ---
 
@@ -343,7 +344,49 @@ thấy đúng cường độ tấn công đến.
 Đánh đổi của chặn theo tốc độ SYN: một phần **SYN hợp lệ cũng bị rớt** khi tổng vượt ngưỡng — giới hạn
 cố hữu khi phía victim không phân biệt được nguồn thật/giả.
 
-## 10. Giới hạn & hướng phát triển
+## 10. Cường độ tối đa & tác động thật lên dịch vụ
+
+Hai mức cường độ tấn công, chọn bằng `intensity` (run_scenarios.py `--intensity`, run_ddos.sh `-i`, hoặc
+nút **Max intensity** trên dashboard):
+
+- **paced** (mặc định): scapy/`http_flood.py` **có điều tiết tốc độ**. Tải vừa phải, ổn định, dùng để
+  sinh **dataset ML** (mục 8.2) và minh họa phân loại. Giữ nguyên, không đổi.
+- **max**: cường độ **tối đa (line-rate)** bằng công cụ chuyên dụng — `hping3` cho SYN flood
+  (`--flood`, thêm `--rand-source` để giả mạo), `ab` (ApacheBench) cho L7 (`-k -c 500`). Chỉ áp dụng
+  cho A/B/C và **bắt buộc engine eBPF** (scapy rớt gói nặng ở line-rate, không đếm kịp).
+
+**Đo tác động thật** (detect-only, **không** bật chặn, để thấy sức tấn công thô): một **client hợp lệ
+tốc độ thấp** (host → cổng publish của victim) đo độ trễ + tỉ lệ thành công, song song đọc bộ đếm gói
+vào của `eth0` victim. Số liệu lab (host 20 core, 10.5 GB trống; mỗi trạng thái 8s):
+
+| Trạng thái | Lưu lượng vào victim | Gói rớt (eth0 rx) | Client hợp lệ | Độ trễ p50/p95 |
+|---|---|---|---|---|
+| idle | ~28 pps | — | 30/30 OK | 1ms / 1ms |
+| A-max (1 nguồn SYN `--flood`) | **~190k pps** | **0** | 37/37 OK | 1ms / 1ms |
+| B-max (6 nguồn SYN spoof) | **~123k pps** | **0** | 36/36 OK | 0ms / 1ms |
+| C-max (6 nguồn HTTP `ab -c 500`) | **~693k pps** | **0** | 35/35 OK | 1ms / **11ms** |
+
+**Kết luận trung thực:** mặc định hiện đại (**SYN cookies** của kernel + nginx phục vụ nội dung tĩnh rất
+nhanh) **hấp thụ sạch** cả ba tấn công — **không gói nào bị rớt ở eth0** kể cả ở 693k pps, client hợp lệ
+**100% thành công** ở mọi trạng thái. Tác động nặng nhất chỉ là **đuôi độ trễ C-max tăng 1ms → 11ms**.
+Muốn victim *sập* thật cần victim yếu hơn hoặc quy mô lớn hơn nhiều — **không thổi phồng** kết quả. Đây là
+một kết luận hợp lệ: phòng thủ cơ bản (tuned kernel + reverse-proxy nhanh) đã đi được rất xa.
+
+**Giá trị của phòng thủ (mục 9) ở đây** là **giảm khối lượng tấn công + tải host** và trả lại độ trễ về
+mức nền, chứ không phải cứu một dịch vụ đã chết:
+
+| Kịch bản max | Không chặn | Bật `--block` |
+|---|---|---|
+| A-max (SYN 1 nguồn) | ~190k pps | XDP drop **~100%** (`blocked_src`=1), client 39/39, p95 1ms |
+| C-max (HTTP 6 nguồn) | 693k pps, p95 **11ms** | pps **~433k → ~28** (`blocked_src`=6), client 41/41, p95 **11ms → 1ms** |
+| B-max (SYN spoof) | per-source vô dụng | `--block-syn-rate` cắt ~85% (mục 9) |
+
+> **Lưu ý kỹ thuật (eBPF):** SYN flood spoof `--rand-source` sinh hàng chục nghìn IP khác nhau/giây. Map
+> `src_ips` bị **chặn kích thước ở 8192** để userspace đọc/xóa map mỗi giây không bị khựng; bộ đếm
+> packets/syn/ack nằm ở PERCPU array nên **cường độ vẫn chính xác**, chỉ `n_src` bão hòa ở ~8192 (vẫn rõ
+> ràng là "rất nhiều nguồn" ⇒ DDoS, `H(src)≈13`).
+
+## 11. Giới hạn & hướng phát triển
 
 **Giới hạn:**
 - Một máy giả mạo nhiều IP **không phân biệt được** với nhiều máy thật từ phía victim.
@@ -355,7 +398,7 @@ cố hữu khi phía victim không phân biệt được nguồn thật/giả.
 (3) thêm vector low-and-slow; (4) phòng thủ **closed-loop XDP drop** đã làm (mục 9) — còn SYN cookies
 và chặn ở thượng nguồn (upstream/CDN) để xử spoof triệt để hơn.
 
-## 11. Thuật ngữ nhanh
+## 12. Thuật ngữ nhanh
 
 | Thuật ngữ | Giải thích |
 |---|---|

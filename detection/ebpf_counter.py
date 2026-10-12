@@ -29,7 +29,12 @@ BPF_TEXT = r"""
 #include <uapi/linux/in.h>
 
 BPF_PERCPU_ARRAY(counters, u64, 5);          // 0=packets 1=syn 2=ack 3=udp 4=blocked
-BPF_HASH(src_ips, u32, u64, 65536);          // key = saddr (network order)
+// src_ips bi CHAN kich thuoc o 8192: mot SYN flood spoof (--rand-source) sinh hang chuc nghin
+// IP khac nhau/giay; neu de 65536 thi userspace doc+xoa map moi cua so se khung (hang chuc nghin
+// syscall) -> detector khung viec in window. Cap 8192 giu readback nhanh; khi day thi update()
+// im lang bo qua IP moi, nhung counters[] (packets/syn/ack) van dem DU moi goi -> cuong do van
+// chinh xac, chi n_src bao hoa o ~8192 (van ro rang la "rat nhieu nguon" -> DDoS, H~13).
+BPF_HASH(src_ips, u32, u64, 8192);           // key = saddr (network order); cap de readback nhanh
 BPF_HASH(dports,  u16, u64, 65536);          // key = TCP dport (host order)
 
 // ----- closed-loop IPS (tro neu userspace khong ghi) -----

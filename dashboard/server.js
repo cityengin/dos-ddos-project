@@ -32,6 +32,7 @@ let running = null;        // active scenario id or null
 let detectorProc = null;   // child process streaming detector JSON
 let dockerOk = false;
 let blocking = false;      // closed-loop IPS (eBPF XDP_DROP) on/off
+let maxIntensity = false;  // "Max intensity": tan cong line-rate (hping3/ab) thay cho scapy paced
 let detStarting = false;   // guard: chi 1 luong startDetector chay cung luc (tranh pkill cheo)
 
 // ---- docker helpers (execFile = no shell) ----
@@ -80,11 +81,14 @@ async function startDetector() {
   // Bat ML neu co san model (train_window.py da sinh). Neu khong co -> chay luat thuan (ml_verdict=null).
   let mlOn = false;
   try { mlOn = fs.existsSync(ML_MODEL_HOST); } catch { mlOn = false; }
+  // Engine LUON la eBPF: dem chinh xac o line-rate (can cho "Max intensity"); scapy rot goi khi pps cao.
   const detArgs = ["exec", "detector", "python3", "-u", "/app/detector.py",
-    "--iface", "eth0", "--pps", "40", "--syn", "25", "--victim", VICTIM, "--stream"];
+    "--iface", "eth0", "--pps", "40", "--syn", "25", "--victim", VICTIM,
+    "--engine", "ebpf", "--stream"];
   if (mlOn) detArgs.push("--ml", ML_MODEL_CONT);
-  // Blocking ON -> chay engine eBPF + --block (XDP_DROP). OFF -> detect-only nhu cu.
-  if (blocking) detArgs.push("--engine", "ebpf", "--block", "--block-pps", "200",
+  // Blocking ON -> them --block (XDP_DROP). Doi blocking van phai restart detector (them/bo --block);
+  // doi "Max intensity" thi KHONG can restart detector (engine da la eBPF san).
+  if (blocking) detArgs.push("--block", "--block-pps", "200",
                              "--block-ttl", "5", "--block-syn-rate", "2000");
   detectorProc = spawn("docker", detArgs, { windowsHide: true });
   detStarting = false;   // da spawn xong -> cho phep lan restart ke tiep
@@ -107,8 +111,8 @@ async function startDetector() {
   });
   broadcast({ type: "detector", up: true });
   broadcast({ type: "blocking", on: blocking });
-  logEvent("Detector stream connected ("
-    + (blocking ? "eBPF + BLOCKING" : "detect-only")
+  logEvent("Detector stream connected (eBPF"
+    + (blocking ? " + BLOCKING" : " detect-only")
     + (mlOn ? " + ML" : "") + ").", "ok");
 }
 
@@ -119,22 +123,36 @@ async function startAttack(id) {
   await stopAttack(true);
   for (const a of s.srcs) {
     let cmd;
-    if (s.type === "syn") {
+    if (maxIntensity && s.type === "syn") {
+      // Max: hping3 line-rate. --rand-source cho kich ban spoof (B). Chay den khi bam Stop.
+      cmd = ["exec", "-d", a, "hping3", "-S", "-p", "80", "-q"];
+      if (s.spoof) cmd.push("--rand-source");
+      cmd.push("--flood", VICTIM);
+    } else if (maxIntensity) { // http L7 cuong do cao: ab keep-alive, concurrency 500
+      cmd = ["exec", "-d", a, "ab", "-k", "-c", "500", "-t", "3600", "-n", "100000000",
+             `http://${VICTIM}/`];
+    } else if (s.type === "syn") {
       cmd = ["exec", "-d", a, "python3", "/app/syn_flood.py", VICTIM, "-p", "80"];
       if (s.pps) cmd.push("--pps", String(s.pps));
       if (s.spoof) cmd.push("--spoof");
-    } else { // http
+    } else { // http paced
       cmd = ["exec", "-d", a, "python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", "6", "-d", "3600"];
     }
     await docker(cmd);
   }
   running = id;
-  broadcast({ type: "state", running: id, label: s.label, attackers: s.srcs, attackType: s.type, spoof: s.spoof });
-  logEvent(`Attack started: ${s.label}`, "attack");
+  broadcast({ type: "state", running: id, label: s.label, attackers: s.srcs,
+    attackType: s.type, spoof: s.spoof, max: maxIntensity });
+  logEvent(`Attack started: ${s.label}${maxIntensity ? " [MAX]" : ""}`, "attack");
 }
 
 async function stopAttack(quiet) {
-  for (const a of ATTACKERS) await docker(["exec", a, "pkill", "-f", "flood.py"]).catch(() => {});
+  // Giet ca scapy/http_flood.py (paced) va hping3/ab (max). -x = khop ten tien trinh chinh xac.
+  for (const a of ATTACKERS) {
+    await docker(["exec", a, "pkill", "-f", "flood.py"]).catch(() => {});
+    await docker(["exec", a, "pkill", "-x", "hping3"]).catch(() => {});
+    await docker(["exec", a, "pkill", "-x", "ab"]).catch(() => {});
+  }
   running = null;
   broadcast({ type: "state", running: null });
   if (!quiet) logEvent("Attack stopped.", "info");
@@ -151,6 +169,18 @@ async function setBlocking(on) {
   // pkills the in-container process first (SIGTERM -> its cleanup removes the XDP program).
   if (detectorProc) { try { detectorProc.kill(); } catch { /* */ } }
   else startDetector();
+}
+
+// ---- "Max intensity" toggle: switch attacks between paced (scapy/http_flood) and line-rate
+// (hping3/ab). The detector already runs eBPF, so NO detector restart is needed; we just relaunch
+// the currently-running attack with the new intensity. ----
+async function setMaxIntensity(on) {
+  if (on === maxIntensity) return;
+  maxIntensity = on;
+  broadcast({ type: "intensity", max: on });
+  logEvent(on ? "Max intensity ON - attacks use hping3/ab (line-rate). Isolated lab only."
+              : "Max intensity OFF - attacks use paced scapy/http_flood.", on ? "attack" : "info");
+  if (running) await startAttack(running);   // restart current attack at the new intensity
 }
 
 // ---- service-health probe (loopback, inside victim's netns) ----
@@ -174,7 +204,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws) => {
-  const snap = { type: "snapshot", running, dockerOk, blocking,
+  const snap = { type: "snapshot", running, dockerOk, blocking, maxIntensity,
     scenarios: Object.fromEntries(Object.entries(SCENARIOS).map(([k, v]) => [k, { label: v.label }])) };
   if (running && SCENARIOS[running]) {
     const s = SCENARIOS[running];
@@ -188,6 +218,7 @@ wss.on("connection", (ws) => {
       if (msg.action === "attack" && typeof msg.scenario === "string") await startAttack(msg.scenario);
       else if (msg.action === "stop") await stopAttack(false);
       else if (msg.action === "blocking") await setBlocking(!!msg.on);
+      else if (msg.action === "intensity") await setMaxIntensity(!!msg.on);
     } catch (e) {
       logEvent("Action failed: " + (e && e.message ? e.message : String(e)), "error");
     }

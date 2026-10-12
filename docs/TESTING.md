@@ -211,7 +211,45 @@ probe (≪ `--block-pps`) is never blocked; `--block` is off by default.
 
 ---
 
-## 9. Quick full-system checklist
+## 9. Max intensity (line-rate) & real impact
+
+Two attack intensities, selectable without touching the paced default (needed for the ML dataset):
+`paced` (scapy/`http_flood.py`, rate-limited) and `max` (**line-rate** via `hping3`/`ab`, A/B/C only,
+requires `--engine ebpf`). **Isolated lab only** — keep `pkill hping3`/`pkill ab` ready.
+
+```bash
+# run_scenarios: max mode (uses hping3/ab + eBPF engine). --max-rate caps hping3 (-i uN) for a safe ramp.
+python experiments/run_scenarios.py --only A --intensity max --duration 10        # A: 1-source hping3 --flood
+python experiments/run_scenarios.py --only B --intensity max                      # B: 6-source --rand-source --flood
+python experiments/run_scenarios.py --only A --intensity max --max-rate 200        # ramp: ~5k pps/src, not --flood
+
+# run_ddos.sh: -i max (6 sources)
+./run_ddos.sh syn  -i max            # hping3 --rand-source --flood
+./run_ddos.sh http -i max            # ab -k -c 500
+./run_ddos.sh syn  -i max -r 50000   # capped ~50k pps/src (ramp)
+
+# Dashboard: click "Max intensity: OFF" -> ON, then run A/B/C. Detector already runs eBPF, so no restart.
+```
+
+**Measure impact** (detect-only, no `--block`): run a low-rate legit client from the host against the
+published victim while an attack runs, and read the victim's `eth0` rx counters for the true rate:
+
+```bash
+# true inbound pps (counts all packets reaching the victim, independent of the detector):
+docker exec detector sh -c 'cat /proc/net/dev' | awk '/eth0:/{gsub(/:/," ");print "rx_packets="$3}'   # before & after, /seconds
+# legit client latency+success:
+while :; do curl -s -m3 -o /dev/null -w '%{http_code} %{time_total}\n' http://localhost:8080/; sleep .25; done
+```
+
+**Expected (modern-defaults conclusion — report honestly):** A-max ~190k pps, B-max ~123k pps, C-max
+~693k pps, **0 rx drops** at the interface, and a legit client stays **100% 200-OK**; the only visible
+impact is C-max's p95 latency tail rising ~1ms → ~11ms. SYN cookies + fast static nginx absorb the
+floods — downing this victim needs a weaker target or far larger scale. With `--block` on, A-max is
+dropped ~100% at XDP and C-max collapses (~433k → ~28 pps) with the latency tail back to ~1ms.
+
+---
+
+## 10. Quick full-system checklist
 
 - [ ] 8 containers Up; `http://localhost:8080` serves the nginx page.
 - [ ] Baseline: 0 alerts, 0 false positives.
@@ -223,4 +261,5 @@ probe (≪ `--block-pps`) is never blocked; `--block` is off by default.
 - [ ] Detector `--ml` prints both rule and ML verdicts; dashboard shows both lines.
 - [ ] `--engine ebpf` observes ~95% of a 120k high-rate flood vs scapy ~57% (detect-only, no drop).
 - [ ] `--block` collapses a real-source flood (C: ~136k → ~242 pps); `--block-syn-rate` cuts a spoofed SYN flood (~85%).
-- [ ] Dashboard reflects every scenario live and binds to 127.0.0.1 only.
+- [ ] `--intensity max` (hping3/ab line-rate) reaches ~190k–693k pps; victim absorbs it (0 rx drops, legit client 100% OK).
+- [ ] Dashboard reflects every scenario live, has a Max-intensity toggle, and binds to 127.0.0.1 only.
