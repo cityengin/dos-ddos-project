@@ -359,12 +359,14 @@ nút **Max intensity** trên dashboard):
 tốc độ thấp** (host → cổng publish của victim) đo độ trễ + tỉ lệ thành công, song song đọc bộ đếm gói
 vào của `eth0` victim. Số liệu lab (host 20 core, 10.5 GB trống; mỗi trạng thái 8s):
 
-| Trạng thái | Lưu lượng vào victim | Gói rớt (eth0 rx) | Client hợp lệ | Độ trễ p50/p95 |
-|---|---|---|---|---|
-| idle | ~28 pps | — | 30/30 OK | 1ms / 1ms |
-| A-max (1 nguồn SYN `--flood`) | **~190k pps** | **0** | 37/37 OK | 1ms / 1ms |
-| B-max (6 nguồn SYN spoof) | **~123k pps** | **0** | 36/36 OK | 0ms / 1ms |
-| C-max (6 nguồn HTTP `ab -c 500`) | **~693k pps** | **0** | 35/35 OK | 1ms / **11ms** |
+| Trạng thái | Lưu lượng vào victim | Gói rớt (eth0 rx) | Client hợp lệ | Độ trễ p50/p95 | Tải host (20 core) |
+|---|---|---|---|---|---|
+| idle | ~28 pps | — | 30/30 OK | 1ms / 1ms | ~0.3 |
+| A-max (1 nguồn SYN `--flood`) | **~190k pps** | **0** | 37/37 OK | 1ms / 1ms | ~0.9 |
+| B-max (6 nguồn SYN spoof) | **~123k pps** | **0** | 36/36 OK | 0ms / 1ms | ~1.7 |
+| C-max (6 nguồn HTTP `ab -c 500`) | **~693k pps** | **0** | 35/35 OK | 1ms / **11ms** | ~3.7 |
+
+(`ab`: ~55.7k req/s mỗi nguồn, ~330k req/s tổng, 0 lỗi. Tải host 0.9/1.7/3.7 trên 20 core ⇒ máy **không nghẽn** ở bất kỳ trạng thái nào — tải tăng theo khối lượng tấn công.)
 
 **Kết luận trung thực:** mặc định hiện đại (**SYN cookies** của kernel + nginx phục vụ nội dung tĩnh rất
 nhanh) **hấp thụ sạch** cả ba tấn công — **không gói nào bị rớt ở eth0** kể cả ở 693k pps, client hợp lệ
