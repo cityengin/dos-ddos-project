@@ -59,18 +59,21 @@ All services share one isolated bridge network, `dos-lab` (`172.30.0.0/24`):
 | Container   | Image / Build      | IP            | Role                                                        |
 |-------------|--------------------|---------------|-------------------------------------------------------------|
 | `victim`    | `nginx:alpine`     | 172.30.0.10   | Target web server, published to `localhost:8080`            |
-| `attacker1` | `./attacker`       | 172.30.0.21   | Attack source (scapy + hping3), `NET_RAW` + `NET_ADMIN`     |
+| `attacker1` | `./attacker`       | 172.30.0.21   | Attack source (scapy + hping3 + ab), `NET_RAW` + `NET_ADMIN` |
 | `attacker2`–`attacker6` | `./attacker` | 172.30.0.22–26 | Attack sources (6 total → an L7 DDoS shows 6 real sources)  |
-| `detector`  | `./attacker`       | shares victim | Sniffs the victim's `eth0` (`network_mode: service:victim`) |
+| `detector`  | `./detection`       | shares victim | Sniffs the victim's `eth0` (`network_mode: service:victim`) |
 
-The detector shares the victim's network namespace, so it sees exactly the traffic the victim
-sees. Attack and detection scripts are **bind-mounted**, so edits take effect on the next
-`docker exec` without rebuilding images.
+The detector builds from its **own** image (`detection/Dockerfile`: ubuntu + `python3-bpfcc` for the
+eBPF/XDP counting engine + pinned `scikit-learn`/`joblib` for `--ml`), with `CAP_BPF`/`CAP_PERFMON`/
+`CAP_NET_ADMIN` and read-only mounts of `/lib/modules`, `/usr/src`, `/sys/kernel/debug` so BCC can
+compile the XDP program at runtime. It shares the victim's network namespace, so it sees exactly the
+traffic the victim sees. Attack and detection scripts are **bind-mounted**, so edits take effect on
+the next `docker exec` without rebuilding images.
 
 ## Requirements
 
-- **Windows 10/11** with **Docker Desktop** (WSL2 backend). The lab is Linux-container based
-  and also works on Linux/macOS with Docker.
+- **Linux** (native Docker — no WSL2/Docker Desktop needed; the eBPF engine attaches a kernel XDP
+  program, so it needs a Linux host).
 - **Python 3.11+** on the host with **matplotlib**, for the analysis/plotting scripts only
   (everything else runs inside containers):
 
@@ -106,6 +109,13 @@ docker exec -it detector python3 /app/detector.py --adaptive --victim 172.30.0.1
 # (needs ml/train_window.py to have produced detection/window_model.joblib first)
 docker exec -it detector python3 /app/detector.py \
   --pps 40 --syn 25 --victim 172.30.0.10 --ml /app/window_model.joblib
+
+# eBPF/XDP counting engine (accurate at line-rate; scapy drops packets above a few k pps)
+docker exec -it detector python3 /app/detector.py --engine ebpf --victim 172.30.0.10
+
+# Closed-loop blocking (detect -> XDP_DROP), needs --engine ebpf; off by default
+docker exec -it detector python3 /app/detector.py --engine ebpf --block \
+  --block-pps 200 --block-ttl 5 --block-syn-rate 2000 --victim 172.30.0.10
 ```
 
 **2. Launch a single attack** (another terminal):
@@ -121,39 +131,31 @@ docker exec attacker1 python3 /app/http_flood.py 172.30.0.10 -p 80 -t 20 -d 30
 **3. Launch a distributed attack** from all six sources:
 
 ```bash
-# Linux (bash) orchestrator
+# bash orchestrator
 ./run_ddos.sh syn        # or: ./run_ddos.sh http
+./run_ddos.sh syn -i max # line-rate (hping3/ab) instead of the paced default — see below
+
 # Reproducible scenarios, writing detection/*.csv + ground-truth metadata:
 python experiments/run_scenarios.py                 # A, B, C
 python experiments/run_scenarios.py --only D        # near-threshold case (rule misses)
+python experiments/run_scenarios.py --only B --intensity max   # line-rate (hping3/ab), forces --engine ebpf
 ```
 
-```powershell
-# PowerShell orchestrator (Windows)
-.\run_ddos.ps1 syn        # or: .\run_ddos.ps1 http
-```
-
-**4. Run the reproducible scenarios** (baseline + A/B/C, one CSV each):
-
-```bash
-python experiments/run_scenarios.py
-```
-
-**5. Guided one-command demo** (narrated: normal → DoS → DDoS SYN → DDoS HTTP).
+**4. Guided one-command demo** (narrated: normal → DoS → DDoS SYN → DDoS HTTP).
 It preflight-checks Docker and the containers, streams the detector live, and writes a plot:
 
 ```bash
 python experiments/demo.py
 ```
 
-**6. Analyze the results:**
+**5. Analyze the results:**
 
 ```bash
 python analysis/metrics.py detection/A.csv --truth DoS       # detection time / FP / FN / table
 python analysis/plot_attack.py detection/A.csv -o analysis/A.png
 ```
 
-**7. Tear down the lab:**
+**6. Tear down the lab:**
 
 ```bash
 docker compose down
@@ -177,9 +179,18 @@ decides per window:
   sources (reported alongside `n_src`).
 - **SYN flood tag**: added when `syn/s ≥ --syn` **and** `ack/s < syn/s × 0.2` (half-open
   connections produce very few ACKs).
+- **Counting engine** (`--engine scapy|ebpf`, default `scapy`): `scapy` sniffs in a background thread
+  and drops packets above a few thousand pps. `ebpf` attaches an **XDP ingress** program (BCC,
+  `detection/ebpf_counter.py`) to the victim's `eth0` that counts in-kernel and always `XDP_PASS`es
+  (detect-only). On a 120k-packet flood scapy observed only **57%** vs eBPF's **95%**.
+- **Closed-loop blocking** (`--block`, off by default, needs `--engine ebpf`): the XDP program counts
+  first, then drops sources exceeding `--block-pps` (`XDP_DROP`, TTL auto-expiring via `--block-ttl`);
+  `--block-syn-rate N` adds a global SYN token-bucket for spoofed floods, where per-source blocking is
+  useless. A stateful HTTP flood collapses from ~136k to ~242 pps once blocked.
 
 Output columns (also written to CSV with `--csv`):
-`time, pps, syn_s, ack_s, h_src, h_dport, n_src, alert`.
+`time, pps, syn_s, ack_s, h_src, h_dport, n_src, alert` (plus `ml_verdict,ml_conf` with `--ml`,
+`blocked_src,blocked_pps` with `--block`).
 
 ## Results
 
@@ -192,6 +203,13 @@ Three reference scenarios, validated in the lab (detection time ≈ 0 s, 0 false
 | C — 6-source HTTP (L7)  | ~1800 | ~400  | ~1400 | 6      | ~2.58  | DDoS               |
 
 ![Demo timeline](assets/demo.png)
+
+**Max-intensity impact** (`--intensity max`, line-rate `hping3`/`ab`, detect-only, no blocking):
+A ~190k pps, B ~123k pps, C ~693k pps reach the victim with **zero `eth0` rx drops** and a legit
+client stays **100% 200-OK** in every state — modern defaults (kernel SYN cookies + fast static
+nginx) absorb all three; the only visible impact is C's p95 latency rising ~1→11ms. With `--block`
+on, A is dropped ~100% and C collapses (~433k→~28 pps), with the latency tail back to ~1ms. See
+`PROJECT_STATUS.md` for the full table.
 
 The **finalized dataset and figures used in the report** are committed under
 [`results/final/`](results/final/) (CSV data, run metadata, and the corresponding plots). All
@@ -274,7 +292,10 @@ Two panels:
 - **Attack** - buttons launch the real A/B/C scenarios against the lab victim, with live
   pps / syn/s / ack/s / n_src / H(src) and **two verdicts side by side**: the threshold rule
   (`rule:`) and, when a trained window model is present, the ML model (`ML: <verdict> · <conf>%`),
-  each colored by its own verdict so a rule-vs-ML disagreement is obvious.
+  each colored by its own verdict so a rule-vs-ML disagreement is obvious. A **Blocking ON/OFF**
+  toggle restarts the detector with closed-loop `--block` (XDP drop) and shows `blocked/s` live; a
+  **Max intensity** toggle switches the running attack between the paced default and line-rate
+  `hping3`/`ab` — the detector always runs the eBPF engine, so toggling it needs no restart.
 
 The backend runs `detector.py --stream` (a new JSON-per-window mode that preserves the table/CSV
 behavior) inside the detector container and relays it over WebSocket. Every control action maps to a
@@ -284,20 +305,28 @@ fixed `docker exec` argument array - no client input is interpolated into a shel
 
 ```
 .
-├── attacker/Dockerfile          # attacker/detector image (scapy + hping3 + tcpdump)
+├── attacker/Dockerfile          # attacker image (scapy + hping3 + ab + tcpdump)
 ├── attacks/
 │   ├── syn_flood.py             # L4 SYN flood (scapy), optional --spoof
 │   └── http_flood.py            # L7 HTTP flood (multi-threaded GET)
-├── detection/detector.py        # real-time detector (threshold + entropy + classification)
+├── detection/
+│   ├── Dockerfile                # detector's own image (ubuntu + python3-bpfcc + scikit-learn)
+│   ├── detector.py               # real-time detector (threshold + entropy + classification + ML + block)
+│   └── ebpf_counter.py           # XDP/BCC counting engine (+ closed-loop blocking)
 ├── experiments/
-│   ├── run_scenarios.py         # reproducible A/B/C runs -> CSV + meta
+│   ├── run_scenarios.py         # reproducible A/B/C/D/E runs -> CSV + meta (--intensity paced|max)
 │   └── demo.py                  # narrated one-command demo with Docker preflight
 ├── analysis/
 │   ├── plot_attack.py           # timeline plots from CSV
 │   └── metrics.py               # detection time / FP / FN / classification table
+├── ml/                           # offline CICDDoS2019 pipeline + live window-model training
+├── dashboard/                    # local-only realtime web dashboard (Node/Express/WebSocket)
+├── docs/
+│   ├── LyThuyet_DoS_DDoS.md      # theory guide (Vietnamese)
+│   └── TESTING.md                # testing & verification guide
 ├── results/final/               # finalized dataset + figures used in the report (committed)
 ├── docker-compose.yml           # isolated lab topology
-├── run_ddos.ps1                 # PowerShell orchestrator (6 attackers in parallel)
+├── run_ddos.sh                  # bash orchestrator (6 attackers in parallel; -i paced|max)
 └── TaiLieu_LyThuyet_DoS_DDoS.docx
 ```
 

@@ -44,7 +44,7 @@ python analysis/metrics.py detection/C.csv --truth DDoS
 | Scenario | pps | syn/s | ack/s | n_src | H(src) | Truth | Verdict (rule) |
 |---|---|---|---|---|---|---|---|
 | A — 1-source SYN | ~300 | ~150 | 0 | 1 | 0.00 | DoS | `DoS [SYN flood]` |
-| B — 6-source SYN + spoof | ~2400 | ~2400 | 0 | **~2400** | ~11 | DDoS | `DDoS [SYN flood]` |
+| B — 6-source SYN + spoof | ~4000 | ~2000 | 0 | **~2300** | ~11.1 | DDoS | `DDoS [SYN flood]` |
 | C — 6-source HTTP (L7) | ~1800 | ~400 | ~1400 | 6 | ~2.58 | DDoS | `DDoS` (no SYN tag) |
 
 Key checks: **A is DoS (n_src=1), B/C are DDoS**; SYN floods have `ack≈0`, the HTTP flood has
@@ -72,7 +72,7 @@ and in another terminal launch one attack, e.g.
 
 ```bash
 docker exec -it detector python3 /app/detector.py --adaptive --victim 172.30.0.10
-# in another terminal, launch any attack (e.g. run_ddos.ps1 syn)
+# in another terminal, launch any attack (e.g. ./run_ddos.sh syn)
 python experiments/adaptive_eval.py      # synthetic comparison -> assets/adaptive_eval.png
 ```
 

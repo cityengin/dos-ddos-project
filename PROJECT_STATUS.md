@@ -17,8 +17,7 @@ reload nhom docker (hoac re-login / `newgrp docker`).
 - attacker/Dockerfile        : image tan cong (python3-slim + hping3 + ab/apache2-utils + scapy + tcpdump)
 - attacks/syn_flood.py        : SYN flood L4, co --spoof (random source IP)
 - attacks/http_flood.py       : HTTP flood L7, multi-thread GET
-- run_ddos.ps1                : orchestrator PowerShell (Windows), chay 6 attacker song song (mode syn|http)
-- run_ddos.sh                 : orchestrator bash (Linux), tuong duong run_ddos.ps1 (-i paced|max; tu re-exec qua sg docker)
+- run_ddos.sh                 : orchestrator bash, chay 6 attacker song song (mode syn|http, -i paced|max; tu re-exec qua sg docker)
 - experiments/bench_syn_throughput.sh: do pps sinh goi SYN (2 diem, khu khoi dong) 1 va 6 nguon
 - detection/detector.py       : sniffer realtime, tinh pps/syn/ack + entropy(src IP) + entropy(dport), phan loai DoS/DDoS, option --csv, --victim
 - experiments/run_scenarios.py: chay lai A/B/C tu dong -> detection/{A,B,C}.csv + {A,B,C}.meta.json (--intensity paced|max)
@@ -79,8 +78,6 @@ reload nhom docker (hoac re-login / `newgrp docker`).
   Dashboard cung co nut "Blocking ON/OFF" + tile blocked/s: bat -> server restart detector voi
   --engine ebpf --block (XDP_DROP); demo C: pps sup ~15k -> ~36 khi chan. Mac dinh TAT (detect-only).
   (Guard detStarting trong server.js: chi 1 luong startDetector chay -> tranh restart chong cheo khi toggle.)
-- Phong thu: DA GO phan mitigation L7 (rate-limit) roi, se lam lai theo huong closed-loop
-  (phat hien -> tu dong chan) sau. Hien detector chi phat hien (IDS).
 
 ## Ket qua da co (so lieu that tu lab)
 - Baseline (baseline.csv, 62s idle): pps=syn=ack=0, 0 episode, 0 false positive -> nguong an toan

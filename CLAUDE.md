@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-University end-of-term project (DUT PBL3): simulate DoS/DDoS attacks **and** detect them inside a fully isolated Docker lab. Everything runs against the lab's own `victim` container — never a real target. Comments and status notes are written in ASCII-only Vietnamese (no diacritics); keep that convention when editing them. Host environment is Windows + Docker Desktop (WSL2).
+University end-of-term project (DUT PBL3): simulate DoS/DDoS attacks **and** detect them inside a fully isolated Docker lab. Everything runs against the lab's own `victim` container — never a real target. Comments and status notes are written in ASCII-only Vietnamese (no diacritics); keep that convention when editing them. Host environment is **Ubuntu native** (Docker, no WSL2 — faster/more stable than the earlier Windows + Docker Desktop setup; `docker` may need `sg docker -c '...'` if the login session hasn't reloaded the `docker` group).
 
 `PROJECT_STATUS.md` is the running log of results, tuned thresholds, and TODOs — read it first and update it when experiments change the numbers or the task list.
 
@@ -19,7 +19,7 @@ The attack/detection Python scripts are **bind-mounted**, so edits take effect o
 
 ## Common commands
 
-```powershell
+```bash
 docker compose up -d --build          # bring up lab (build attacker/detector image)
 docker compose down                   # tear down
 
@@ -30,9 +30,9 @@ docker exec -it detector python3 /app/detector.py --pps 40 --syn 25 --csv /app/a
 docker exec attacker1 python3 /app/syn_flood.py 172.30.0.10 -p 80 --spoof
 docker exec attacker1 python3 /app/http_flood.py 172.30.0.10 -p 80 -t 20 -d 30
 
-# All 6 attackers in parallel (PowerShell orchestrator)
-.\run_ddos.ps1 syn        # or: .\run_ddos.ps1 http
-.\run_ddos.ps1 syn -target 172.30.0.10 -duration 30
+# All 6 attackers in parallel (bash orchestrator)
+./run_ddos.sh syn        # or: ./run_ddos.sh http
+./run_ddos.sh syn -t 172.30.0.10 -d 30
 
 # Reproducible experiment run + analysis (host Python, needs matplotlib)
 python experiments/run_scenarios.py                       # runs A/B/C -> detection/{A,B,C}.csv + .meta.json

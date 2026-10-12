@@ -147,6 +147,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the event log moved **below the console (off-screen)** so it no longer takes space from the panels
   (scroll down to see it), which also stops the attack panel from being clipped. Scenario B/C attack
   commands now pace SYN with `--pps` (A 150, B 400 per source).
+- Full pass over every `.md` file to match the current code and stay consistent across files:
+  fixed the detector's build path (`./detection`, not `./attacker`) in README's architecture table;
+  fixed a stale `attacker/Dockerfile` reference to the window-model ML deps (they live in
+  `detection/Dockerfile`, the detector's own image) in the theory guide; fixed a leftover "3
+  container" comparison (the lab has 6) in the theory guide's state-of-the-art table; resolved a
+  numeric mismatch for scenario B between `docs/TESTING.md` and the other three files (pps/syn/
+  n_src/H(src) now read ~4000/~2000/~2300/~11.1 everywhere); removed a stale "will rebuild
+  mitigation later" TODO from `PROJECT_STATUS.md` left over from before closed-loop blocking
+  shipped; `CLAUDE.md`'s host-environment line and command block now say Ubuntu native / bash
+  (were Windows + Docker Desktop / PowerShell); README's Requirements, Usage, Detection Mechanism,
+  Results, Dashboard, and Project Structure sections now cover the eBPF engine, closed-loop
+  `--block`, max-intensity mode, and the dashboard's Blocking/Max-intensity toggles, none of which
+  were documented there before.
 
 ### Fixed
 
@@ -170,6 +183,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `run_ddos.ps1` (the PowerShell orchestrator): the project now runs on Linux only, and
+  `run_ddos.sh` (bash) has covered the same job since it was added. All active docs now reference
+  `run_ddos.sh`; historical CHANGELOG entries about `run_ddos.ps1` are left as-is.
 - L7 mitigation (nginx per-IP rate-limit): the `mitigation/` directory (`demo_mitigation.py`,
   `nginx/default.conf`), its figure, the dashboard Defense panel / toggle, and all docs references.
   Defense will be rebuilt as detection-driven blocking (closed-loop: the detector triggers the

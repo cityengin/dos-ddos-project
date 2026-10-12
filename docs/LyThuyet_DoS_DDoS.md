@@ -83,8 +83,11 @@ có rất nhiều `ACK` — đặc điểm **ACK ≫ SYN** giúp phân biệt L7
 ![Kiến trúc lab](../assets/architecture.png)
 
 Mạng cô lập `dos-lab` (`172.30.0.0/24`): `victim` (nginx, .10), sáu `attacker` (.21–.26, có scapy +
-hping3), và `detector`. Detector chạy `network_mode: service:victim` → **dùng chung namespace mạng với
-victim**, nên thấy đúng lưu lượng victim thấy (dẫn tới lưu ý quan trọng ở mục 5.6).
+`hping3` + `ab`/ApacheBench), và `detector`. Detector build từ image **riêng** (`detection/Dockerfile`:
+ubuntu + `python3-bpfcc` cho engine eBPF + `scikit-learn`/`joblib` cho `--ml`), có quyền
+`CAP_BPF`/`CAP_PERFMON`/`CAP_NET_ADMIN` để biên dịch và gắn chương trình XDP lúc chạy. Detector chạy
+`network_mode: service:victim` → **dùng chung namespace mạng với victim**, nên thấy đúng lưu lượng
+victim thấy (dẫn tới lưu ý quan trọng ở mục 5.6).
 
 ## 5. Nguyên lý phát hiện
 
@@ -195,7 +198,7 @@ Thành thật: phương pháp hiện tại là **kinh điển/nền tảng**, ph
 |---|---|
 | SYN flood, HTTP GET flood | Reflection/Amplification (DNS, NTP, memcached — khuếch đại hàng nghìn lần) |
 | HTTP flood 1 URL | HTTP/2 Rapid Reset (CVE-2023-44487), Slowloris/slow-read, giả browser thật |
-| 3 container | Botnet IoT (Mirai), pulse-wave, carpet-bombing, đa vector |
+| 6 container | Botnet IoT (Mirai), pulse-wave, carpet-bombing, đa vector |
 
 **Phía phát hiện:**
 
@@ -314,8 +317,8 @@ docker exec -it detector python3 /app/detector.py --pps 40 --syn 25 \
 
 Detector nạp mô hình một lần lúc khởi động và với mỗi cửa sổ in **cả hai** phán quyết: của luật và của
 ML (`ml_verdict` kèm độ tin `ml_conf`). Dashboard cũng hiển thị hai dòng `rule:` và `ML:` cạnh nhau,
-tô màu theo từng bên nên thấy ngay khi chúng khác nhau. (Container detector đã cài sẵn
-`scikit-learn 1.9.1 + joblib` trong `attacker/Dockerfile` để nạp được mô hình.)
+tô màu theo từng bên nên thấy ngay khi chúng khác nhau. (Image riêng của detector, `detection/Dockerfile`,
+đã cài sẵn `scikit-learn 1.9.1 + joblib` để nạp được mô hình.)
 
 ## 9. Phòng thủ: closed-loop (XDP drop)
 
