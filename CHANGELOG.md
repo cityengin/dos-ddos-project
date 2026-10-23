@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Multi-machine (physical) support** — run the lab on real Linux laptops over a shared private
+  WiFi, additively (the Docker lab and every existing script are untouched). The attack scripts and
+  `detection/detector.py` already take all addresses as parameters, so they run bare-metal unchanged
+  (`--iface wlan0 --victim <dhcp-ip>`). Adds `run_ddos_remote.sh`, an SSH orchestrator that fires one
+  or more real attackers in parallel via a repeatable `-a user@ip` flag (`timeout`-bounded, runs each
+  over background SSH then `wait`s), with an SSH preflight check and a `-s` flag for the NOPASSWD-sudo
+  path. Adds `docs/MULTI_MACHINE.md` (Vietnamese): 3-machine model, DHCP IP discovery, software to
+  install, the A/B/C commands, the "2 machines now vs add a 3rd" note (C needs 2 real attackers to be
+  a true DDoS), differences from Docker, and the `CAP_NET_RAW` (recommended, with a scope warning) vs
+  NOPASSWD-sudoers options for the SYN flood's raw socket over SSH. README gains a "Multi-machine
+  (physical)" section.
 - **Max-intensity attack mode** (`intensity=paced|max`) alongside the paced default. `max` drives
   **line-rate** tools instead of the scapy/urllib scripts — `hping3 -S --flood` (SYN, `--rand-source`
   to spoof) and `ab -k -c 500` (L7) — for scenarios **A/B/C only**, and forces `--engine ebpf` (scapy

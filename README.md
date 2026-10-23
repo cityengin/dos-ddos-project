@@ -301,6 +301,21 @@ The backend runs `detector.py --stream` (a new JSON-per-window mode that preserv
 behavior) inside the detector container and relays it over WebSocket. Every control action maps to a
 fixed `docker exec` argument array - no client input is interpolated into a shell.
 
+## Multi-machine (physical)
+
+Besides the Docker lab, the attack scripts and detector run **directly on real Linux laptops** over a
+shared private WiFi — they already take all addresses as parameters, so nothing in `attacks/*.py` or
+`detection/detector.py` changes. Run the detector on the victim (`sudo python3 detection/detector.py
+--iface wlan0 --victim <ip> --pps 40 --syn 25`) and the attacks from one or more attacker machines.
+A separate SSH orchestrator, [`run_ddos_remote.sh`](run_ddos_remote.sh), fires several real attackers
+in parallel (one repeatable `-a user@ip` flag per machine) — the Docker-only `run_ddos.sh` is left
+untouched. Two machines cover scenarios A, B, and single-source C; adding a third attacker (just one
+more `-a`) makes C a true multi-source L7 DDoS.
+
+Full step-by-step guide (Vietnamese): **[`docs/MULTI_MACHINE.md`](docs/MULTI_MACHINE.md)** — software
+to install, finding DHCP IPs, the A/B/C commands, SSH-key setup, and the `CAP_NET_RAW` vs NOPASSWD-
+sudoers options for running the SYN flood over SSH.
+
 ## Project Structure
 
 ```
@@ -323,10 +338,12 @@ fixed `docker exec` argument array - no client input is interpolated into a shel
 ├── dashboard/                    # local-only realtime web dashboard (Node/Express/WebSocket)
 ├── docs/
 │   ├── LyThuyet_DoS_DDoS.md      # theory guide (Vietnamese)
+│   ├── MULTI_MACHINE.md          # running the lab on real machines over WiFi (Vietnamese)
 │   └── TESTING.md                # testing & verification guide
 ├── results/final/               # finalized dataset + figures used in the report (committed)
 ├── docker-compose.yml           # isolated lab topology
-├── run_ddos.sh                  # bash orchestrator (6 attackers in parallel; -i paced|max)
+├── run_ddos.sh                  # bash orchestrator, Docker (6 attackers in parallel; -i paced|max)
+├── run_ddos_remote.sh           # SSH orchestrator for real machines (repeatable -a user@ip)
 └── TaiLieu_LyThuyet_DoS_DDoS.docx
 ```
 
