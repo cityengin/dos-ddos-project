@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Phat hien DoS/DDoS realtime: threshold + entropy. Chi dung trong lab."""
 import argparse, time, math, collections, threading, json, sys, os, signal
-from scapy.all import sniff, IP, TCP
+from scapy.all import sniff, IP, TCP, UDP
 
 # ====== bo dem cho moi cua so thoi gian ======
 VICTIM = None   # neu set: chi dem goi INBOUND (dst == victim), bo qua goi victim tu tra ve
@@ -10,12 +10,13 @@ win = {
     "packets": 0,
     "syn": 0,
     "ack": 0,
+    "udp": 0,                           # dem goi UDP -> nhan dang UDP flood (volumetric)
     "src_ip": collections.Counter(),   # dem goi theo source IP  -> entropy nguon
     "dst_port": collections.Counter(), # dem goi theo dest port  -> entropy dich
 }
 
 def reset_window():
-    return {"packets":0,"syn":0,"ack":0,"src_ip":collections.Counter(),"dst_port":collections.Counter()}
+    return {"packets":0,"syn":0,"ack":0,"udp":0,"src_ip":collections.Counter(),"dst_port":collections.Counter()}
 
 def entropy(counter):
     total = sum(counter.values())
@@ -52,6 +53,8 @@ def on_packet(pkt):
                 win["syn"] += 1
             if f & 0x10:  # ACK
                 win["ack"] += 1
+        elif UDP in pkt:  # volumetric L3/4: dem rieng de nhan dang UDP flood
+            win["udp"] += 1
 
 def main():
     ap = argparse.ArgumentParser()
@@ -117,16 +120,16 @@ def main():
         if args.block:
             print("[*] CHAN (closed-loop IPS): block-pps=%d ttl=%.0fs syn-rate=%s"
                   % (args.block_pps, args.block_ttl, args.block_syn_rate or "tat"))
-        print("%-8s %8s %8s %8s %10s %10s   %s" %
-              ("time","pkts/s","syn/s","ack/s","H(src)","H(dport)","ALERT (luat) | ML" if ml else "ALERT"))
+        print("%-8s %8s %8s %8s %8s %10s %10s   %s" %
+              ("time","pkts/s","syn/s","ack/s","udp/s","H(src)","H(dport)","ALERT (luat) | ML" if ml else "ALERT"))
     csvf = open(args.csv, "w") if args.csv else None
     if csvf:
-        csvf.write("time,pps,syn_s,ack_s,h_src,h_dport,n_src,alert" +
+        csvf.write("time,pps,syn_s,ack_s,udp_s,h_src,h_dport,n_src,alert" +
                    (",ml_verdict,ml_conf" if ml else "") +
                    (",blocked_src,blocked_pps" if args.block else "") + "\n")
 
     # ====== chon BACKEND dem goi ======
-    # Hai backend cung tra ve (packets, syn, ack, src_counter, dport_counter) cho moi cua so,
+    # Hai backend cung tra ve (packets, syn, ack, udp, src_counter, dport_counter) cho moi cua so,
     # phan con lai cua detector (luat, --adaptive, --ml, --stream, --csv) GIU NGUYEN.
     ebpf = None
     if args.engine == "ebpf":
@@ -158,10 +161,10 @@ def main():
             with lock:
                 snap_src = win["src_ip"].copy()
                 snap_dport = win["dst_port"].copy()
-                pkts, syn, ack = win["packets"], win["syn"], win["ack"]
+                pkts, syn, ack, udp = win["packets"], win["syn"], win["ack"], win["udp"]
                 for k, v in reset_window().items():
                     win[k] = v
-            return pkts, syn, ack, snap_src, snap_dport
+            return pkts, syn, ack, udp, snap_src, snap_dport
 
     # Don dep khi bi dung (SIGTERM/SIGINT): go XDP ra khoi eth0 de khong de lai chuong trinh treo.
     def _cleanup(*_):
@@ -179,11 +182,12 @@ def main():
 
     while True:
         time.sleep(args.interval)
-        packets, syn, ack, snap_src, snap_dport = snapshot()
+        packets, syn, ack, udp, snap_src, snap_dport = snapshot()
 
         pps = packets / args.interval
         syn_s = syn / args.interval
         ack_s = ack / args.interval
+        udp_s = udp / args.interval
         h_src = entropy(snap_src)
         h_dport = entropy(snap_dport)
         n_src = len(snap_src)
@@ -204,16 +208,22 @@ def main():
         alert = ""
         verdict = None
         syn_flood = False
+        udp_flood = False
         if triggered:
             # co flood -> phan loai dua vao so nguon + entropy nguon
             verdict = "DDoS" if n_src >= 2 else "DoS"
             syn_flood = (syn_s >= thr_syn and ack_s < syn_s * 0.2)
+            # UDP flood: volumetric UDP ap dao (udp_s vuot nguong --pps VA lon hon syn_s) ->
+            # khong gan nham khi vua co SYN vua co UDP. Dung args.pps (nguong --pps) lam nguong UDP.
+            udp_flood = (udp_s >= args.pps and udp_s > syn_s)
             if verdict == "DDoS":
                 alert = "!! DDoS (nhieu nguon, H_src=%.2f, n=%d)" % (h_src, n_src)
             else:
                 alert = "!! DoS  (it nguon, H_src=%.2f, n=%d)" % (h_src, n_src)
             if syn_flood:
                 alert += " [SYN flood]"
+            if udp_flood:
+                alert += " [UDP flood]"
 
         # ====== closed-loop CHAN (neu --block; chi engine ebpf) ======
         blocked_src, blocked_pps = 0, 0
@@ -241,8 +251,8 @@ def main():
                 ml_conf = None
 
         if csvf:
-            row = "%s,%.0f,%.0f,%.0f,%.3f,%.3f,%d,%s" % (
-                time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, n_src, alert.replace(","," "))
+            row = "%s,%.0f,%.0f,%.0f,%.0f,%.3f,%.3f,%d,%s" % (
+                time.strftime("%H:%M:%S"), pps, syn_s, ack_s, udp_s, h_src, h_dport, n_src, alert.replace(","," "))
             if ml:
                 row += ",%s,%s" % (ml_verdict or "", ("%.3f" % ml_conf) if ml_conf is not None else "")
             if args.block:
@@ -254,9 +264,9 @@ def main():
             # 1 JSON/dong cho dashboard (stdout sach, de backend parse)
             print(json.dumps({
                 "time": time.strftime("%H:%M:%S"),
-                "pps": round(pps), "syn": round(syn_s), "ack": round(ack_s),
+                "pps": round(pps), "syn": round(syn_s), "ack": round(ack_s), "udp": round(udp_s),
                 "h_src": round(h_src, 3), "h_dport": round(h_dport, 3), "n_src": n_src,
-                "triggered": bool(triggered), "verdict": verdict, "syn_flood": syn_flood,
+                "triggered": bool(triggered), "verdict": verdict, "syn_flood": syn_flood, "udp_flood": udp_flood,
                 "thr_pps": round(thr_pps, 1), "thr_syn": round(thr_syn, 1),
                 "ml_verdict": ml_verdict, "ml_conf": round(ml_conf, 3) if ml_conf is not None else None,
                 "blocked_src": blocked_src, "blocked_pps": round(blocked_pps),
@@ -266,8 +276,8 @@ def main():
             if ml:
                 ml_txt = ("  | ML:%s(%.2f)" % (ml_verdict, ml_conf)) if ml_conf is not None else ("  | ML:%s" % ml_verdict)
             blk_txt = ("  | BLOCK src=%d drop=%.0fpps" % (blocked_src, blocked_pps)) if args.block else ""
-            print("%-8s %8.0f %8.0f %8.0f %10.2f %10.2f   %s%s%s" %
-                  (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, h_src, h_dport, alert, ml_txt, blk_txt))
+            print("%-8s %8.0f %8.0f %8.0f %8.0f %10.2f %10.2f   %s%s%s" %
+                  (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, udp_s, h_src, h_dport, alert, ml_txt, blk_txt))
 
 if __name__ == "__main__":
     main()

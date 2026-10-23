@@ -45,10 +45,10 @@ container on the private `172.30.0.0/24` network.
 
 The project has two halves that run against each other in an isolated network:
 
-1. **Attack side** — SYN flood (L4) and HTTP flood (L7) scripts, optionally with IP spoofing,
-   driven from one to six attacker containers.
+1. **Attack side** — SYN flood (L4), HTTP flood (L7), and UDP flood (L3/4 volumetric) scripts,
+   optionally with IP spoofing, driven from one to six attacker containers.
 2. **Detection side** — a real-time sniffer that reports per-second traffic features and raises
-   classified alerts (`DoS` / `DDoS`, with a `[SYN flood]` tag when applicable).
+   classified alerts (`DoS` / `DDoS`, with a `[SYN flood]` or `[UDP flood]` tag when applicable).
 
 ## Lab Architecture
 
@@ -126,6 +126,9 @@ docker exec attacker1 python3 /app/syn_flood.py 172.30.0.10 -p 80 --spoof
 
 # HTTP flood (L7), 20 threads for 30 seconds
 docker exec attacker1 python3 /app/http_flood.py 172.30.0.10 -p 80 -t 20 -d 30
+
+# UDP flood (L3/4 volumetric), with IP spoofing
+docker exec attacker1 python3 /app/udp_flood.py 172.30.0.10 -p 80 --spoof --pps 400
 ```
 
 **3. Launch a distributed attack** from all six sources:
@@ -179,6 +182,8 @@ decides per window:
   sources (reported alongside `n_src`).
 - **SYN flood tag**: added when `syn/s ≥ --syn` **and** `ack/s < syn/s × 0.2` (half-open
   connections produce very few ACKs).
+- **UDP flood tag**: added when `udp/s ≥ --pps` **and** `udp/s > syn/s` (volumetric UDP dominates),
+  to flag L3/4 floods. SYN/HTTP scenarios keep `udp_s=0` and are unaffected.
 - **Counting engine** (`--engine scapy|ebpf`, default `scapy`): `scapy` sniffs in a background thread
   and drops packets above a few thousand pps. `ebpf` attaches an **XDP ingress** program (BCC,
   `detection/ebpf_counter.py`) to the victim's `eth0` that counts in-kernel and always `XDP_PASS`es
@@ -189,7 +194,7 @@ decides per window:
   useless. A stateful HTTP flood collapses from ~136k to ~242 pps once blocked.
 
 Output columns (also written to CSV with `--csv`):
-`time, pps, syn_s, ack_s, h_src, h_dport, n_src, alert` (plus `ml_verdict,ml_conf` with `--ml`,
+`time, pps, syn_s, ack_s, udp_s, h_src, h_dport, n_src, alert` (plus `ml_verdict,ml_conf` with `--ml`,
 `blocked_src,blocked_pps` with `--block`).
 
 ## Results
@@ -323,7 +328,8 @@ sudoers options for running the SYN flood over SSH.
 ├── attacker/Dockerfile          # attacker image (scapy + hping3 + ab + tcpdump)
 ├── attacks/
 │   ├── syn_flood.py             # L4 SYN flood (scapy), optional --spoof
-│   └── http_flood.py            # L7 HTTP flood (multi-threaded GET)
+│   ├── http_flood.py            # L7 HTTP flood (multi-threaded GET)
+│   └── udp_flood.py             # L3/4 UDP flood (scapy), optional --spoof
 ├── detection/
 │   ├── Dockerfile                # detector's own image (ubuntu + python3-bpfcc + scikit-learn)
 │   ├── detector.py               # real-time detector (threshold + entropy + classification + ML + block)

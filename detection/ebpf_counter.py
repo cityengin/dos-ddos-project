@@ -140,7 +140,7 @@ class EbpfCounter:
         self.last_blocked = 0   # so goi drop trong cua so vua roi (userspace doc tu counters[4])
 
     def snapshot(self):
-        """Doc + XOA maps cho cua so vua roi. Tra (packets, syn, ack, src_counter, dport_counter).
+        """Doc + XOA maps cho cua so vua roi. Tra (packets, syn, ack, udp, src_counter, dport_counter).
         Dong thoi luu so goi da chan (counters[4]) vao self.last_blocked."""
         def total(idx):
             return int(sum(x for x in self._counters[ctypes.c_int(idx)]))
@@ -148,6 +148,7 @@ class EbpfCounter:
         packets = total(0)
         syn = total(1)
         ack = total(2)
+        udp = total(3)
         self.last_blocked = total(4)
 
         src_counter = Counter()
@@ -160,7 +161,7 @@ class EbpfCounter:
         self._counters.clear()
         self._src.clear()
         self._dports.clear()
-        return packets, syn, ack, src_counter, dport_counter
+        return packets, syn, ack, udp, src_counter, dport_counter
 
     # ----- closed-loop IPS (chi goi khi --block) -----
     def block_sources(self, src_ints, ttl_s):

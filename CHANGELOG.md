@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **UDP flood** — a third attack type (volumetric L3/4), alongside SYN (L4) and HTTP (L7). New
+  `attacks/udp_flood.py` mirrors `syn_flood.py` (scapy `IP()/UDP()`, `--spoof`, `--pps`, `--count`,
+  `--size`, one reused `conf.L3socket()`). The detector now counts UDP in both engines (scapy
+  `on_packet` gained a UDP branch; `ebpf_counter.py` surfaces the already-present `counters[3]`), adds
+  a `udp_s` CSV column (after `ack_s`) and a `udp` field to the `--stream` JSON, and tags
+  `[UDP flood]` when `udp_s >= --pps` and `udp_s > syn_s` (UDP dominates — so a mixed SYN+UDP window
+  isn't mislabeled). `--engine`/`--block`/`--ml`/`--adaptive` and the DoS-vs-DDoS/`n_src`/entropy
+  logic are unchanged; the ML window model and its 8 features are untouched (the dataset builder reads
+  the CSV by column name, so the extra column is ignored). SYN/HTTP scenarios A/B/C produce identical
+  output with `udp_s=0`. `udp` mode added to both orchestrators: `run_ddos.sh udp` (paced scapy, or
+  `-i max` → `hping3 --udp --flood`) and `run_ddos_remote.sh udp` (which routes UDP through the same
+  raw-socket privilege path as SYN — `CAP_NET_RAW` or `-s`/NOPASSWD — not HTTP's). Docs: a UDP
+  scenario in `docs/MULTI_MACHINE.md` and `docs/TESTING.md`.
 - **Multi-machine (physical) support** — run the lab on real Linux laptops over a shared private
   WiFi, additively (the Docker lab and every existing script are untouched). The attack scripts and
   `detection/detector.py` already take all addresses as parameters, so they run bare-metal unchanged

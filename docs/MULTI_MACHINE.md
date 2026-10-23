@@ -120,6 +120,23 @@ python3 ~/dos-ddos-project/attacks/http_flood.py 192.168.1.50 -p 80 -t 20 -d 30
 HTTP là kết nối THẬT nên IP nguồn = IP máy thật. **1 máy attacker → n_src=1 → hiện DoS**, KHÔNG
 phải DDoS. Cần **2 máy attacker** mới ra DDoS L7 thật (mục 7). HTTP flood KHÔNG cần `sudo`.
 
+### D — UDP flood (volumetric L3/4)
+```bash
+# DoS (1 nguồn, không spoof) → n_src=1:
+sudo python3 ~/dos-ddos-project/attacks/udp_flood.py 192.168.1.50 -p 80 --pps 400
+# DDoS (spoof IP giả) → n_src>=2:
+sudo python3 ~/dos-ddos-project/attacks/udp_flood.py 192.168.1.50 -p 80 --spoof --pps 400
+```
+Detector: `pps` cao, **`udp_s` cao**, `syn/s` và `ack/s` ~0 → tag **`[UDP flood]`** (phân loại DoS
+hay DDoS vẫn theo `n_src` như thường). UDP connectionless nên spoof được như SYN; UDP flood **cần
+`sudo`** (raw socket) giống syn_flood — xem mục 9. Thêm `--size <byte>` để đổi kích thước payload
+(mặc định 32 byte).
+
+> LƯU Ý (volumetric trong lab): nginx chỉ phục vụ TCP cổng 80, **không xử lý UDP**, nên gói UDP tới
+> victim bị kernel bỏ (hoặc trả ICMP port-unreachable). Trong lab WiFi băng thông thừa, UDP flood
+> **không làm sập** victim — nó minh họa **nhận dạng** loại tấn công volumetric (tag `[UDP flood]`),
+> không phải gây sập. Muốn thật sự nghẽn phải bão hòa băng thông đường truyền (quy mô lớn hơn nhiều).
+
 ## 7. Hai máy bây giờ vs thêm máy thứ 3
 
 - **2 máy (1 victim + 1 attacker):** chạy được A (DoS), B (DDoS qua spoof), và C với 1 nguồn
@@ -152,20 +169,23 @@ ssh user@192.168.1.61 true       # kiểm tra: vào được không cần mật 
 # 2 attacker, HTTP (DDoS L7 thật, n_src=2):
 ./run_ddos_remote.sh http -t 192.168.1.50 -d 30 -a user@192.168.1.61 -a user@192.168.1.62
 
+# UDP flood (volumetric, cần raw socket giống SYN — xem mục 9):
+./run_ddos_remote.sh udp  -t 192.168.1.50 -d 30 -a user@192.168.1.61
+
 # thêm máy thứ 3 sau này: chỉ thêm 1 cờ -a nữa
 ./run_ddos_remote.sh http -t 192.168.1.50 -d 30 -a user@192.168.1.61 -a user@192.168.1.62 -a user@192.168.1.63
 ```
-Các cờ: `-t` IP victim, `-d` giây, `-a` user@ip (lặp lại), `-r` pps/nguồn cho SYN (mặc định 400),
-`-s` thêm sudo cho SYN (chỉ khi dùng NOPASSWD sudoers thay vì CAP_NET_RAW — mục 9). Repo trên máy
-attacker mặc định `~/dos-ddos-project`; đổi bằng biến `REMOTE_REPO=/đường/dẫn ./run_ddos_remote.sh ...`.
+Các cờ: `-t` IP victim, `-d` giây, `-a` user@ip (lặp lại), `-r` pps/nguồn cho SYN và UDP (mặc định
+400), `-s` thêm sudo cho SYN/UDP (chỉ khi dùng NOPASSWD sudoers thay vì CAP_NET_RAW — mục 9). Repo
+trên máy attacker mặc định `~/dos-ddos-project`; đổi bằng biến `REMOTE_REPO=/đường/dẫn ./run_ddos_remote.sh ...`.
 
-## 9. SYN flood cần quyền raw socket (sudo / CAP_NET_RAW)
+## 9. SYN / UDP flood cần quyền raw socket (sudo / CAP_NET_RAW)
 
-`syn_flood.py` mở raw socket (scapy) nên cần quyền. `http_flood.py` KHÔNG cần.
+`syn_flood.py` và `udp_flood.py` mở raw socket (scapy) nên cần quyền root. `http_flood.py` KHÔNG cần.
 
-- **1 attacker, chạy tay trên máy đó:** chỉ cần `sudo python3 .../syn_flood.py ...` (mục 6A/6B).
-  Không vướng gì.
-- **Bắn SYN song song qua SSH từ >=2 máy** (`run_ddos_remote.sh`): SSH không-tương-tác không nhập
+- **1 attacker, chạy tay trên máy đó:** chỉ cần `sudo python3 .../syn_flood.py ...` (hoặc
+  `.../udp_flood.py ...`) — mục 6. Không vướng gì.
+- **Bắn SYN/UDP song song qua SSH từ >=2 máy** (`run_ddos_remote.sh`): SSH không-tương-tác không nhập
   được mật khẩu sudo. Chọn 1 trong 2 cách SAU, cấu hình trên MỖI máy attacker:
 
 **Cách 1 (KHUYẾN DÙNG cho lab) — CAP_NET_RAW cho python3:** không cần sudo, không cần cờ `-s`.

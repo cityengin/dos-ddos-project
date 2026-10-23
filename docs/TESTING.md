@@ -62,6 +62,21 @@ fixed rule fails and ML does better:
 **Expected:** the rule misses D (false negative) and false-alarms on E (false positive); the ML
 detector (section 5) classifies D as `DDoS` and E as `BENIGN`.
 
+**UDP flood** (third attack type — volumetric L3/4, alongside SYN/L4 and HTTP/L7). Not a
+`run_scenarios.py` scenario; run it manually or via the orchestrator:
+
+```bash
+# 1 source (DoS) — manual:
+docker exec attacker1 python3 /app/udp_flood.py 172.30.0.10 -p 80 --pps 400
+# 6 sources, spoofed (DDoS) — orchestrator:
+./run_ddos.sh udp            # paced (scapy udp_flood);  ./run_ddos.sh udp -i max  -> hping3 --udp --flood
+```
+
+**Expected:** the detector's new `udp_s` column is high while `syn_s`/`ack_s` ≈ 0, so the alert gets a
+`[UDP flood]` tag (DoS vs DDoS still by `n_src`). SYN/HTTP scenarios are unchanged — they show
+`udp_s=0` and no UDP tag. (nginx serves TCP only, so UDP to port 80 is dropped/ICMP-unreachable'd — in
+a spare-bandwidth lab this demonstrates *classification*, not a takedown.)
+
 **Manual alternative** (two terminals): run the detector (as in step 1, add `--csv /app/attack.csv`)
 and in another terminal launch one attack, e.g.
 `docker exec attacker1 python3 /app/syn_flood.py 172.30.0.10 -p 80 --spoof`.
@@ -254,7 +269,7 @@ dropped ~100% at XDP and C-max collapses (~433k → ~28 pps) with the latency ta
 - [ ] 8 containers Up; `http://localhost:8080` serves the nginx page.
 - [ ] Baseline: 0 alerts, 0 false positives.
 - [ ] A -> DoS, B -> DDoS, C -> DDoS (classification 3/3).
-- [ ] SYN floods: `ack≈0`; HTTP flood: `ack >> syn`.
+- [ ] SYN floods: `ack≈0`; HTTP flood: `ack >> syn`; UDP flood: `udp_s` high, `syn/ack≈0`, `[UDP flood]` tag.
 - [ ] Adaptive mode detects and avoids false positives on drifting load.
 - [ ] CICDDoS2019 ML beats the single-threshold rule (F1 ~0.60 -> ~0.999).
 - [ ] Window ML: the rule misses D and false-alarms on E; the RF gets both right (F1 ~0.58 -> ~0.99).
