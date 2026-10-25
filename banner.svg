@@ -3,24 +3,21 @@
     <!-- Background Gradients -->
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#070c14"/>
-      <stop offset="50%" stop-color="#0f172a"/>
-      <stop offset="100%" stop-color="#1e293b"/>
+      <stop offset="50%" stop-color="#0d1527"/>
+      <stop offset="100%" stop-color="#162035"/>
     </linearGradient>
 
     <radialGradient id="glow-victim" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"/>
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.30"/>
+      <stop offset="60%" stop-color="#10b981" stop-opacity="0.08"/>
       <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
     </radialGradient>
 
     <radialGradient id="glow-attack" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.20"/>
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.22"/>
+      <stop offset="70%" stop-color="#ef4444" stop-opacity="0.05"/>
       <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
     </radialGradient>
-
-    <linearGradient id="badge-pbl3" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ef4444"/>
-      <stop offset="100%" stop-color="#dc2626"/>
-    </linearGradient>
 
     <linearGradient id="bar-gradient" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#ef4444"/>
@@ -31,21 +28,23 @@
 
     <linearGradient id="laptop-screen-victim" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#064e3b"/>
-      <stop offset="100%" stop-color="#022c22"/>
+      <stop offset="60%" stop-color="#022c22"/>
+      <stop offset="100%" stop-color="#011b15"/>
     </linearGradient>
 
     <linearGradient id="laptop-screen-att" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#450a0a"/>
-      <stop offset="100%" stop-color="#1c0505"/>
+      <stop offset="60%" stop-color="#1c0505"/>
+      <stop offset="100%" stop-color="#100303"/>
     </linearGradient>
 
     <!-- Dot Pattern -->
-    <pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
-      <circle cx="2" cy="2" r="1.2" fill="#334155" fill-opacity="0.35"/>
+    <pattern id="dot-grid" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.1" fill="#334155" fill-opacity="0.30"/>
     </pattern>
 
-    <!-- Marker Arrows -->
-    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <!-- Marker Arrow -->
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 1 L 10 5 L 0 9 z" fill="#ef4444"/>
     </marker>
   </defs>
@@ -55,144 +54,218 @@
   <rect width="1200" height="300" fill="url(#dot-grid)"/>
 
   <!-- Subtle Ambient Glows -->
-  <circle cx="780" cy="160" r="140" fill="url(#glow-attack)"/>
-  <circle cx="1060" cy="160" r="150" fill="url(#glow-victim)"/>
+  <circle cx="730" cy="150" r="150" fill="url(#glow-attack)"/>
+  <circle cx="1070" cy="136" r="160" fill="url(#glow-victim)"/>
 
   <!-- Accent Top and Bottom Borders -->
-  <rect x="0" y="0" width="1200" height="5" fill="url(#bar-gradient)"/>
-  <rect x="0" y="295" width="1200" height="5" fill="url(#bar-gradient)"/>
+  <rect x="0" y="0" width="1200" height="4" fill="url(#bar-gradient)"/>
+  <rect x="0" y="296" width="1200" height="4" fill="url(#bar-gradient)"/>
 
   <!-- ======================================================== -->
-  <!-- LEFT SIDE: TITLE, DESCRIPTIONS & 9 FEATURES              -->
+  <!-- LEFT SIDE: TITLE, SUBTITLE & 9 FEATURES HUD CARD         -->
   <!-- ======================================================== -->
+
+  <!-- Eyebrow Chip: Research Domain -->
+  <g transform="translate(62, 26)">
+    <rect width="176" height="24" rx="12" fill="#0f172a" stroke="#3b82f6" stroke-width="1.2"/>
+    <circle cx="14" cy="12" r="3.5" fill="#38bdf8"/>
+    <text x="96" y="12.5" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="10.5" font-weight="700" fill="#93c5fd" text-anchor="middle" dominant-baseline="central" letter-spacing="1">NETWORK DEFENSE LAB</text>
+  </g>
+
   <!-- Main Title -->
-  <text x="68" y="98" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif" font-size="58" font-weight="900" fill="#f8fafc" letter-spacing="1">
+  <text x="60" y="90" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif" font-size="52" font-weight="900" fill="#f8fafc" letter-spacing="1">
     DoS <tspan fill="#ef4444">/</tspan> DDoS
   </text>
 
   <!-- Subtitle -->
-  <text x="70" y="136" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="#93c5fd" letter-spacing="0.5">
+  <text x="62" y="124" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif" font-size="20" font-weight="700" fill="#93c5fd" letter-spacing="0.5">
     Real-Time Attack Simulation &amp; Defense Lab
   </text>
 
-  <!-- Technology Summary -->
-  <text x="70" y="168" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#94a3b8">
-    Multi-Machine WiFi/LAN Lab &#183; SYN Flood &#183; UDP Flood &#183; HTTP Flood &#183; Rule &amp; ML Hybrid
+  <!-- Technology Summary Line -->
+  <text x="62" y="150" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="500" fill="#94a3b8">
+    Multi-Machine WiFi/LAN &#183; SYN Flood &#183; UDP Flood &#183; HTTP Flood &#183; eBPF &amp; ML
   </text>
 
-  <!-- 9 Features Showcase Card -->
-  <g transform="translate(70, 188)">
-    <rect width="620" height="66" rx="10" fill="#0b1322" fill-opacity="0.9" stroke="#334155" stroke-width="1.2"/>
-    
-    <!-- Header of Features Badge -->
-    <text x="18" y="22" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="11" font-weight="700" fill="#38bdf8" letter-spacing="1.2">
-      9 REAL-TIME WINDOW FEATURES:
+  <!-- 9 Real-time Features Telemetry HUD Card -->
+  <g transform="translate(62, 168)">
+    <!-- Card Frame -->
+    <rect width="540" height="94" rx="10" fill="#080e1a" fill-opacity="0.95" stroke="#1e293b" stroke-width="1.4"/>
+    <rect width="540" height="2" rx="1" fill="#38bdf8" fill-opacity="0.75"/>
+
+    <!-- Header line with live pulse -->
+    <circle cx="16" cy="18" r="3.5" fill="#10b981"/>
+    <text x="28" y="18.5" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="10.5" font-weight="800" fill="#38bdf8" dominant-baseline="central" letter-spacing="1.2">
+      9 REAL-TIME DETECTION FEATURES (1s WINDOW)
     </text>
 
-    <!-- The 9 Metrics Listed: pps, syn_s, ack_s, udp_s, H(src), H(dport), n_src, syn_ratio, ack_syn_ratio -->
-    <text x="18" y="48" font-family="'Segoe UI', Consolas, 'Roboto Mono', monospace" font-size="14" font-weight="600" fill="#f8fafc" letter-spacing="0.4">
-      pps <tspan fill="#38bdf8">&#183;</tspan>
-      syn_s <tspan fill="#38bdf8">&#183;</tspan>
-      ack_s <tspan fill="#38bdf8">&#183;</tspan>
-      udp_s <tspan fill="#38bdf8">&#183;</tspan>
-      H(src) <tspan fill="#38bdf8">&#183;</tspan>
-      H(dport) <tspan fill="#38bdf8">&#183;</tspan>
-      n_src <tspan fill="#38bdf8">&#183;</tspan>
-      syn_ratio <tspan fill="#38bdf8">&#183;</tspan>
-      ack_syn_ratio
-    </text>
+    <!-- Row 1: 4 Rate Counters + Distinct Sources + Live Indicator -->
+    <g transform="translate(14, 34)">
+      <!-- pps -->
+      <g transform="translate(0, 0)">
+        <rect width="54" height="22" rx="4" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+        <text x="27" y="11" font-family="'Segoe UI', Consolas, monospace" font-size="11" font-weight="700" fill="#f8fafc" text-anchor="middle" dominant-baseline="central">pps</text>
+      </g>
+      <!-- syn_s -->
+      <g transform="translate(60, 0)">
+        <rect width="66" height="22" rx="4" fill="#0f172a" stroke="#ef4444" stroke-width="1"/>
+        <text x="33" y="11" font-family="'Segoe UI', Consolas, monospace" font-size="11" font-weight="700" fill="#fca5a5" text-anchor="middle" dominant-baseline="central">syn_s</text>
+      </g>
+      <!-- ack_s -->
+      <g transform="translate(132, 0)">
+        <rect width="66" height="22" rx="4" fill="#0f172a" stroke="#3b82f6" stroke-width="1"/>
+        <text x="33" y="11" font-family="'Segoe UI', Consolas, monospace" font-size="11" font-weight="700" fill="#93c5fd" text-anchor="middle" dominant-baseline="central">ack_s</text>
+      </g>
+      <!-- udp_s -->
+      <g transform="translate(204, 0)">
+        <rect width="66" height="22" rx="4" fill="#0f172a" stroke="#f59e0b" stroke-width="1"/>
+        <text x="33" y="11" font-family="'Segoe UI', Consolas, monospace" font-size="11" font-weight="700" fill="#fcd34d" text-anchor="middle" dominant-baseline="central">udp_s</text>
+      </g>
+      <!-- n_src (Distinct sources) -->
+      <g transform="translate(276, 0)">
+        <rect width="66" height="22" rx="4" fill="#0f172a" stroke="#8b5cf6" stroke-width="1"/>
+        <text x="33" y="11" font-family="'Segoe UI', Consolas, monospace" font-size="11" font-weight="700" fill="#c4b5fd" text-anchor="middle" dominant-baseline="central">n_src</text>
+      </g>
+      <!-- live telemetry badge -->
+      <g transform="translate(348, 0)">
+        <rect width="164" height="22" rx="4" fill="#064e3b" fill-opacity="0.4" stroke="#10b981" stroke-width="0.8"/>
+        <text x="82" y="11" font-family="'Segoe UI', -apple-system, sans-serif" font-size="10" font-weight="700" fill="#6ee7b7" text-anchor="middle" dominant-baseline="central">ACTIVE TELEMETRY</text>
+      </g>
+    </g>
+
+    <!-- Row 2: 4 Entropy & Ratio Metrics -->
+    <g transform="translate(14, 63)">
+      <!-- H(src) -->
+      <g transform="translate(0, 0)">
+        <rect width="70" height="20" rx="4" fill="#0d1527" stroke="#334155" stroke-width="0.8"/>
+        <text x="35" y="10" font-family="'Segoe UI', Consolas, monospace" font-size="10.5" font-weight="600" fill="#e2e8f0" text-anchor="middle" dominant-baseline="central">H(src)</text>
+      </g>
+      <!-- H(dport) -->
+      <g transform="translate(76, 0)">
+        <rect width="78" height="20" rx="4" fill="#0d1527" stroke="#334155" stroke-width="0.8"/>
+        <text x="39" y="10" font-family="'Segoe UI', Consolas, monospace" font-size="10.5" font-weight="600" fill="#e2e8f0" text-anchor="middle" dominant-baseline="central">H(dport)</text>
+      </g>
+      <!-- syn_ratio -->
+      <g transform="translate(160, 0)">
+        <rect width="84" height="20" rx="4" fill="#0d1527" stroke="#334155" stroke-width="0.8"/>
+        <text x="42" y="10" font-family="'Segoe UI', Consolas, monospace" font-size="10.5" font-weight="600" fill="#e2e8f0" text-anchor="middle" dominant-baseline="central">syn_ratio</text>
+      </g>
+      <!-- ack_syn_ratio -->
+      <g transform="translate(250, 0)">
+        <rect width="108" height="20" rx="4" fill="#0d1527" stroke="#334155" stroke-width="0.8"/>
+        <text x="54" y="10" font-family="'Segoe UI', Consolas, monospace" font-size="10.5" font-weight="600" fill="#e2e8f0" text-anchor="middle" dominant-baseline="central">ack_syn_ratio</text>
+      </g>
+      <!-- sub info -->
+      <text x="366" y="10.5" font-family="'Segoe UI', -apple-system, sans-serif" font-size="10" font-weight="500" fill="#64748b" dominant-baseline="central">
+        Shannon Entropy + Ratios
+      </text>
+    </g>
   </g>
 
   <!-- ======================================================== -->
   <!-- TOP RIGHT: DUT · PBL3 BADGE                              -->
   <!-- ======================================================== -->
-  <g transform="translate(1020, 24)">
-    <rect width="150" height="42" rx="21" fill="url(#badge-pbl3)"/>
-    <text x="75" y="22" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif" font-size="19" font-weight="800" fill="#ffffff" text-anchor="middle" dominant-baseline="central" letter-spacing="2">DUT &#183; PBL3</text>
+  <g transform="translate(1010, 24)">
+    <rect width="138" height="34" rx="17" fill="#ef4444"/>
+    <text x="69" y="17.5" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="14.5" font-weight="900" fill="#ffffff" text-anchor="middle" dominant-baseline="central" letter-spacing="2">DUT &#183; PBL3</text>
   </g>
 
   <!-- ======================================================== -->
-  <!-- RIGHT SIDE: 2 ATTACKER LAPTOPS ATTACKING 1 VICTIM LAPTOP -->
+  <!-- RIGHT SIDE: MULTI-MACHINE TOPOLOGY (2 ATTACKERS -> VICTIM) -->
   <!-- ======================================================== -->
 
-  <!-- Radar waves surrounding Victim Laptop -->
-  <circle cx="1060" cy="165" r="75" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.45"/>
-  <circle cx="1060" cy="165" r="95" fill="none" stroke="#059669" stroke-width="1.2" stroke-dasharray="2 6" opacity="0.25"/>
+  <!-- Victim Radar Defense Rings (Concentric around victim laptop) -->
+  <circle cx="1070" cy="136" r="75" fill="none" stroke="#10b981" stroke-width="1.4" stroke-dasharray="4 4" opacity="0.45"/>
+  <circle cx="1070" cy="136" r="105" fill="none" stroke="#059669" stroke-width="1.2" stroke-dasharray="2 6" opacity="0.25"/>
+  <circle cx="1070" cy="136" r="135" fill="none" stroke="#047857" stroke-width="0.8" stroke-dasharray="1 8" opacity="0.15"/>
 
   <!-- Attack Vector 1: Attacker 1 -> Victim -->
-  <path d="M 815 105 C 890 105, 940 145, 1000 155" fill="none" stroke="#ef4444" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#arrow-red)" opacity="0.9"/>
-  <!-- Attack Vector 2: Attacker 2 -> Victim -->
-  <path d="M 815 225 C 890 225, 940 185, 1000 175" fill="none" stroke="#ef4444" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#arrow-red)" opacity="0.9"/>
+  <path d="M 748 78 C 830 78, 880 120, 995 125" fill="none" stroke="#ef4444" stroke-width="2.4" stroke-dasharray="6 4" marker-end="url(#arrow-red)" opacity="0.95"/>
 
-  <!-- Flow Label (High contrast, sharp, no chromostereopsis) -->
-  <g transform="translate(900, 165)">
-    <rect x="-52" y="-14" width="104" height="28" rx="14" fill="#dc2626"/>
-    <text x="0" y="1" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="12" font-weight="800" fill="#ffffff" text-anchor="middle" dominant-baseline="central" letter-spacing="0.5">DDoS FLOOD</text>
+  <!-- Attack Vector 2: Attacker 2 -> Victim -->
+  <path d="M 748 198 C 830 198, 880 156, 995 150" fill="none" stroke="#ef4444" stroke-width="2.4" stroke-dasharray="6 4" marker-end="url(#arrow-red)" opacity="0.95"/>
+
+  <!-- Central Attack Flow Badge -->
+  <g transform="translate(865, 138)">
+    <rect x="-56" y="-14" width="112" height="28" rx="14" fill="#0f172a" stroke="#ef4444" stroke-width="1.6"/>
+    <circle cx="-34" cy="0" r="3.5" fill="#ef4444"/>
+    <text x="8" y="0.5" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="11" font-weight="800" fill="#fca5a5" text-anchor="middle" dominant-baseline="central" letter-spacing="1">DDoS FLOOD</text>
   </g>
 
   <!-- ================= LAPTOP 1: ATTACKER 1 (Top) ================= -->
-  <g transform="translate(740, 75)">
+  <g transform="translate(635, 50)">
     <!-- Screen Frame -->
-    <rect x="0" y="0" width="70" height="46" rx="4" fill="#0f172a" stroke="#ef4444" stroke-width="1.5"/>
+    <rect x="0" y="0" width="96" height="58" rx="5" fill="#0f172a" stroke="#ef4444" stroke-width="1.6"/>
     <!-- Screen Display -->
-    <rect x="4" y="4" width="62" height="38" rx="2" fill="url(#laptop-screen-att)"/>
-    <!-- Attack CLI glyphs -->
-    <text x="8" y="16" font-family="'Segoe UI', Consolas, monospace" font-size="9" font-weight="700" fill="#ef4444">&gt; hping3</text>
-    <text x="8" y="27" font-family="'Segoe UI', Consolas, monospace" font-size="8" font-weight="600" fill="#fca5a5">--flood</text>
-    <text x="8" y="37" font-family="'Segoe UI', Consolas, monospace" font-size="8" font-weight="600" fill="#fca5a5">SYN/UDP</text>
-    <circle cx="56" cy="14" r="3" fill="#ef4444"/>
+    <rect x="4" y="4" width="88" height="50" rx="3" fill="url(#laptop-screen-att)"/>
+    <!-- Terminal header dots -->
+    <circle cx="12" cy="11" r="2.2" fill="#ef4444"/>
+    <circle cx="18" cy="11" r="2.2" fill="#f59e0b"/>
+    <circle cx="24" cy="11" r="2.2" fill="#10b981"/>
+    <!-- Terminal commands -->
+    <text x="10" y="26" font-family="'Segoe UI', Consolas, monospace" font-size="9.5" font-weight="700" fill="#f87171">&gt; hping3 --flood</text>
+    <text x="10" y="38" font-family="'Segoe UI', Consolas, monospace" font-size="8.5" font-weight="600" fill="#fca5a5">SYN/UDP Spoofed</text>
+    <text x="10" y="49" font-family="'Segoe UI', Consolas, monospace" font-size="8" font-weight="600" fill="#94a3b8">L3/L4 Volumetric</text>
     <!-- Base / Keyboard -->
-    <path d="M -10 46 L 80 46 L 86 53 L -16 53 Z" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+    <path d="M -12 58 L 108 58 L 118 67 L -22 67 Z" fill="#1e293b" stroke="#475569" stroke-width="1"/>
     <!-- Trackpad -->
-    <rect x="24" y="47" width="22" height="4" rx="1" fill="#334155"/>
+    <rect x="36" y="60" width="24" height="4" rx="1.5" fill="#334155"/>
     <!-- Label -->
-    <text x="35" y="68" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="12" font-weight="700" fill="#f87171" text-anchor="middle">
+    <text x="48" y="82" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="12" font-weight="800" fill="#fca5a5" text-anchor="middle">
       Attacker 1
     </text>
   </g>
 
   <!-- ================= LAPTOP 2: ATTACKER 2 (Bottom) ============== -->
-  <g transform="translate(740, 195)">
+  <g transform="translate(635, 170)">
     <!-- Screen Frame -->
-    <rect x="0" y="0" width="70" height="46" rx="4" fill="#0f172a" stroke="#ef4444" stroke-width="1.5"/>
+    <rect x="0" y="0" width="96" height="58" rx="5" fill="#0f172a" stroke="#ef4444" stroke-width="1.6"/>
     <!-- Screen Display -->
-    <rect x="4" y="4" width="62" height="38" rx="2" fill="url(#laptop-screen-att)"/>
-    <!-- Attack CLI glyphs -->
-    <text x="8" y="16" font-family="'Segoe UI', Consolas, monospace" font-size="9" font-weight="700" fill="#ef4444">&gt; python3</text>
-    <text x="8" y="27" font-family="'Segoe UI', Consolas, monospace" font-size="8" font-weight="600" fill="#fca5a5">http_flood</text>
-    <text x="8" y="37" font-family="'Segoe UI', Consolas, monospace" font-size="8" font-weight="600" fill="#fca5a5">L7 GET</text>
-    <circle cx="56" cy="14" r="3" fill="#ef4444"/>
+    <rect x="4" y="4" width="88" height="50" rx="3" fill="url(#laptop-screen-att)"/>
+    <!-- Terminal header dots -->
+    <circle cx="12" cy="11" r="2.2" fill="#ef4444"/>
+    <circle cx="18" cy="11" r="2.2" fill="#f59e0b"/>
+    <circle cx="24" cy="11" r="2.2" fill="#10b981"/>
+    <!-- Terminal commands -->
+    <text x="10" y="26" font-family="'Segoe UI', Consolas, monospace" font-size="9.5" font-weight="700" fill="#f87171">&gt; python3 http</text>
+    <text x="10" y="38" font-family="'Segoe UI', Consolas, monospace" font-size="8.5" font-weight="600" fill="#fca5a5">http_flood -t 20</text>
+    <text x="10" y="49" font-family="'Segoe UI', Consolas, monospace" font-size="8" font-weight="600" fill="#94a3b8">L7 App GET Flood</text>
     <!-- Base / Keyboard -->
-    <path d="M -10 46 L 80 46 L 86 53 L -16 53 Z" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+    <path d="M -12 58 L 108 58 L 118 67 L -22 67 Z" fill="#1e293b" stroke="#475569" stroke-width="1"/>
     <!-- Trackpad -->
-    <rect x="24" y="47" width="22" height="4" rx="1" fill="#334155"/>
+    <rect x="36" y="60" width="24" height="4" rx="1.5" fill="#334155"/>
     <!-- Label -->
-    <text x="35" y="68" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="12" font-weight="700" fill="#f87171" text-anchor="middle">
+    <text x="48" y="82" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="12" font-weight="800" fill="#fca5a5" text-anchor="middle">
       Attacker 2
     </text>
   </g>
 
-  <!-- ================= LAPTOP 3: VICTIM (Target + Detector) ======= -->
-  <g transform="translate(1015, 125)">
+  <!-- ================= LAPTOP 3: VICTIM (Target + Defense) ======= -->
+  <g transform="translate(1005, 95)">
     <!-- Screen Frame -->
-    <rect x="0" y="0" width="90" height="60" rx="5" fill="#0f172a" stroke="#10b981" stroke-width="2"/>
+    <rect x="0" y="0" width="130" height="82" rx="6" fill="#0f172a" stroke="#10b981" stroke-width="2.2"/>
     <!-- Screen Display -->
-    <rect x="5" y="5" width="80" height="50" rx="3" fill="url(#laptop-screen-victim)"/>
+    <rect x="5" y="5" width="120" height="72" rx="4" fill="url(#laptop-screen-victim)"/>
+    
     <!-- Shield / Defense Symbol -->
-    <path d="M 45 14 L 60 19 L 60 31 C 60 41 45 47 45 47 C 45 47 30 41 30 31 L 30 19 Z" fill="#10b981" fill-opacity="0.3" stroke="#34d399" stroke-width="1.8"/>
-    <!-- Radar Heartbeat Line -->
-    <path d="M 12 36 L 25 36 L 30 30 L 35 42 L 40 33 L 45 36 L 78 36" fill="none" stroke="#6ee7b7" stroke-width="1.2" opacity="0.8"/>
-    <text x="45" y="29" font-family="'Segoe UI', sans-serif" font-size="8" font-weight="800" fill="#a7f3d0" text-anchor="middle">DEFENSE</text>
+    <path d="M 65 14 L 84 21 L 84 38 C 84 52 65 61 65 61 C 65 61 46 52 46 38 L 46 21 Z" fill="#10b981" fill-opacity="0.22" stroke="#34d399" stroke-width="2"/>
+    
+    <!-- Heartbeat / Telemetry Line -->
+    <path d="M 16 46 L 36 46 L 43 36 L 50 56 L 57 40 L 64 46 L 114 46" fill="none" stroke="#6ee7b7" stroke-width="1.8" opacity="0.9"/>
+    
+    <text x="65" y="32" font-family="'Segoe UI', sans-serif" font-size="9" font-weight="800" fill="#a7f3d0" text-anchor="middle" letter-spacing="1.5">DEFENSE</text>
+
     <!-- Base / Keyboard -->
-    <path d="M -12 60 L 102 60 L 110 69 L -20 69 Z" fill="#1e293b" stroke="#10b981" stroke-width="1.2"/>
+    <path d="M -16 82 L 146 82 L 158 93 L -28 93 Z" fill="#1e293b" stroke="#10b981" stroke-width="1.4"/>
     <!-- Trackpad -->
-    <rect x="32" y="62" width="26" height="4" rx="1.5" fill="#334155"/>
-    <!-- Labels -->
-    <text x="45" y="85" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="13" font-weight="800" fill="#34d399" text-anchor="middle">
+    <rect x="48" y="84" width="34" height="5" rx="1.5" fill="#334155"/>
+    
+    <!-- Labels Below Victim -->
+    <text x="65" y="112" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="14" font-weight="900" fill="#34d399" text-anchor="middle">
       Victim Server
     </text>
-    <text x="45" y="99" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="11" font-weight="600" fill="#94a3b8" text-anchor="middle">
-      Nginx + Detector
+    <text x="65" y="128" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" font-size="11" font-weight="600" fill="#94a3b8" text-anchor="middle">
+      Nginx &#183; eBPF &#183; Console
     </text>
   </g>
 
