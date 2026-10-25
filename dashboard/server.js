@@ -1,244 +1,332 @@
-// Local-only realtime dashboard backend for the DoS/DDoS lab.
-// SECURITY: binds 127.0.0.1 only; the browser sends ENUMERATED actions, never raw
-// shell input. Every docker command is a fixed argument array run with execFile/spawn
-// (no shell string interpolation) -> no command injection.
+// Bare-metal Realtime Victim Defense Console backend.
+// Designed for single-machine or multi-machine (WiFi/LAN) deployments.
 "use strict";
 
 const express = require("express");
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
-const { spawn, execFile } = require("child_process");
+const readline = require("readline");
+const { spawn } = require("child_process");
 const { WebSocketServer } = require("ws");
 
-const HOST = "127.0.0.1";
-const PORT = 3000;
-const VICTIM = "172.30.0.10";
-const ATTACKERS = ["attacker1", "attacker2", "attacker3", "attacker4", "attacker5", "attacker6"];
-// Window ML model: host path (to check it exists) + in-container path (detector bind-mounts ./detection).
-const ML_MODEL_HOST = path.join(__dirname, "..", "detection", "window_model.joblib");
-const ML_MODEL_CONT = "/app/window_model.joblib";
-
-// Fixed scenario definitions. The client only sends the KEY ("A"/"B"/"C").
-// `pps` paces each SYN sender (per container) so the combined load stays controlled while
-// a spoofed flood still produces many distinct source IPs per window.
-const SCENARIOS = {
-  A: { label: "DoS - 1 source SYN", type: "syn", spoof: false, srcs: ["attacker1"], pps: 150 },
-  B: { label: "DDoS - 6 source SYN + spoof", type: "syn", spoof: true, srcs: ATTACKERS, pps: 400 },
-  C: { label: "DDoS - 6 source HTTP (L7)", type: "http", spoof: false, srcs: ATTACKERS },
-};
-
-let running = null;        // active scenario id or null
-let detectorProc = null;   // child process streaming detector JSON
-let dockerOk = false;
-let blocking = false;      // closed-loop IPS (eBPF XDP_DROP) on/off
-let maxIntensity = false;  // "Max intensity": tan cong line-rate (hping3/ab) thay cho scapy paced
-let detStarting = false;   // guard: chi 1 luong startDetector chay cung luc (tranh pkill cheo)
-
-// ---- docker helpers (execFile = no shell) ----
-function docker(args, timeout = 15000) {
-  return new Promise((resolve) => {
-    execFile("docker", args, { timeout, windowsHide: true }, (err, stdout, stderr) =>
-      resolve({ err, stdout: stdout || "", stderr: stderr || "" }));
-  });
+// Parse CLI args (e.g. node server.js --iface wlan0 --victim 192.168.1.50 --port 3000)
+const args = process.argv.slice(2);
+function getArg(flag, fallback) {
+  const idx = args.indexOf(flag);
+  if (idx >= 0 && idx + 1 < args.length) return args[idx + 1];
+  return fallback;
 }
+const hasFlag = (flag) => args.includes(flag);
+
+const PORT = parseInt(getArg("--port", process.env.PORT || "3000"), 10);
+const HOST = getArg("--host", process.env.HOST || "0.0.0.0");
+const IFACE = getArg("--iface", process.env.IFACE || "");
+const VICTIM = getArg("--victim", process.env.VICTIM || "");
+const PPS_THR = getArg("--pps", process.env.PPS || "40");
+const SYN_THR = getArg("--syn", process.env.SYN || "25");
+const ENGINE = getArg("--engine", process.env.ENGINE || "scapy");
+const NO_SPAWN = hasFlag("--no-spawn") || process.env.NO_SPAWN === "1";
+
+const ROOT_DIR = path.join(__dirname, "..");
+const DETECTOR_SCRIPT = path.join(ROOT_DIR, "detection", "detector.py");
+const ML_MODEL = path.join(ROOT_DIR, "detection", "window_model.joblib");
+
+let detectorProc = null;
+let detectorOnline = false;
+let lastVerdict = "BENIGN";
+let lastAttackType = null;
+let wss = null;
+const eventLog = []; // in-memory event log (last 100 events)
+
+function addEvent(level, title, detail, verdict = "BENIGN", attackType = null) {
+  const evt = {
+    id: Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+    time: new Date().toLocaleTimeString(),
+    timestamp: Date.now(),
+    level, // 'safe', 'warn', 'crit', 'info'
+    title,
+    detail,
+    verdict,
+    attackType,
+  };
+  eventLog.unshift(evt);
+  if (eventLog.length > 100) eventLog.pop();
+  broadcast({ type: "event", data: evt });
+}
+
+// Initial system event
+addEvent("info", "Console Initialized", `Monitoring server active on ${HOST}:${PORT}. Ready for traffic analysis.`);
+
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+// REST API for external metric ingestion (if piped or pushed from external script)
+app.post("/api/metric", (req, res) => {
+  if (req.body && typeof req.body === "object") {
+    handleDetectorMetric(req.body);
+    res.json({ ok: true });
+  } else {
+    res.status(400).json({ error: "Invalid metric format" });
+  }
+});
+
+app.get("/api/status", (req, res) => {
+  res.json({
+    detectorOnline,
+    iface: IFACE || "default",
+    victim: VICTIM || "all",
+    eventCount: eventLog.length,
+  });
+});
+
+const server = http.createServer(app);
+wss = new WebSocketServer({ server });
 
 function broadcast(obj) {
-  const s = JSON.stringify(obj);
-  wss.clients.forEach((c) => { if (c.readyState === 1) c.send(s); });
+  if (typeof wss === "undefined" || !wss || !wss.clients) return;
+  const msg = JSON.stringify(obj);
+  wss.clients.forEach((client) => {
+    if (client.readyState === 1) client.send(msg);
+  });
 }
 
-function logEvent(msg, level = "info") {
-  broadcast({ type: "log", level, msg, time: new Date().toLocaleTimeString() });
+// Process incoming metric from detector
+function handleDetectorMetric(d) {
+  detectorOnline = true;
+
+  // Determine current verdict and type
+  const isTriggered = !!d.triggered;
+  const currentVerdict = isTriggered ? (d.verdict || "DoS") : "BENIGN";
+  let attackType = null;
+  if (isTriggered) {
+    if (d.syn_flood) attackType = "SYN Flood (L4)";
+    else if (d.udp_flood) attackType = "UDP Flood (L4)";
+    else attackType = "HTTP Flood (L7)";
+  }
+
+  // Detect state transitions to emit security log events
+  if (currentVerdict !== lastVerdict || attackType !== lastAttackType) {
+    if (isTriggered) {
+      const level = currentVerdict === "DDoS" ? "crit" : "warn";
+      const srcText = d.n_src ? `${d.n_src} source(s)` : "unknown sources";
+      const topSrc = d.top_sources && d.top_sources.length > 0 ? d.top_sources[0].ip : "multiple";
+      addEvent(
+        level,
+        `Threat Detected: ${currentVerdict} - ${attackType}`,
+        `Rate: ${d.pps || 0} pps, ${srcText}. Primary sender: ${topSrc} (Entropy H(src)=${(d.h_src || 0).toFixed(2)})`,
+        currentVerdict,
+        attackType
+      );
+    } else if (lastVerdict !== "BENIGN") {
+      addEvent("safe", "Threat Mitigated / Traffic Normalized", "Traffic rate has fallen below trigger threshold. System is BENIGN.", "BENIGN", null);
+    }
+    lastVerdict = currentVerdict;
+    lastAttackType = attackType;
+  }
+
+  // Broadcast metric data
+  broadcast({
+    type: "metric",
+    data: {
+      ...d,
+      attackType,
+    },
+  });
 }
 
-// ---- detector realtime stream ----
-async function startDetector() {
-  if (detStarting) return;   // tranh 2 luong khoi dong chong cheo (vd toggle luc dang start)
-  detStarting = true;
-  const info = await docker(["info", "--format", "{{.ServerVersion}}"], 8000);
-  dockerOk = !info.err;
-  broadcast({ type: "docker", up: dockerOk });
-  if (!dockerOk) {
-    logEvent("Docker not reachable - start Docker Desktop, then 'docker compose up -d'.", "error");
-    detStarting = false;
-    setTimeout(startDetector, 5000); // retry
-    return;
-  }
-  // verify the detector actually SHARES the victim's network namespace (curl localhost -> nginx).
-  // If recreate-victim-without-detector broke it, fail loudly instead of streaming silent zeros.
-  const ns = await docker(["exec", "detector", "curl", "-s", "-m", "2", "-o", "/dev/null",
-    "-w", "%{http_code}", "http://localhost:80"], 6000);
-  if ((ns.stdout || "").trim() !== "200") {
-    broadcast({ type: "detector", up: false });
-    logEvent("Detector cannot reach the victim (shared netns broken). " +
-             "Run: docker compose up -d --force-recreate", "error");
-    detStarting = false;
-    setTimeout(startDetector, 6000);
-    return;
-  }
-  await docker(["exec", "detector", "pkill", "-f", "detector.py"]).catch(() => {});
-  // Bat ML neu co san model (train_window.py da sinh). Neu khong co -> chay luat thuan (ml_verdict=null).
-  let mlOn = false;
-  try { mlOn = fs.existsSync(ML_MODEL_HOST); } catch { mlOn = false; }
-  // Engine LUON la eBPF: dem chinh xac o line-rate (can cho "Max intensity"); scapy rot goi khi pps cao.
-  const detArgs = ["exec", "detector", "python3", "-u", "/app/detector.py",
-    "--iface", "eth0", "--pps", "40", "--syn", "25", "--victim", VICTIM,
-    "--engine", "ebpf", "--stream"];
-  if (mlOn) detArgs.push("--ml", ML_MODEL_CONT);
-  // Blocking ON -> them --block (XDP_DROP). Doi blocking van phai restart detector (them/bo --block);
-  // doi "Max intensity" thi KHONG can restart detector (engine da la eBPF san).
-  if (blocking) detArgs.push("--block", "--block-pps", "200",
-                             "--block-ttl", "5", "--block-syn-rate", "2000");
-  detectorProc = spawn("docker", detArgs, { windowsHide: true });
-  detStarting = false;   // da spawn xong -> cho phep lan restart ke tiep
-
+// Line buffer parser for detector stdout / stdin
+function createLineParser(onLine) {
   let buf = "";
-  detectorProc.stdout.on("data", (d) => {
-    buf += d.toString();
-    let i;
-    while ((i = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, i).trim();
-      buf = buf.slice(i + 1);
-      if (!line) continue;
-      try { broadcast({ type: "metric", data: JSON.parse(line) }); } catch { /* ignore */ }
+  return function (chunk) {
+    buf += chunk.toString();
+    let idx;
+    while ((idx = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (line) onLine(line);
     }
-  });
-  detectorProc.on("exit", () => {
-    detectorProc = null;
-    broadcast({ type: "detector", up: false });
-    setTimeout(startDetector, 4000); // auto-restart
-  });
-  broadcast({ type: "detector", up: true });
-  broadcast({ type: "blocking", on: blocking });
-  logEvent("Detector stream connected (eBPF"
-    + (blocking ? " + BLOCKING" : " detect-only")
-    + (mlOn ? " + ML" : "") + ").", "ok");
+  };
 }
 
-// ---- attack control ----
-async function startAttack(id) {
-  const s = SCENARIOS[id];
-  if (!s) return;
-  await stopAttack(true);
-  for (const a of s.srcs) {
-    let cmd;
-    if (maxIntensity && s.type === "syn") {
-      // Max: hping3 line-rate. --rand-source cho kich ban spoof (B). Chay den khi bam Stop.
-      cmd = ["exec", "-d", a, "hping3", "-S", "-p", "80", "-q"];
-      if (s.spoof) cmd.push("--rand-source");
-      cmd.push("--flood", VICTIM);
-    } else if (maxIntensity) { // http L7 cuong do cao: ab keep-alive, concurrency 500
-      cmd = ["exec", "-d", a, "ab", "-k", "-c", "500", "-t", "3600", "-n", "100000000",
-             `http://${VICTIM}/`];
-    } else if (s.type === "syn") {
-      cmd = ["exec", "-d", a, "python3", "/app/syn_flood.py", VICTIM, "-p", "80"];
-      if (s.pps) cmd.push("--pps", String(s.pps));
-      if (s.spoof) cmd.push("--spoof");
-    } else { // http paced
-      cmd = ["exec", "-d", a, "python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", "6", "-d", "3600"];
+function processDetectorJsonLine(line) {
+  try {
+    const data = JSON.parse(line);
+    handleDetectorMetric(data);
+  } catch (err) {
+    // Non-JSON output (e.g. startup banner / log)
+    if (line.includes("[*]") || line.includes("[!]")) {
+      addEvent("info", "Detector Notice", line);
     }
-    await docker(cmd);
   }
-  running = id;
-  broadcast({ type: "state", running: id, label: s.label, attackers: s.srcs,
-    attackType: s.type, spoof: s.spoof, max: maxIntensity });
-  logEvent(`Attack started: ${s.label}${maxIntensity ? " [MAX]" : ""}`, "attack");
 }
 
-async function stopAttack(quiet) {
-  // Giet ca scapy/http_flood.py (paced) va hping3/ab (max). -x = khop ten tien trinh chinh xac.
-  for (const a of ATTACKERS) {
-    await docker(["exec", a, "pkill", "-f", "flood.py"]).catch(() => {});
-    await docker(["exec", a, "pkill", "-x", "hping3"]).catch(() => {});
-    await docker(["exec", a, "pkill", "-x", "ab"]).catch(() => {});
+// 1. Support piped STDIN: e.g. "sudo python3 detector.py --stream | node server.js"
+if (!process.stdin.isTTY) {
+  const rl = readline.createInterface({ input: process.stdin, terminal: false });
+  rl.on("line", (line) => {
+    if (line.trim()) processDetectorJsonLine(line.trim());
+  });
+  console.log("[dashboard] Reading detector stream from STDIN.");
+}
+
+// 2. Bare-metal automatic spawn of detector.py
+function findPythonCommand() {
+  if (process.env.PYTHON) return process.env.PYTHON;
+  return process.platform === "win32" ? "python" : "python3";
+}
+
+function startDetector() {
+  if (NO_SPAWN || !process.stdin.isTTY) return;
+  if (detectorProc) return;
+
+  const pythonCmd = findPythonCommand();
+  const detArgs = [DETECTOR_SCRIPT, "--stream"];
+  if (IFACE) detArgs.push("--iface", IFACE);
+  if (VICTIM) detArgs.push("--victim", VICTIM);
+  if (PPS_THR) detArgs.push("--pps", String(PPS_THR));
+  if (SYN_THR) detArgs.push("--syn", String(SYN_THR));
+  if (ENGINE) detArgs.push("--engine", ENGINE);
+
+  // Check if ML model is trained and available
+  if (fs.existsSync(ML_MODEL)) {
+    detArgs.push("--ml", ML_MODEL);
+    console.log(`[dashboard] ML model detected at ${ML_MODEL}, enabling --ml.`);
   }
-  running = null;
-  broadcast({ type: "state", running: null });
-  if (!quiet) logEvent("Attack stopped.", "info");
+
+  console.log(`[dashboard] Spawning detector: ${pythonCmd} ${detArgs.join(" ")}`);
+  try {
+    detectorProc = spawn(pythonCmd, detArgs, {
+      cwd: ROOT_DIR,
+      windowsHide: true,
+    });
+
+    const parser = createLineParser(processDetectorJsonLine);
+    detectorProc.stdout.on("data", parser);
+
+    detectorProc.stderr.on("data", (d) => {
+      const errStr = d.toString().trim();
+      if (errStr) {
+        console.error(`[detector-err] ${errStr}`);
+        addEvent("warn", "Detector Warning", errStr);
+      }
+    });
+
+    detectorProc.on("error", (err) => {
+      console.error(`[dashboard] Failed to spawn detector (${pythonCmd}):`, err.message);
+      addEvent("warn", "Detector Spawn Error", `Cannot run ${pythonCmd}: ${err.message}. If running bare-metal with sudo, run detector in terminal and pipe: 'sudo python3 detection/detector.py --stream | node server.js'.`);
+      detectorProc = null;
+      detectorOnline = false;
+      broadcast({ type: "detector", up: false });
+    });
+
+    detectorProc.on("exit", (code, sig) => {
+      console.log(`[dashboard] Detector process exited with code ${code}, sig ${sig}`);
+      detectorProc = null;
+      detectorOnline = false;
+      broadcast({ type: "detector", up: false });
+      if (code !== 0) {
+        console.log(`[dashboard] Tip: If detector needs sudo/scapy on host, run in terminal: 'sudo python3 detection/detector.py --stream | node dashboard/server.js' or 'node server.js --no-spawn'.`);
+      }
+    });
+
+    detectorOnline = true;
+    broadcast({ type: "detector", up: true });
+    addEvent("info", "Detector Attached", `Sniffing on interface ${IFACE || "default"}, target ${VICTIM || "all"}`);
+  } catch (err) {
+    console.error("[dashboard] Exception spawning detector:", err.message);
+  }
 }
 
-// ---- closed-loop blocking toggle: restart the detector with/without --block (eBPF) ----
-async function setBlocking(on) {
-  if (on === blocking) return;
-  blocking = on;
-  broadcast({ type: "blocking", on });
-  logEvent(on ? "Blocking ENABLED - restarting detector with eBPF XDP_DROP (~a few seconds)..."
-              : "Blocking disabled - restarting detector (detect-only)...", on ? "ok" : "info");
-  // Kill the current detector; the exit handler restarts it with the new flags. startDetector()
-  // pkills the in-container process first (SIGTERM -> its cleanup removes the XDP program).
-  if (detectorProc) { try { detectorProc.kill(); } catch { /* */ } }
-  else startDetector();
-}
+// 3. Victim Service Health Probe (checks local Nginx/Web Server availability)
+const PROBE_TARGET = VICTIM || "127.0.0.1";
+setInterval(() => {
+  const startTime = Date.now();
+  const req = http.get(`http://${PROBE_TARGET}:80/`, { timeout: 2000 }, (res) => {
+    const latency = Date.now() - startTime;
+    const ok = res.statusCode >= 200 && res.statusCode < 400;
+    broadcast({
+      type: "health",
+      ok,
+      status: String(res.statusCode),
+      ms: latency,
+      target: `http://${PROBE_TARGET}:80/`,
+    });
+    res.resume(); // consume response to free memory
+  });
 
-// ---- "Max intensity" toggle: switch attacks between paced (scapy/http_flood) and line-rate
-// (hping3/ab). The detector already runs eBPF, so NO detector restart is needed; we just relaunch
-// the currently-running attack with the new intensity. ----
-async function setMaxIntensity(on) {
-  if (on === maxIntensity) return;
-  maxIntensity = on;
-  broadcast({ type: "intensity", max: on });
-  logEvent(on ? "Max intensity ON - attacks use hping3/ab (line-rate). Isolated lab only."
-              : "Max intensity OFF - attacks use paced scapy/http_flood.", on ? "attack" : "info");
-  if (running) await startAttack(running);   // restart current attack at the new intensity
-}
+  req.on("error", (err) => {
+    broadcast({
+      type: "health",
+      ok: false,
+      status: "ERR",
+      ms: null,
+      error: err.code || err.message,
+      target: `http://${PROBE_TARGET}:80/`,
+    });
+  });
 
-// ---- service-health probe (loopback, inside victim's netns) ----
-// Probing from the detector over localhost goes via `lo`, NOT eth0, so it does NOT
-// appear to the sniffer as an extra source (which previously made scenario A look like
-// DDoS). curl's %{time_total} is the real request latency, excluding docker-exec overhead.
-setInterval(async () => {
-  if (!dockerOk) return;
-  const r = await docker(["exec", "detector", "curl", "-s", "-m", "2", "-o", "/dev/null",
-    "-w", "%{http_code} %{time_total}", "http://localhost:80"], 4000);
-  const parts = (r.stdout || "").trim().split(/\s+/);
-  const code = parts[0] || "000";
-  const ms = parts[1] ? Math.round(parseFloat(parts[1]) * 1000) : null;
-  broadcast({ type: "health", ok: code === "200", status: code, ms });
+  req.on("timeout", () => {
+    req.destroy();
+    broadcast({
+      type: "health",
+      ok: false,
+      status: "TIMEOUT",
+      ms: 2000,
+      target: `http://${PROBE_TARGET}:80/`,
+    });
+  });
 }, 2500);
 
-// ---- http + ws server (127.0.0.1 only) ----
-const app = express();
-app.use(express.static(path.join(__dirname, "public")));
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
-
+// WebSocket connection handling
 wss.on("connection", (ws) => {
-  const snap = { type: "snapshot", running, dockerOk, blocking, maxIntensity,
-    scenarios: Object.fromEntries(Object.entries(SCENARIOS).map(([k, v]) => [k, { label: v.label }])) };
-  if (running && SCENARIOS[running]) {
-    const s = SCENARIOS[running];
-    Object.assign(snap, { label: s.label, attackers: s.srcs, attackType: s.type, spoof: s.spoof });
-  }
-  ws.send(JSON.stringify(snap));
-  ws.on("message", async (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw.toString()); } catch { return; }
+  // Send current state and recent events to new client
+  ws.send(
+    JSON.stringify({
+      type: "snapshot",
+      detectorOnline,
+      iface: IFACE || "default",
+      victim: VICTIM || "all",
+      lastVerdict,
+      lastAttackType,
+      events: eventLog.slice(0, 50),
+    })
+  );
+
+  ws.on("message", (raw) => {
     try {
-      if (msg.action === "attack" && typeof msg.scenario === "string") await startAttack(msg.scenario);
-      else if (msg.action === "stop") await stopAttack(false);
-      else if (msg.action === "blocking") await setBlocking(!!msg.on);
-      else if (msg.action === "intensity") await setMaxIntensity(!!msg.on);
-    } catch (e) {
-      logEvent("Action failed: " + (e && e.message ? e.message : String(e)), "error");
+      const msg = JSON.parse(raw.toString());
+      if (msg.action === "clear_logs") {
+        eventLog.length = 0;
+        broadcast({ type: "clear_logs" });
+      }
+    } catch {
+      /* ignore */
     }
   });
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`[dashboard] http://${HOST}:${PORT}  (local only)`);
+  console.log(`[dashboard] Victim Defense Console running at http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
   startDetector();
 });
 
-// ---- cleanup on exit: stop the detector (and its XDP) + stop attacks ----
-async function cleanup() {
-  detStarting = true;   // chan auto-restart trong luc dang thoat
-  try { if (detectorProc) detectorProc.kill(); } catch { /* */ }
-  // Killing the local `docker exec` client does NOT stop the in-container detector, so it would
-  // keep running (and keep dropping packets if --block was on) after the dashboard exits. Send
-  // SIGTERM to the in-container process so it stops AND removes its XDP program.
-  try { await docker(["exec", "detector", "pkill", "-f", "detector.py"], 4000); } catch { /* */ }
-  try { await stopAttack(true); } catch { /* */ }
+// Graceful cleanup
+function cleanup() {
+  if (detectorProc) {
+    try {
+      detectorProc.kill("SIGTERM");
+    } catch {
+      /* */
+    }
+  }
 }
-process.on("SIGINT", async () => { await cleanup(); process.exit(0); });
-process.on("SIGTERM", async () => { await cleanup(); process.exit(0); });
+process.on("SIGINT", () => {
+  cleanup();
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  cleanup();
+  process.exit(0);
+});

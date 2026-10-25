@@ -1,232 +1,480 @@
 (() => {
   "use strict";
+
   const $ = (id) => document.getElementById(id);
-  const ATTACKERS = ["attacker1", "attacker2", "attacker3", "attacker4", "attacker5", "attacker6"];
-  const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const SVGNS = "http://www.w3.org/2000/svg";
 
-  let running = null, verdictLevel = "idle", serviceDown = false, blocking = false, maxIntensity = false;
+  // Configuration for 9 rolling charts (60 points each, 1 per second)
+  const HISTORY_LEN = 60;
+  const METRICS = [
+    { key: "pps", id: "chart-pps", valId: "val-pps", statsId: "stats-pps", color: "#4f46e5", unit: "pkts/s", decimals: 0 },
+    { key: "syn", id: "chart-syn", valId: "val-syn", statsId: "stats-syn", color: "#7c3aed", unit: "syn/s", decimals: 0 },
+    { key: "ack", id: "chart-ack", valId: "val-ack", statsId: "stats-ack", color: "#059669", unit: "ack/s", decimals: 0 },
+    { key: "udp", id: "chart-udp", valId: "val-udp", statsId: "stats-udp", color: "#0284c7", unit: "udp/s", decimals: 0 },
+    { key: "h_src", id: "chart-hsrc", valId: "val-hsrc", statsId: "stats-hsrc", color: "#d97706", unit: "bits", decimals: 2 },
+    { key: "h_dport", id: "chart-hdport", valId: "val-hdport", statsId: "stats-hdport", color: "#ea580c", unit: "bits", decimals: 2 },
+    { key: "n_src", id: "chart-nsrc", valId: "val-nsrc", statsId: "stats-nsrc", color: "#e11d48", unit: "IPs", decimals: 0 },
+    { key: "syn_ratio", id: "chart-synratio", valId: "val-synratio", statsId: "stats-synratio", color: "#c026d3", unit: "ratio", decimals: 2 },
+    { key: "ack_syn_ratio", id: "chart-acksynratio", valId: "val-acksynratio", statsId: "stats-acksynratio", color: "#0d9488", unit: "ratio", decimals: 2 },
+  ];
 
-  // ---------- websocket ----------
-  let ws;
+  // Initialize history queues with zeros
+  const history = {};
+  METRICS.forEach((m) => {
+    history[m.key] = new Array(HISTORY_LEN).fill(0);
+  });
+
+  // ---------- WebSocket Connection ----------
+  let ws = null;
+
   function connect() {
-    ws = new WebSocket(`ws://${location.host}`);
-    ws.onopen = () => setPill("pill-ws", true);
-    ws.onclose = () => { setPill("pill-ws", false); setPill("pill-detector", false); setTimeout(connect, 1500); };
-    ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch { /* */ } };
-  }
-  const send = (obj) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); };
-  const setPill = (id, ok) => { $(id).className = "pill " + (ok ? "ok" : "bad"); };
+    const loc = window.location;
+    const proto = loc.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${proto}//${loc.host}`;
+    ws = new WebSocket(url);
 
-  // ---------- dispatch ----------
-  function handle(m) {
-    switch (m.type) {
-      case "snapshot":
-        setPill("pill-docker", m.dockerOk);
-        applyBlocking(!!m.blocking);
-        applyMaxIntensity(!!m.maxIntensity);
-        onState(m.running ? m : { running: null });
-        break;
-      case "docker": setPill("pill-docker", m.up); break;
-      case "detector": setPill("pill-detector", m.up); break;
-      case "metric": onMetric(m.data); break;
-      case "state": onState(m); break;
-      case "blocking": applyBlocking(m.on); break;
-      case "intensity": applyMaxIntensity(m.max); break;
-      case "health": onHealth(m); break;
-      case "log": addLog(m); break;
-    }
-  }
-
-  // ---------- metrics + verdict + victim ----------
-  function onMetric(d) {
-    setPill("pill-detector", true);
-    $("m-pps").textContent = d.pps;
-    $("m-syn").textContent = d.syn;
-    $("m-ack").textContent = d.ack;
-    $("m-nsrc").textContent = d.n_src;
-    $("m-hsrc").textContent = (d.h_src || 0).toFixed(2);
-    $("m-thr").textContent = `${Math.round(d.thr_pps)}/${Math.round(d.thr_syn)}`;
-    $("m-blocked").textContent = d.blocked_pps != null ? d.blocked_pps : 0;
-
-    const v = $("verdict"), lab = $("verdict-label"), sub = $("verdict-sub");
-    if (!d.triggered) {
-      v.className = "verdict safe";
-      lab.textContent = "SAFE";
-      sub.textContent = "no attack detected";
-      verdictLevel = "idle";
-    } else {
-      const ddos = d.verdict === "DDoS";
-      v.className = "verdict " + (ddos ? "ddos" : "dos");
-      lab.textContent = d.verdict + (d.syn_flood ? "  [SYN flood]" : "");
-      sub.textContent = `n_src=${d.n_src} · H(src)=${(d.h_src || 0).toFixed(2)} · ${d.pps} pps`;
-      verdictLevel = ddos ? "crit" : "warn";
-    }
-    // Verdict ML song song (detector chay voi --ml). ml_verdict=null -> khong co model -> "off".
-    const mlVal = $("ml-val");
-    if (d.ml_verdict) {
-      const lvl = d.ml_verdict === "DDoS" ? "ddos" : (d.ml_verdict === "DoS" ? "dos" : "safe");
-      mlVal.className = "ml-val " + lvl;
-      mlVal.textContent = d.ml_verdict + (d.ml_conf != null ? ` · ${Math.round(d.ml_conf * 100)}%` : "");
-    } else {
-      mlVal.className = "ml-val";
-      mlVal.textContent = "off";
-    }
-    updateVictim();
-    pushChart(d);
-  }
-
-  // victim color = worst of (detector load) and (service reachability from host probe).
-  // Slowloris keeps the detector at SAFE (low traffic) but the service goes DOWN -> shown here.
-  function updateVictim() {
-    const n = $("node-victim"), halo = n.querySelector(".vhalo"), st = $("victim-state");
-    n.classList.remove("warn", "crit", "down");
-    if (serviceDown) { n.classList.add("down"); st.textContent = "DOWN"; halo.classList.add("pulse"); }
-    else if (verdictLevel === "crit") { n.classList.add("crit"); st.textContent = "overloaded"; halo.classList.add("pulse"); }
-    else if (verdictLevel === "warn") { n.classList.add("warn"); st.textContent = "under attack"; halo.classList.add("pulse"); }
-    else { st.textContent = "idle"; halo.classList.remove("pulse"); }
-  }
-
-  // ---------- attack state / topology ----------
-  function onState(m) {
-    running = m.running;
-    ATTACKERS.forEach((a) => setLinkActive(a, false));
-    document.querySelectorAll(".btn-attack").forEach((b) => b.classList.remove("running"));
-    if (m.running) {
-      (m.attackers || []).forEach((a) => setLinkActive(a, true, m.attackType));
-      const btn = document.querySelector(`.btn-attack[data-scenario="${m.running}"]`);
-      if (btn) btn.classList.add("running");
-      $("btn-stop").disabled = false;
-    } else {
-      $("btn-stop").disabled = true;
-      verdictLevel = "idle";
-      updateVictim();
-    }
-  }
-
-  function onHealth(m) {
-    const ok = $("h-ok"), ms = $("h-ms");
-    ok.textContent = m.ok ? "200" : "DOWN";
-    ok.className = "tile-v small " + (m.ok ? "good" : "bad");
-    ms.textContent = (m.ms != null ? m.ms : "-") + "ms";
-    serviceDown = !m.ok;      // host can't reach the service -> victim shows DOWN
-    updateVictim();
-  }
-
-  // ---------- blocking toggle (closed-loop IPS) ----------
-  function applyBlocking(on) {
-    blocking = on;
-    const b = $("btn-block");
-    b.textContent = "Blocking: " + (on ? "ON" : "OFF");
-    b.classList.toggle("on", on);
-    b.setAttribute("aria-pressed", on ? "true" : "false");
-  }
-
-  // ---------- max-intensity toggle (hping3/ab line-rate vs scapy paced) ----------
-  function applyMaxIntensity(on) {
-    maxIntensity = on;
-    const b = $("btn-max");
-    b.textContent = "Max intensity: " + (on ? "ON" : "OFF");
-    b.classList.toggle("on", on);
-    b.setAttribute("aria-pressed", on ? "true" : "false");
-  }
-
-  function addLog(m) {
-    const ul = $("log");
-    // only stick to the newest line if the user is already near the bottom,
-    // so scrolling up to read history is not yanked back down.
-    const atBottom = ul.scrollHeight - ul.scrollTop - ul.clientHeight < 24;
-    const li = document.createElement("li");
-    li.className = m.level || "info";
-    const t = document.createElement("time"); t.textContent = m.time || "";
-    li.appendChild(t); li.appendChild(document.createTextNode(m.msg));
-    ul.appendChild(li);                                             // newest at the BOTTOM
-    while (ul.children.length > 60) ul.removeChild(ul.firstChild);  // drop the oldest (top)
-    if (atBottom) ul.scrollTop = ul.scrollHeight;                   // auto-scroll to newest
-  }
-
-  // ---------- network packets (rAF particle flow) ----------
-  const pktGroup = $("packets");
-  const linkEls = {};
-  ATTACKERS.forEach((a) => { linkEls[a] = $("link-" + a); });   // one line per attacker node
-  const pktState = {};
-
-  function setLinkActive(name, active, type) {
-    const link = linkEls[name], node = $("node-" + name);
-    link.classList.toggle("active", active);
-    link.classList.toggle("http", active && type === "http");
-    node.classList.toggle("active", active);
-    if (active && !REDUCE) ensurePackets(name, type); else clearPackets(name);
-  }
-  function ensurePackets(name, type) {
-    clearPackets(name);
-    const dots = [];
-    for (let i = 0; i < 4; i++) {
-      const c = document.createElementNS(SVGNS, "circle");
-      c.setAttribute("r", "3.2"); c.setAttribute("class", "packet");
-      c.style.fill = type === "http" ? "#fde68a" : "#fecaca";
-      pktGroup.appendChild(c);
-      dots.push({ el: c, phase: i / 4 });
-    }
-    pktState[name] = { dots, link: linkEls[name] };
-  }
-  function clearPackets(name) {
-    const st = pktState[name]; if (!st) return;
-    st.dots.forEach((d) => d.el.remove()); delete pktState[name];
-  }
-  let lastT = 0;
-  function animate(ts) {
-    const dt = Math.min((ts - lastT) / 1000 || 0, 0.1); lastT = ts;
-    for (const name in pktState) {
-      const st = pktState[name], L = st.link;
-      const x1 = +L.getAttribute("x1"), y1 = +L.getAttribute("y1");
-      const x2 = +L.getAttribute("x2"), y2 = +L.getAttribute("y2");
-      st.dots.forEach((d) => {
-        d.phase = (d.phase + dt * 0.55) % 1;
-        d.el.setAttribute("cx", x1 + (x2 - x1) * d.phase);
-        d.el.setAttribute("cy", y1 + (y2 - y1) * d.phase);
-        d.el.style.opacity = 0.95;
-      });
-    }
-    requestAnimationFrame(animate);
-  }
-  if (!REDUCE) requestAnimationFrame(animate);
-
-  // ---------- chart ----------
-  const canvas = $("chart"), ctx = canvas.getContext("2d");
-  const HIST = 60, data = { pps: [], syn: [], ack: [] };
-  function pushChart(d) {
-    data.pps.push(d.pps); data.syn.push(d.syn); data.ack.push(d.ack);
-    for (const k in data) if (data[k].length > HIST) data[k].shift();
-    drawChart();
-  }
-  function drawChart() {
-    const dpr = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
-    if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    const max = Math.max(50, ...data.pps, ...data.syn, ...data.ack);
-    ctx.strokeStyle = "rgba(255,255,255,.06)"; ctx.lineWidth = 1;
-    for (let i = 0; i <= 3; i++) { const y = Math.round(h * i / 3) + 0.5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
-    const line = (arr, color) => {
-      if (!arr.length) return;
-      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
-      arr.forEach((v, i) => { const x = w * i / (HIST - 1), y = h - (v / max) * (h - 8) - 4; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-      ctx.stroke();
+    ws.onopen = () => {
+      setPill("pill-ws", true, "Connected");
     };
-    line(data.pps, "#3b82f6"); line(data.syn, "#ef4444"); line(data.ack, "#22c55e");
+
+    ws.onclose = () => {
+      setPill("pill-ws", false, "Disconnected");
+      setPill("pill-detector", false, "Offline");
+      setTimeout(connect, 2000);
+    };
+
+    ws.onerror = () => {
+      setPill("pill-ws", false, "Error");
+    };
+
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        handleMessage(msg);
+      } catch (e) {
+        console.error("Failed to parse message:", e);
+      }
+    };
   }
-  addEventListener("resize", drawChart);
 
-  // ---------- controls ----------
-  document.querySelectorAll(".btn-attack").forEach((b) =>
-    b.addEventListener("click", () => send({ action: "attack", scenario: b.dataset.scenario })));
-  $("btn-stop").addEventListener("click", () => send({ action: "stop" }));
-  $("btn-block").addEventListener("click", () => send({ action: "blocking", on: !blocking }));
-  $("btn-max").addEventListener("click", () => send({ action: "intensity", on: !maxIntensity }));
+  function setPill(id, isOnline, text) {
+    const el = $(id);
+    if (!el) return;
+    el.className = "status-pill " + (isOnline ? "online" : "offline");
+    if (text) {
+      const txtEl = el.querySelector(".status-text");
+      if (txtEl) txtEl.textContent = text;
+    }
+  }
 
-  // ---------- init ----------
-  document.querySelector(".dring").classList.add("pulse");
-  drawChart();
+  // ---------- Message Dispatcher ----------
+  function handleMessage(msg) {
+    switch (msg.type) {
+      case "snapshot":
+        setPill("pill-detector", !!msg.detectorOnline, msg.detectorOnline ? "Detector Online" : "Detector Standby");
+        if (msg.events && Array.isArray(msg.events)) {
+          const list = $("log-list");
+          list.innerHTML = "";
+          msg.events.forEach((evt) => appendEventLog(evt, false));
+        }
+        break;
+
+      case "detector":
+        setPill("pill-detector", !!msg.up, msg.up ? "Detector Online" : "Detector Offline");
+        break;
+
+      case "metric":
+        onMetricReceived(msg.data);
+        break;
+
+      case "event":
+        appendEventLog(msg.data, true);
+        break;
+
+      case "health":
+        onHealthReceived(msg);
+        break;
+
+      case "clear_logs":
+        $("log-list").innerHTML = "";
+        break;
+    }
+  }
+
+  // ---------- Metric Handler & UI Updates ----------
+  function onMetricReceived(d) {
+    setPill("pill-detector", true, "Detector Active");
+
+    // 1. Update rolling history
+    METRICS.forEach((m) => {
+      let val = d[m.key];
+      if (val === undefined || val === null) {
+        if (m.key === "syn_ratio") val = (d.syn || 0) / Math.max(d.pps || 0, 1.0);
+        else if (m.key === "ack_syn_ratio") val = (d.ack || 0) / Math.max(d.syn || 0, 1.0);
+        else val = 0;
+      }
+      history[m.key].push(Number(val));
+      if (history[m.key].length > HISTORY_LEN) history[m.key].shift();
+
+      // Update text values
+      const valEl = $(m.valId);
+      if (valEl) {
+        const displayVal = m.decimals > 0 ? Number(val).toFixed(m.decimals) : Math.round(Number(val));
+        valEl.innerHTML = `${displayVal} <span class="unit">${m.unit}</span>`;
+      }
+
+      // Update min/max footer
+      const statsEl = $(m.statsId);
+      if (statsEl) {
+        const arr = history[m.key];
+        const maxVal = Math.max(...arr);
+        const avgVal = arr.reduce((a, b) => a + b, 0) / arr.length;
+        if (m.decimals > 0) {
+          statsEl.textContent = `max: ${maxVal.toFixed(m.decimals)} · avg: ${avgVal.toFixed(m.decimals)}`;
+        } else {
+          statsEl.textContent = `max: ${Math.round(maxVal)} · avg: ${Math.round(avgVal)}`;
+        }
+      }
+    });
+
+    // 2. Update Verdict Banner
+    updateVerdictBanner(d);
+
+    // 3. Update Attacker IPs Table
+    updateAttackerTable(d);
+
+    // 4. Render Canvas Charts
+    renderAllCharts();
+  }
+
+  // ---------- Update Classification Banner ----------
+  function updateVerdictBanner(d) {
+    const banner = $("main-verdict-banner");
+    const primaryText = $("verdict-primary-text");
+    const attackTypeTag = $("verdict-attack-type");
+    const descText = $("verdict-desc-text");
+    const icon = $("verdict-icon");
+
+    const ruleVal = $("rule-val");
+    const mlVal = $("ml-val");
+    const mlConf = $("ml-conf");
+    const nsrcVal = $("nsrc-val");
+    const entropySub = $("entropy-sub");
+
+    const isTriggered = !!d.triggered;
+    const verdict = isTriggered ? (d.verdict || "DoS") : "BENIGN";
+    const ddos = verdict === "DDoS";
+
+    let attackType = d.attackType;
+    if (!attackType) {
+      if (d.syn_flood) attackType = "SYN Flood (L4)";
+      else if (d.udp_flood) attackType = "UDP Flood (L4)";
+      else if (isTriggered) attackType = "HTTP Flood (L7)";
+    }
+
+    if (!isTriggered) {
+      banner.className = "verdict-banner safe";
+      primaryText.textContent = "BENIGN";
+      attackTypeTag.textContent = "An toàn · Không có tấn công";
+      descText.textContent = "Lưu lượng mạng trong giới hạn an toàn. Không phát hiện bất thường.";
+      icon.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>`;
+      ruleVal.textContent = "BENIGN";
+      ruleVal.style.color = "#15803d";
+    } else {
+      banner.className = "verdict-banner " + (ddos ? "crit" : "warn");
+      primaryText.textContent = verdict;
+      attackTypeTag.textContent = attackType || "Threat Detected";
+      descText.textContent = ddos
+        ? `Tấn công Từ chối Dịch vụ Phân tán (DDoS) từ ${d.n_src} địa chỉ nguồn khác nhau!`
+        : `Tấn công Từ chối Dịch vụ (DoS) tập trung từ 1 địa chỉ nguồn!`;
+      icon.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>`;
+      ruleVal.textContent = verdict + (attackType ? ` [${attackType.split(' ')[0]}]` : "");
+      ruleVal.style.color = ddos ? "#b91c1c" : "#b45309";
+    }
+
+    // Machine Learning Prediction
+    if (d.ml_verdict) {
+      const mlLvl = d.ml_verdict === "DDoS" ? "#b91c1c" : (d.ml_verdict === "DoS" ? "#b45309" : "#15803d");
+      mlVal.textContent = d.ml_verdict;
+      mlVal.style.color = mlLvl;
+      mlConf.textContent = d.ml_conf != null ? `Confidence: ${Math.round(d.ml_conf * 100)}%` : "Active";
+    } else {
+      mlVal.textContent = "Standby (No model)";
+      mlVal.style.color = "#64748b";
+      mlConf.textContent = "Run train_window.py to activate";
+    }
+
+    // Source count & Entropy
+    nsrcVal.textContent = d.n_src || 0;
+    entropySub.textContent = `H(src): ${(d.h_src || 0).toFixed(2)} | H(dst): ${(d.h_dport || 0).toFixed(2)}`;
+  }
+
+  // ---------- Update Attacker IPs Table ----------
+  function updateAttackerTable(d) {
+    const tbody = $("attacker-table-body");
+    const countBadge = $("active-ip-count");
+    const spoofBanner = $("spoof-banner");
+    const spoofBannerText = $("spoof-banner-text");
+
+    const totalPps = Math.max(d.pps || 0, 1);
+    const topSources = d.top_sources || [];
+    const nSrc = d.n_src || 0;
+
+    countBadge.textContent = `${nSrc} IPs Active`;
+
+    // Show spoof warning banner if dispersion is high (> 10 sources)
+    if (nSrc > 10) {
+      spoofBanner.style.display = "flex";
+      spoofBannerText.textContent = `Cảnh báo IP Spoofing / Phân tán cao: Có ${nSrc.toLocaleString()} địa chỉ IP nguồn ngẫu nhiên trong cửa sổ hiện tại. Dưới đây là Top nguồn lưu lượng lớn nhất.`;
+    } else {
+      spoofBanner.style.display = "none";
+    }
+
+    if (topSources.length === 0) {
+      tbody.innerHTML = `
+        <tr class="empty-row">
+          <td colspan="5">
+            <div class="empty-state">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <p>Hiện không có lưu lượng mạng đáng chú ý. Hệ thống an toàn.</p>
+            </div>
+          </td>
+        </tr>`;
+      return;
+    }
+
+    let rowsHtml = "";
+    topSources.forEach((src, idx) => {
+      const pps = src.pps || 0;
+      const count = src.count || 0;
+      const percent = Math.min(100, Math.round((pps / totalPps) * 100));
+
+      const isSuspect = d.triggered && pps >= 20;
+      const badgeHtml = isSuspect
+        ? `<span class="ip-badge">${d.verdict === "DDoS" ? "DDoS Source" : "Attacker"}</span>`
+        : `<span class="badge badge-subtle">Active</span>`;
+
+      rowsHtml += `
+        <tr>
+          <td class="mono" style="color: #64748b; font-weight: 600;">#${idx + 1}</td>
+          <td>
+            <div class="ip-cell">
+              <span class="ip-text">${src.ip}</span>
+              ${badgeHtml}
+            </div>
+          </td>
+          <td class="mono font-semibold" style="color: ${isSuspect ? '#dc2626' : '#1e293b'};">${pps.toLocaleString()} <span style="font-size: 0.72rem; color: #94a3b8;">pps</span></td>
+          <td class="mono" style="color: #64748b;">${count.toLocaleString()}</td>
+          <td>
+            <div class="bar-wrap">
+              <div class="bar-track">
+                <div class="bar-fill" style="width: ${percent}%; background: ${isSuspect ? '#ef4444' : '#3b82f6'};"></div>
+              </div>
+              <span class="mono" style="font-size: 0.75rem; color: #64748b; min-width: 32px;">${percent}%</span>
+            </div>
+          </td>
+        </tr>`;
+    });
+
+    tbody.innerHTML = rowsHtml;
+  }
+
+  // ---------- Security Event Log ----------
+  function appendEventLog(evt, prepend = true) {
+    const list = $("log-list");
+    if (!list) return;
+
+    const item = document.createElement("div");
+    item.className = `log-item ${evt.level || "info"}`;
+    item.innerHTML = `
+      <div class="log-time">${evt.time || new Date().toLocaleTimeString()}</div>
+      <div class="log-body">
+        <div class="log-title">${escapeHtml(evt.title || "Event")}</div>
+        <div class="log-detail">${escapeHtml(evt.detail || "")}</div>
+      </div>
+    `;
+
+    if (prepend && list.firstChild) {
+      list.insertBefore(item, list.firstChild);
+    } else {
+      list.appendChild(item);
+    }
+
+    // Limit log elements in DOM to 100
+    while (list.children.length > 100) {
+      list.removeChild(list.lastChild);
+    }
+  }
+
+  $("btn-clear-logs").addEventListener("click", () => {
+    $("log-list").innerHTML = "";
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ action: "clear_logs" }));
+    }
+  });
+
+  // ---------- Victim Service Health ----------
+  function onHealthReceived(msg) {
+    const badge = $("health-status");
+    const msEl = $("health-ms");
+    if (!badge || !msEl) return;
+
+    if (msg.ok) {
+      badge.className = "health-badge up";
+      badge.textContent = `UP (${msg.status})`;
+      msEl.textContent = msg.ms != null ? `${msg.ms} ms` : "OK";
+    } else {
+      badge.className = "health-badge down";
+      badge.textContent = msg.status === "ERR" ? "DOWN (Offline)" : `ERR (${msg.status})`;
+      msEl.textContent = msg.ms ? `${msg.ms} ms` : "No reply";
+    }
+  }
+
+  // ---------- High-Performance HTML5 Canvas Charts ----------
+  function renderAllCharts() {
+    METRICS.forEach((m) => {
+      renderSparkline(m.id, history[m.key], m.color, m.decimals);
+    });
+  }
+
+  function renderSparkline(canvasId, data, color, decimals) {
+    const canvas = $(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Handle high-DPI retina display
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.parentElement.clientWidth || 380;
+    const height = 110;
+
+    if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+    }
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const padLeft = 10;
+    const padRight = 10;
+    const padTop = 12;
+    const padBottom = 16;
+    const plotW = width - padLeft - padRight;
+    const plotH = height - padTop - padBottom;
+
+    const maxVal = Math.max(...data, 1);
+    const minVal = 0;
+    const range = maxVal - minVal || 1;
+
+    // 1. Draw subtle horizontal grid lines (3 lines)
+    ctx.strokeStyle = "#f1f5f9";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 2; i++) {
+      const y = padTop + (plotH / 2) * i;
+      ctx.beginPath();
+      ctx.moveTo(padLeft, y);
+      ctx.lineTo(width - padRight, y);
+      ctx.stroke();
+    }
+
+    // 2. Map coordinates
+    const points = data.map((val, idx) => {
+      const x = padLeft + (idx / (HISTORY_LEN - 1)) * plotW;
+      const y = padTop + plotH - ((val - minVal) / range) * plotH;
+      return { x, y };
+    });
+
+    if (points.length < 2) {
+      ctx.restore();
+      return;
+    }
+
+    // 3. Draw gradient filled area
+    const grad = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
+    grad.addColorStop(0, hexToRgba(color, 0.22));
+    grad.addColorStop(1, hexToRgba(color, 0.0));
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, padTop + plotH);
+    ctx.lineTo(points[0].x, points[0].y);
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const xc = (points[i].x + points[i + 1].x) / 2;
+      const yc = (points[i].y + points[i + 1].y) / 2;
+      ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+    }
+    ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+    ctx.lineTo(points[points.length - 1].x, padTop + plotH);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // 4. Draw smooth stroke curve
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 0; i < points.length - 1; i++) {
+      const xc = (points[i].x + points[i + 1].x) / 2;
+      const yc = (points[i].y + points[i + 1].y) / 2;
+      ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+    }
+    ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 5. Draw pulse point at latest value
+    const lastPoint = points[points.length - 1];
+    ctx.beginPath();
+    ctx.arc(lastPoint.x, lastPoint.y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(lastPoint.x, lastPoint.y, 6, 0, Math.PI * 2);
+    ctx.strokeStyle = hexToRgba(color, 0.35);
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Helper
+  function hexToRgba(hex, alpha) {
+    hex = hex.replace("#", "");
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  // Handle window resize for canvas responsiveness
+  window.addEventListener("resize", () => {
+    renderAllCharts();
+  });
+
+  // Start connection
   connect();
 })();

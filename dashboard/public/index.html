@@ -1,147 +1,361 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="vi">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DoS/DDoS Defense Console</title>
+  <title>Victim Defense Console — DoS/DDoS Real-time Monitor</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="console"><!-- topbar + panels: fills exactly one screen; log is below it -->
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <div>
-        <h1>DoS/DDoS Defense Console</h1>
-        <p class="sub">Isolated lab &middot; localhost only &middot; PBL3</p>
-      </div>
-    </div>
-    <div class="status" role="status" aria-live="polite">
-      <span class="pill" id="pill-docker"><span class="dot"></span> Docker</span>
-      <span class="pill" id="pill-detector"><span class="dot"></span> Detector</span>
-      <span class="pill" id="pill-ws"><span class="dot"></span> Link</span>
-    </div>
-  </header>
-
-  <main class="grid">
-    <!-- ATTACK PANEL -->
-    <section class="panel" id="attack-panel" aria-labelledby="h-attack">
-      <h2 id="h-attack" class="panel-title attack">Attack</h2>
-
-      <div class="verdict" id="verdict">
-        <div class="verdict-row"><span class="vtag">rule</span><span class="verdict-label" id="verdict-label">SAFE</span></div>
-        <span class="verdict-sub" id="verdict-sub">no attack detected</span>
-        <div class="verdict-ml"><span class="vtag">ML</span><span class="ml-val" id="ml-val">-</span></div>
-      </div>
-
-      <div class="btn-col">
-        <button class="btn btn-attack" data-scenario="A">
-          <b>A</b> DoS &middot; 1 source SYN
-        </button>
-        <button class="btn btn-attack" data-scenario="B">
-          <b>B</b> DDoS &middot; 6 source SYN + spoof
-        </button>
-        <button class="btn btn-attack" data-scenario="C">
-          <b>C</b> DDoS &middot; 6 source HTTP (L7)
-        </button>
-        <button class="btn btn-stop" id="btn-stop" disabled>&#9632; Stop attack</button>
-        <button class="btn btn-block" id="btn-block" aria-pressed="false">Blocking: OFF</button>
-        <button class="btn btn-max" id="btn-max" aria-pressed="false">Max intensity: OFF</button>
-      </div>
-
-      <div class="metrics">
-        <div class="tile"><span class="tile-k">pps</span><span class="tile-v" id="m-pps">0</span></div>
-        <div class="tile"><span class="tile-k">syn/s</span><span class="tile-v" id="m-syn">0</span></div>
-        <div class="tile"><span class="tile-k">ack/s</span><span class="tile-v" id="m-ack">0</span></div>
-        <div class="tile"><span class="tile-k">n_src</span><span class="tile-v" id="m-nsrc">0</span></div>
-        <div class="tile"><span class="tile-k">H(src)</span><span class="tile-v" id="m-hsrc">0.00</span></div>
-        <div class="tile"><span class="tile-k">thr pps/syn</span><span class="tile-v small" id="m-thr">40/25</span></div>
-        <div class="tile"><span class="tile-k">blocked/s</span><span class="tile-v" id="m-blocked">0</span></div>
-      </div>
-    </section>
-
-    <!-- NETWORK VIEW -->
-    <section class="panel center" id="network-panel" aria-labelledby="h-net">
-      <h2 id="h-net" class="panel-title">Network View</h2>
-      <div class="net-wrap">
-        <svg id="net" viewBox="0 0 600 360" preserveAspectRatio="xMidYMid meet" aria-label="Lab network topology">
-          <defs>
-            <radialGradient id="glowGreen" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#22c55e" stop-opacity="0.9"/>
-              <stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>
-            </radialGradient>
-          </defs>
-          <!-- links (attacker -> victim) -->
-          <g id="links" stroke-linecap="round">
-            <line class="link" id="link-attacker1" x1="95" y1="35"  x2="410" y2="150"/>
-            <line class="link" id="link-attacker2" x1="95" y1="92"  x2="410" y2="150"/>
-            <line class="link" id="link-attacker3" x1="95" y1="149" x2="410" y2="150"/>
-            <line class="link" id="link-attacker4" x1="95" y1="206" x2="410" y2="150"/>
-            <line class="link" id="link-attacker5" x1="95" y1="263" x2="410" y2="150"/>
-            <line class="link" id="link-attacker6" x1="95" y1="320" x2="410" y2="150"/>
-          </g>
-          <g id="packets"></g>
-          <!-- detector link -->
-          <line class="watchlink" x1="440" y1="186" x2="440" y2="262"/>
-
-          <!-- nodes -->
-          <g class="node attacker" id="node-attacker1" transform="translate(75,35)">
-            <circle r="20"/><text class="nlabel" y="-25">attacker1</text><text class="nip" y="4">.21</text>
-          </g>
-          <g class="node attacker" id="node-attacker2" transform="translate(75,92)">
-            <circle r="20"/><text class="nlabel" y="-25">attacker2</text><text class="nip" y="4">.22</text>
-          </g>
-          <g class="node attacker" id="node-attacker3" transform="translate(75,149)">
-            <circle r="20"/><text class="nlabel" y="-25">attacker3</text><text class="nip" y="4">.23</text>
-          </g>
-          <g class="node attacker" id="node-attacker4" transform="translate(75,206)">
-            <circle r="20"/><text class="nlabel" y="-25">attacker4</text><text class="nip" y="4">.24</text>
-          </g>
-          <g class="node attacker" id="node-attacker5" transform="translate(75,263)">
-            <circle r="20"/><text class="nlabel" y="-25">attacker5</text><text class="nip" y="4">.25</text>
-          </g>
-          <g class="node attacker" id="node-attacker6" transform="translate(75,320)">
-            <circle r="20"/><text class="nlabel" y="-25">attacker6</text><text class="nip" y="4">.26</text>
-          </g>
-          <g class="node victim" id="node-victim" transform="translate(440,150)">
-            <circle class="vhalo" r="46"/>
-            <circle class="vcore" r="34"/>
-            <text class="nlabel" y="-44">victim (nginx)</text>
-            <text class="nip" y="-2">.10</text>
-            <text class="vstate" id="victim-state" y="14">idle</text>
-          </g>
-          <g class="node detector" id="node-detector" transform="translate(440,290)">
-            <circle class="dring" r="24"/>
-            <circle r="18"/>
-            <text class="nlabel" y="34">detector</text>
-          </g>
-        </svg>
-      </div>
-      <div class="chart-wrap">
-        <div class="chart-head">
-          <span>Traffic to victim (last 60s)</span>
-          <span class="legend">
-            <i class="lg pps"></i>pps <i class="lg syn"></i>syn/s <i class="lg ack"></i>ack/s
-          </span>
+  <div class="app-container">
+    <!-- Topbar Header -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="shield-icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
         </div>
-        <canvas id="chart" width="900" height="150"></canvas>
+        <div>
+          <div class="title-row">
+            <h1>Victim Defense Console</h1>
+            <span class="badge badge-subtle">PBL3 &middot; SOC Monitor</span>
+          </div>
+          <p class="subtitle">Bảng điều khiển giám sát & phát hiện DoS/DDoS thời gian thực trên máy Nạn nhân (Victim)</p>
+        </div>
       </div>
 
-      <div class="health">
-        <div class="health-title">Service health (can it serve?)</div>
-        <div class="metrics two">
-          <div class="tile"><span class="tile-k">status</span><span class="tile-v small" id="h-ok">-</span></div>
-          <div class="tile"><span class="tile-k">latency</span><span class="tile-v" id="h-ms">-</span></div>
+      <div class="topbar-right">
+        <!-- Live System Status Badges -->
+        <div class="status-group">
+          <div class="status-pill" id="pill-ws">
+            <span class="status-dot"></span>
+            <span class="status-text">WebSocket</span>
+          </div>
+          <div class="status-pill" id="pill-detector">
+            <span class="status-dot"></span>
+            <span class="status-text">Detector Engine</span>
+          </div>
+          <div class="health-card" id="card-health" title="Trạng thái Web Server Victim">
+            <span class="health-label">Web Service:</span>
+            <span class="health-badge" id="health-status">Checking...</span>
+            <span class="health-latency" id="health-ms">- ms</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Alert Banner & Dual Verdict Bar -->
+    <section class="verdict-banner safe" id="main-verdict-banner">
+      <div class="verdict-main">
+        <div class="verdict-icon-wrap" id="verdict-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        </div>
+        <div class="verdict-info">
+          <div class="verdict-headline">
+            <span class="verdict-primary" id="verdict-primary-text">BENIGN</span>
+            <span class="verdict-tag" id="verdict-attack-type">An toàn &middot; Không có tấn công</span>
+          </div>
+          <p class="verdict-desc" id="verdict-desc-text">Lưu lượng mạng trong giới hạn bình thường. Không phát hiện hành vi bất thường.</p>
+        </div>
+      </div>
+
+      <div class="verdict-meta">
+        <!-- Rule vs ML Comparison -->
+        <div class="verdict-box">
+          <span class="vbox-title">Rule-Based Verdict</span>
+          <div class="vbox-val" id="rule-val">BENIGN</div>
+          <span class="vbox-sub" id="rule-sub">Ngưỡng: pps &ge; 40 hoặc syn &ge; 25</span>
+        </div>
+        <div class="verdict-box">
+          <span class="vbox-title">Machine Learning (AI)</span>
+          <div class="vbox-val" id="ml-val">BENIGN</div>
+          <span class="vbox-sub" id="ml-conf">Confidence: --%</span>
+        </div>
+        <div class="verdict-box">
+          <span class="vbox-title">Tổng Nguồn IP Active</span>
+          <div class="vbox-val mono" id="nsrc-val">0</div>
+          <span class="vbox-sub" id="entropy-sub">Entropy H(src): 0.00</span>
         </div>
       </div>
     </section>
-  </main>
-  </div><!-- /.console -->
 
-  <section class="logbar" aria-label="Event log">
-    <div class="log-head">Event log</div>
-    <ul id="log"></ul>
-  </section>
+    <!-- 8 + 1 Features Grid (Đồ thị thời gian thực) -->
+    <section class="section-container">
+      <div class="section-header">
+        <div>
+          <h2>Đồ thị Đặc trưng Thời gian thực (Real-time Feature Metrics)</h2>
+          <p class="section-sub">Theo dõi 8 đặc trưng cốt lõi của mô hình ML và lưu lượng UDP trong 60 giây gần nhất</p>
+        </div>
+        <div class="metric-legend">
+          <span class="legend-item"><span class="legend-dot" style="background:#4f46e5;"></span> L4/L7 Flow</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#0284c7;"></span> UDP</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#d97706;"></span> Entropy</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#e11d48;"></span> Sources & Ratios</span>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <!-- 1. PPS -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#1 &middot; PPS</span>
+              <h3 class="chart-title">Tổng Lưu lượng Gói</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-pps" style="color: #4f46e5;">0 <span class="unit">pkts/s</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-pps" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">Packets per second</span>
+            <span class="footer-stats" id="stats-pps">max: 0 &middot; avg: 0</span>
+          </div>
+        </div>
+
+        <!-- 2. SYN_S -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#2 &middot; SYN/s</span>
+              <h3 class="chart-title">Tốc độ Gói SYN</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-syn" style="color: #7c3aed;">0 <span class="unit">syn/s</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-syn" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">Dấu hiệu SYN Flood</span>
+            <span class="footer-stats" id="stats-syn">max: 0 &middot; avg: 0</span>
+          </div>
+        </div>
+
+        <!-- 3. ACK_S -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#3 &middot; ACK/s</span>
+              <h3 class="chart-title">Tốc độ Gói ACK</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-ack" style="color: #059669;">0 <span class="unit">ack/s</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-ack" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">Dấu hiệu HTTP Flood (L7)</span>
+            <span class="footer-stats" id="stats-ack">max: 0 &middot; avg: 0</span>
+          </div>
+        </div>
+
+        <!-- 4. UDP_S -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#4 &middot; UDP/s</span>
+              <h3 class="chart-title">Tốc độ Gói UDP</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-udp" style="color: #0284c7;">0 <span class="unit">udp/s</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-udp" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">Dấu hiệu UDP Volumetric Flood</span>
+            <span class="footer-stats" id="stats-udp">max: 0 &middot; avg: 0</span>
+          </div>
+        </div>
+
+        <!-- 5. H_SRC -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#5 &middot; H(src)</span>
+              <h3 class="chart-title">Shannon Entropy IP Nguồn</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-hsrc" style="color: #d97706;">0.00 <span class="unit">bits</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-hsrc" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">Độ phân tán nguồn (0 = 1 IP, &gt;6 = Spoof)</span>
+            <span class="footer-stats" id="stats-hsrc">max: 0.00</span>
+          </div>
+        </div>
+
+        <!-- 6. H_DPORT -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#6 &middot; H(dport)</span>
+              <h3 class="chart-title">Shannon Entropy Port Đích</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-hdport" style="color: #ea580c;">0.00 <span class="unit">bits</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-hdport" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">Phân tán port (0 = tập trung port 80)</span>
+            <span class="footer-stats" id="stats-hdport">max: 0.00</span>
+          </div>
+        </div>
+
+        <!-- 7. N_SRC -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#7 &middot; n_src</span>
+              <h3 class="chart-title">Số Lượng IP Nguồn Duy Nhất</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-nsrc" style="color: #e11d48;">0 <span class="unit">IPs</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-nsrc" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">&ge; 2 sources &rArr; DDoS, 1 &rArr; DoS</span>
+            <span class="footer-stats" id="stats-nsrc">max: 0</span>
+          </div>
+        </div>
+
+        <!-- 8. SYN_RATIO -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#8 &middot; syn_ratio</span>
+              <h3 class="chart-title">Tỷ lệ Gói SYN / Tổng Gói</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-synratio" style="color: #c026d3;">0.00 <span class="unit">ratio</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-synratio" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">syn_s / max(pps, 1.0)</span>
+            <span class="footer-stats" id="stats-synratio">cur: 0.00</span>
+          </div>
+        </div>
+
+        <!-- 9. ACK_SYN_RATIO -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#9 &middot; ack_syn_ratio</span>
+              <h3 class="chart-title">Tỷ lệ Gói ACK / Gói SYN</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-acksynratio" style="color: #0d9488;">0.00 <span class="unit">ratio</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-acksynratio" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">&lt; 0.2 &rArr; SYN Flood (half-open)</span>
+            <span class="footer-stats" id="stats-acksynratio">cur: 0.00</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom Split Section: Attacker IPs & Security Event Log -->
+    <section class="section-container split-section">
+      <!-- Left: Attacker IPs Table -->
+      <div class="panel-card panel-left">
+        <div class="panel-card-header">
+          <div class="panel-title-group">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="panel-icon text-red">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="22" y1="12" x2="18" y2="12"/>
+              <line x1="6" y1="12" x2="2" y2="12"/>
+              <line x1="12" y1="6" x2="12" y2="2"/>
+              <line x1="12" y1="22" x2="12" y2="18"/>
+            </svg>
+            <div>
+              <h3>Địa chỉ IP Tấn công (Top Active Attacker IPs)</h3>
+              <p class="panel-desc">Danh sách các địa chỉ IP nguồn đang phát sinh lưu lượng lớn nhất vào máy Victim</p>
+            </div>
+          </div>
+          <span class="badge badge-neutral mono" id="active-ip-count">0 IPs Active</span>
+        </div>
+
+        <!-- Dynamic High Entropy / Spoof Notice -->
+        <div class="spoof-banner" id="spoof-banner" style="display: none;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span id="spoof-banner-text">Phát hiện tấn công giả mạo IP nguồn ngẫu nhiên (IP Spoofing)! Đang hiển thị Top nguồn mẫu.</span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 50px;">#</th>
+                <th>Địa chỉ IP Nguồn (Source IP)</th>
+                <th style="width: 140px;">Tốc độ (Rate)</th>
+                <th style="width: 120px;">Số gói (Packets)</th>
+                <th style="width: 140px;">Tỷ trọng (%)</th>
+              </tr>
+            </thead>
+            <tbody id="attacker-table-body">
+              <tr class="empty-row">
+                <td colspan="5">
+                  <div class="empty-state">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/>
+                      <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <p>Hiện không có lưu lượng tấn công đáng chú ý. Hệ thống an toàn.</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right: Security Event Log -->
+      <div class="panel-card panel-right">
+        <div class="panel-card-header">
+          <div class="panel-title-group">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="panel-icon text-indigo">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <div>
+              <h3>Nhật ký Sự kiện Bảo mật (Security Event Log)</h3>
+              <p class="panel-desc">Lịch sử phát hiện tấn công, thay đổi trạng thái và sự cố mạng</p>
+            </div>
+          </div>
+          <button class="btn-text" id="btn-clear-logs" title="Xóa lịch sử log">Xóa Log</button>
+        </div>
+
+        <div class="log-container" id="log-list">
+          <!-- Dynamically populated events -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer info -->
+    <footer class="footer">
+      <p>DoS/DDoS Attack Simulation & Detection Lab &middot; DUT PBL3 &middot; Running in Bare-metal Host Environment</p>
+    </footer>
+  </div>
 
   <script src="app.js"></script>
 </body>

@@ -260,16 +260,37 @@ def main():
             csvf.write(row + "\n")
             csvf.flush()
 
+        syn_ratio = round(syn_s / max(pps, 1.0), 3)
+        ack_syn_ratio = round(ack_s / max(syn_s, 1.0), 3)
+
         if args.stream:
+            # Dinh dang IP (ho tro ca str scapy lan int network-order tu ebpf)
+            def _fmt_ip(ip):
+                if isinstance(ip, int):
+                    import socket, struct
+                    try:
+                        return socket.inet_ntoa(struct.pack("I", ip))
+                    except Exception:
+                        return str(ip)
+                return str(ip)
+
+            top_sources = [
+                {"ip": _fmt_ip(ip), "pps": round(c / args.interval), "count": c}
+                for ip, c in snap_src.most_common(10)
+            ]
+
             # 1 JSON/dong cho dashboard (stdout sach, de backend parse)
             print(json.dumps({
                 "time": time.strftime("%H:%M:%S"),
                 "pps": round(pps), "syn": round(syn_s), "ack": round(ack_s), "udp": round(udp_s),
                 "h_src": round(h_src, 3), "h_dport": round(h_dport, 3), "n_src": n_src,
-                "triggered": bool(triggered), "verdict": verdict, "syn_flood": syn_flood, "udp_flood": udp_flood,
+                "syn_ratio": syn_ratio, "ack_syn_ratio": ack_syn_ratio,
+                "triggered": bool(triggered), "verdict": verdict or "BENIGN",
+                "syn_flood": syn_flood, "udp_flood": udp_flood,
                 "thr_pps": round(thr_pps, 1), "thr_syn": round(thr_syn, 1),
                 "ml_verdict": ml_verdict, "ml_conf": round(ml_conf, 3) if ml_conf is not None else None,
                 "blocked_src": blocked_src, "blocked_pps": round(blocked_pps),
+                "top_sources": top_sources,
             }), flush=True)
         else:
             ml_txt = ""
