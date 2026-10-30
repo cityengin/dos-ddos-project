@@ -2,7 +2,7 @@
 
 > Tài liệu nội bộ nhóm – Đồ án PBL3 (Khoa Công nghệ Thông tin, Đại học Bách khoa – Đại học Đà Nẵng).  
 > Mục đích: Cung cấp đầy đủ nền tảng lý thuyết mạng, toán học entropy, giải thuật phát hiện và phòng thủ cho các thành viên trước khi đọc mã nguồn và tham gia bảo vệ đồ án.  
-> Bản Word tham khảo: [`TaiLieu_LyThuyet_DoS_DDoS.docx`](../TaiLieu_LyThuyet_DoS_DDoS.docx).
+> Bản Word tham khảo: [`TaiLieu_LyThuyet_DoS_DDoS.docx`](TaiLieu_LyThuyet_DoS_DDoS.docx).
 
 > ⚠️ **Tuyên bố trách nhiệm – Chỉ dùng cho mục đích giáo dục & nghiên cứu phòng thủ:**  
 > Toàn bộ các công cụ tấn công và thử nghiệm trong đề tài được thiết kế để **chỉ chạy trong môi trường lab cô lập** (lab ảo hóa Docker trên dải mạng riêng `172.30.0.0/24` hoặc mạng WiFi/LAN thử nghiệm nội bộ). Tuyệt đối không sử dụng bất kỳ công cụ nào để nhắm vào máy chủ, thiết bị hoặc hạ tầng mạng thực tế mà không có sự cho phép bằng văn bản.

@@ -284,7 +284,7 @@ First tagged release. Captures the current state of the lab, attacks, detector, 
 - Analysis tools: timeline plots (`analysis/plot_attack.py`) and evaluation metrics —
   detection time, false positives/negatives, classification table (`analysis/metrics.py`).
 - Finalized experiment dataset and figures used in the report (`results/final/`).
-- Project documentation: `README.md`, theory document `TaiLieu_LyThuyet_DoS_DDoS.docx`,
+- Project documentation: `README.md`, theory document `docs/TaiLieu_LyThuyet_DoS_DDoS.docx`,
   and internal status notes `PROJECT_STATUS.md`.
 - Repository scaffolding: `.gitignore`, `CONTRIBUTING.md` (Conventional Commits + workflow),
   and an ASCII project banner (`banner.txt`) printed by the demo.
