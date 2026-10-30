@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A/B/C there are unchanged. Adds `top=<share>` to the DoS/DDoS alert line; CSV / `--stream` / ML /
   `--adaptive` / `[SYN flood]` / `[UDP flood]` are all unchanged. Validated live on 2 real machines
   over WiFi: A→DoS, B(spoof)→DDoS, C(1 source)→DoS, D(UDP)→DoS.
+- **`detector.py --ml` now supplies the full 10-feature vector** — `udp_s` and `rate_per_src` were
+  added to the live ML feature dict to match `window_features.FEATURES`, so `--ml` loads the
+  pcap-trained 10-feature window model without a `KeyError`, while staying back-compatible with the
+  old 8-feature model (the vector is built from `ml["features"]`). `detection/window_model.joblib` is
+  retrained on the 3-run pcap dataset (3362 windows, sklearn 1.9.1). Live sanity passed: idle→BENIGN,
+  1-source SYN→DoS, spoofed SYN→DDoS for both the rule and the ML head.
 
 ### Added
 

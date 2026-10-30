@@ -252,12 +252,15 @@ def main():
             blocked_pps = ebpf.last_blocked / args.interval
 
         # ====== ML song song (neu co --ml) ======
-        # Dung vector dac trung DUNG THU TU model da luu; tinh 2 ty le dan xuat giong luc train.
+        # Dung vector dac trung DUNG THU TU model da luu; cong thuc KHOP window_features.py
+        # (nguon chan ly dung chung voi bo trich pcap luc train). Cung cap du 10 FEATURES hien tai;
+        # vec chi lay theo ml["features"] nen van tuong thich model cu (8 feature, bo udp_s/rate_per_src).
         ml_verdict, ml_conf = None, None
         if ml:
-            feat = {"pps": pps, "syn_s": syn_s, "ack_s": ack_s, "h_src": h_src,
-                    "h_dport": h_dport, "n_src": n_src,
-                    "syn_ratio": syn_s / max(pps, 1.0), "ack_syn_ratio": ack_s / max(syn_s, 1.0)}
+            feat = {"pps": pps, "syn_s": syn_s, "ack_s": ack_s, "udp_s": udp_s,
+                    "h_src": h_src, "h_dport": h_dport, "n_src": n_src,
+                    "syn_ratio": syn_s / max(pps, 1.0), "ack_syn_ratio": ack_s / max(syn_s, 1.0),
+                    "rate_per_src": pps / max(n_src, 1)}
             vec = [[feat[k] for k in ml["features"]]]
             ml_verdict = str(ml["model"].predict(vec)[0])
             try:
