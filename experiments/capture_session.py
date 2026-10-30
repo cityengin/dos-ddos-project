@@ -57,7 +57,13 @@ def c_udp(pps=None, spoof=False):
     return a
 
 def c_http(threads, dur, pps=0):
-    return ["ab", "-k", "-c", str(threads), "-t", str(dur), "-n", "10000000", "http://%s/" % VICTIM]
+    # HTTP paced cho DATASET: http_flood.py --pps gioi han REQUEST/giay -> pps goi ve dai THUC TE
+    # (tranh chuc nghin pps phi thuc te cua bridge Docker; khop mien voi demo 2 may WiFi that).
+    # Che do line-rate 'ab' danh cho DEMO (run_demo.sh / run_scenarios --intensity max), KHONG dung o day.
+    a = ["python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", str(threads), "-d", str(dur)]
+    if pps:
+        a += ["--pps", str(pps)]
+    return a
 
 def c_benign(pps, dur):
     return ["python3", "/app/benign_gen.py", VICTIM, "--pps", str(pps), "-d", str(dur)]

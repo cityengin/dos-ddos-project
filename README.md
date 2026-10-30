@@ -4,9 +4,9 @@
 
 # DoS/DDoS Attack Simulation, Real-Time Detection & Defense Lab
 
-A comprehensive, dual-mode research and educational laboratory that **simulates** DoS/DDoS attacks, **extracts 9 real-time traffic features**, and performs **live classification and in-kernel mitigation**. Built as an end-of-term capstone project (DUT — PBL3).
+A comprehensive, dual-mode research and educational laboratory that **simulates** DoS/DDoS attacks, **extracts 10 real-time traffic features**, and performs **live classification and in-kernel mitigation**. Built as an end-of-term capstone project (DUT — PBL3).
 
-The system observes inbound network traffic in 1-second sliding windows, computing 9 real-time metrics including **Shannon entropy of source IPs & destination ports**, **distinct source IP counts**, and **protocol ratios**. It accurately differentiates benign traffic from single-source **DoS** and distributed **DDoS**, and identifies attack vectors across **L4 SYN flood**, **L3/L4 UDP flood**, and **L7 HTTP flood**.
+The system observes inbound network traffic in 1-second sliding windows, computing 10 real-time metrics including **Shannon entropy of source IPs & destination ports**, **distinct source IP counts**, and **protocol ratios**. It accurately differentiates benign traffic from single-source **DoS** and distributed **DDoS**, and identifies attack vectors across **L4 SYN flood**, **L3/L4 UDP flood**, and **L7 HTTP flood**.
 
 The project natively supports two deployment environments:
 1. **Physical Multi-Machine Deployment**: Real laptops (1 Victim + 2 Attackers) communicating over a local WiFi/LAN network.
@@ -31,7 +31,7 @@ This project is developed **strictly for education and defensive cybersecurity r
   - [1. Physical Multi-Machine Topology (WiFi / LAN)](#1-physical-multi-machine-topology-wifi--lan)
   - [2. Virtualized Docker Lab](#2-virtualized-docker-lab)
 - [Attack Vectors (3 Types)](#attack-vectors-3-types)
-- [Detection Engine & 9 Real-Time Features](#detection-engine--9-real-time-features)
+- [Detection Engine & 10 Real-Time Features](#detection-engine--10-real-time-features)
 - [Real-Time Victim Defense Console (Dashboard)](#real-time-victim-defense-console-dashboard)
 - [Machine Learning Pipeline](#machine-learning-pipeline)
   - [1. Flow-Level Benchmark on CICDDoS2019](#1-flow-level-benchmark-on-cicddos2019)
@@ -63,7 +63,7 @@ The system is organized into three cooperating pillars:
    - Concurrent **Machine Learning classification** (Random Forest window model).
 3. **Victim Defense Console**:
    - Standalone, light-themed web monitoring dashboard ([`dashboard/`](dashboard/)) running on the victim node.
-   - Displays live attack classification, 9 rolling sparkline charts, top attacker IP distribution with spoof warnings, chronological security event logs, and service health probes.
+   - Displays live attack classification, 10 rolling sparkline charts, top attacker IP distribution with spoof warnings, chronological security event logs, and service health probes.
 
 ---
 
@@ -101,7 +101,7 @@ For automated experimentation, CI testing, and reproducible scenario benchmarks:
   │                                                                                        │
   │  ┌────────────────────────┐      ┌────────────────────────┐     ┌───────────────────┐  │
   │  │ victim (172.30.0.10)   │      │ detector (netns victim)│     │ attacker1 (.21)   │  │
-  │  │ • nginx:alpine         │◄────►│ • eBPF XDP + detector  │◄────┤ • scapy, hping3   │  │
+  │  │ • nginx:alpine         │◄────►│ • eBPF XDP + detector  │◄────┤ • hping3, ab      │  │
   │  │ • published :8080      │      │ • scikit-learn / joblib│     │ attacker2..6 (.26)│  │
   │  └────────────────────────┘      └────────────────────────┘     └───────────────────┘  │
   └────────────────────────────────────────────────────────────────────────────────────────┘
@@ -129,11 +129,11 @@ For automated experimentation, CI testing, and reproducible scenario benchmarks:
 
 ---
 
-## Detection Engine & 9 Real-Time Features
+## Detection Engine & 10 Real-Time Features
 
 The detector ([`detection/detector.py`](detection/detector.py)) operates over a 1-second sliding window (`--interval 1.0`), inspecting all incoming packets. To prevent the victim's own responses (e.g. `SYN-ACK`) from polluting source statistics, it strictly enforces **inbound-only filtering** (`--victim <ip>`).
 
-### The 9 Real-Time Window Features
+### The 10 Real-Time Window Features
 
 | # | Feature Key | Unit | Description & Formula | Role in Classification |
 |---|---|---|---|---|
@@ -143,18 +143,19 @@ The detector ([`detection/detector.py`](detection/detector.py)) operates over a 
 | 4 | `udp_s` | pkts/s | UDP datagrams received per second | Identifies volumetric UDP flooding |
 | 5 | `h_src` | bits | Shannon entropy of source IP addresses: $H(src) = -\sum_{i} p_i \log_2(p_i)$ | Measures source dispersion: $H \approx 0$ (single IP), $H \gg 0$ (distributed/spoofed) |
 | 6 | `h_dport` | bits | Shannon entropy of destination ports: $H(dport) = -\sum_{j} p_j \log_2(p_j)$ | Detects targeted service attacks ($H \approx 0$) vs port scanning/random floods |
-| 7 | `n_src` | count | Number of distinct source IP addresses in window | Decisive metric: $n\_src = 1 \implies \mathbf{DoS}$, $n\_src \ge 2 \implies \mathbf{DDoS}$ |
+| 7 | `n_src` | count | Number of distinct source IP addresses in window | Core dispersion metric; combined with top-source dominance to decide DoS vs DDoS |
 | 8 | `syn_ratio` | ratio | Ratio of SYN packets to total traffic: $syn\_s / \max(pps, 1.0)$ | Close to $1.0$ during pure SYN floods; low during HTTP or UDP floods |
 | 9 | `ack_syn_ratio`| ratio | Ratio of ACK packets to SYN packets: $ack\_s / \max(syn\_s, 1.0)$ | $\gg 1.0$ for completed HTTP sessions; $\approx 0.0$ for half-open SYN floods |
+| 10 | `rate_per_src` | pkts/s/src | Mean packet rate per source: $pps / \max(n\_src, 1)$ | Separates a flash crowd (many sources, **low** per-source rate) from an HTTP-DDoS (many sources, **high** per-source rate) |
 
 ### Classification Logic
 
 1. **Trigger Condition**:
    - Fixed: `pps ≥ --pps` **or** `syn/s ≥ --syn`.
    - Adaptive EWMA: `pps > μ_pps + k·MAD_pps` **or** `syn_s > μ_syn + k·MAD_syn` (with minimum floor). Baseline updates only during benign windows.
-2. **Scope Classification**:
-   - `n_src == 1` $\implies$ **DoS** (Single source, verified by $H(src) \approx 0.00$).
-   - `n_src >= 2` $\implies$ **DDoS** (Distributed sources or random IP spoofing, $H(src) > 0.00$).
+2. **Scope Classification** (source count **plus dominance**, robust to background noise on a shared network):
+   - **DDoS** when `n_src >= --ddos-min-src` (default 10 — many sources, spoof or many hosts) **or** (`n_src >= 2` **and** top-source packet share `< --ddos-dom-share`, default 0.8 — no single source dominates).
+   - **DoS** otherwise (one source dominates, `top_share ≈ 1.0`, $H(src) \approx 0$) — even if 1–2 stray background packets push `n_src` above 1.
 3. **Attack Vector Tagging**:
    - **`[SYN flood]`**: `syn/s ≥ threshold` AND `ack/s < syn/s × 0.2` (half-open connection starvation).
    - **`[UDP flood]`**: `udp/s ≥ --pps` AND `udp/s > syn/s` (datagram flooding dominates).
@@ -174,7 +175,7 @@ A standalone, high-performance web console ([`dashboard/`](dashboard/)) runs dir
 
 - **Real-Time Classification Status Banner**: Instantly displays network state (`BENIGN`, `DoS`, or `DDoS`), attack vector badges (`[SYN flood]`, `[UDP flood]`, `[HTTP flood]`), active threshold values, and Machine Learning confidence scores.
 - **Service Health Probe**: Pings the local Nginx web service every 3 seconds, rendering response latency (ms) and HTTP status codes to verify target availability under load.
-- **9 Rolling Sparkline Canvas Charts**: Dynamic 60-second sliding window graphs for all 9 real-time features (`pps`, `syn_s`, `ack_s`, `udp_s`, `h_src`, `h_dport`, `n_src`, `syn_ratio`, `ack_syn_ratio`) with peak indicators and threshold lines.
+- **10 Rolling Sparkline Canvas Charts**: Dynamic 60-second sliding window graphs for all 10 real-time features (`pps`, `syn_s`, `ack_s`, `udp_s`, `h_src`, `h_dport`, `n_src`, `syn_ratio`, `ack_syn_ratio`, `rate_per_src`) with peak indicators and threshold lines.
 - **Top Attacker IPs Table**: Ranks top offending IP addresses with per-second rates, total packet volume, traffic percentage share, and automated **IP Spoofing Warning** tags when random source address generation is detected.
 - **Security Event Log**: Chronological audit log with severity indicators (`safe`, `warn`, `crit`, `info`) tracking state transitions, attack start/stop events, and mitigation actions.
 
@@ -202,23 +203,21 @@ Access the interface in any web browser at: `http://localhost:3000`.
 
 The project employs a dual-stage machine learning architecture, clearly separating **flow-level benchmarking** from **real-time window-level classification**.
 
-### 1. Flow-Level Benchmark on CICDDoS2019
+### 1. Flow-Level Benchmark on CICDDoS2019 (earlier phase)
 
-To evaluate the limitations of single-threshold rules against modern multi-feature learning, [`ml/train.py`](ml/train.py) trains classifiers on the Canadian Institute for Cybersecurity benchmark dataset (**CICDDoS2019**, cleaned parquet format via Kaggle):
+An earlier phase benchmarked single-threshold rules against multi-feature models on the **CICDDoS2019** dataset (~131,000 bidirectional flows, 63 CICFlowMeter features — packet size, IAT, forward/backward header lengths, TCP flags). Reported results:
 
-- **Data characteristics**: ~131,000 bidirectional flows, 63 statistical flow features (packet size min/max/mean, IAT, forward/backward header lengths, TCP flags) extracted using CICFlowMeter.
-- **Fundamental Distinction**: These features represent individual 5-tuple flows over their full lifetime. Cross-flow aggregate metrics like $H(src)$ or $n\_src$ do not exist in flow-level datasets.
-- **Binary Detection Performance**:
-  - Single-threshold rule (best single flow rate feature): **F1 = 0.60**
-  - **Random Forest**: **F1 = 0.999** (Accuracy 99.9%)
-  - **HistGradientBoosting**: **F1 = 0.996**
-- **Multi-Class Attack Family Classification**: Random Forest achieves **93.0% accuracy** / **0.735 macro-F1** across 13 attack families (NTP, TFTP, SYN, MSSQL, UDP, DNS, LDAP, NetBIOS, SNMP, Portmap).
+- **Binary detection**: single-threshold rule **F1 ≈ 0.60** vs **Random Forest F1 ≈ 0.999** (Accuracy 99.9%), **HistGradientBoosting F1 ≈ 0.996**.
+- **Multi-class attack family**: Random Forest **93.0% accuracy / 0.735 macro-F1** across 13 families (NTP, TFTP, SYN, MSSQL, UDP, DNS, LDAP, NetBIOS, SNMP, Portmap).
+- **Fundamental distinction**: flow-level features are per 5-tuple over a full lifetime — cross-flow aggregates like $H(src)$ / $n\_src$ do not exist there, which motivates the live window-level model below.
+
+> The flow-level training scripts (`ml/train.py`, `ml/make_synthetic.py`) have been **removed** from the repo; the results above are kept as historical context. The project now centres on the live window-level model.
 
 ### 2. Live Window-Level Model
 
-Because flow-level models require completed flow statistics that cannot be evaluated sub-second on raw packets, [`ml/build_window_dataset.py`](ml/build_window_dataset.py) compiles 1-second window snapshots from laboratory runs into a dedicated window dataset.
+Because flow-level models require completed flow statistics that cannot be evaluated sub-second on raw packets, the lab captures its own window dataset. [`experiments/capture_session.py`](experiments/capture_session.py) drives a scenario matrix in the Docker lab and records a pcap + a host-clock timeline; [`ml/pcap_to_windows.py`](ml/pcap_to_windows.py) then extracts labelled sliding windows (1.0 s window / 0.5 s stride) using the shared feature module [`detection/window_features.py`](detection/window_features.py), so the offline and live feature formulas are identical. (The earlier [`ml/build_window_dataset.py`](ml/build_window_dataset.py), which compiled detector CSVs, is kept as a fallback.)
 
-- [`ml/train_window.py`](ml/train_window.py) trains a lightweight Random Forest model on the 9 real-time features (`detection/window_model.joblib`).
+- [`ml/train_window.py`](ml/train_window.py) trains a lightweight Random Forest on the 10 real-time features (`detection/window_model.joblib`), evaluated by **leave-one-run-out** (1 pcap = 1 run; no random split, since overlapping windows would leak).
 - Evaluated against near-threshold edge cases:
   - **Scenario D**: Low-rate spoofed SYN flood (~24 pps, below rule threshold). The rule catches **0%**, whereas the ML model detects **100%**.
   - **Scenario E**: Benign HTTP flash crowd above rate threshold. The rule generates false alarms; the ML model correctly identifies it as benign.
@@ -374,18 +373,18 @@ python experiments/demo.py
 │   ├── package.json              # Dashboard dependencies (Express, WS)
 │   ├── server.js                 # Backend server (stdin stream, REST API, health probes)
 │   └── public/                   # Frontend assets
-│       ├── index.html            # Defense console markup (9 sparklines, status banner, logs)
+│       ├── index.html            # Defense console markup (10 sparklines, status banner, logs)
 │       ├── style.css             # Modern light theme CSS styles
 │       └── app.js                # WebSocket client & 60s dynamic canvas renderers
 │
 ├── ml/                           # Machine Learning research pipeline
-│   ├── train.py                  # CICDDoS2019 dataset training & benchmark comparison
-│   ├── make_synthetic.py         # Synthetic flow generator for zero-setup verification
-│   ├── build_window_dataset.py   # Extracts 9-feature window datasets from scenario runs
-│   └── train_window.py           # Trains the live window Random Forest model
+│   ├── pcap_to_windows.py        # Extracts labelled sliding-window features from a capture pcap (primary)
+│   ├── build_window_dataset.py   # (fallback) builds the window dataset from detector CSV runs
+│   └── train_window.py           # Trains the live window Random Forest model (LORO, 10 features)
 │
 ├── experiments/                  # Reproducible test execution & validation
-│   ├── run_scenarios.py          # Runs scenarios A through E with ground-truth metadata
+│   ├── run_scenarios.py          # Runs scenarios A/B/C/D/E/U/I with ground-truth metadata
+│   ├── capture_session.py        # Docker-lab pcap capture + host-clock timeline for the ML dataset
 │   └── demo.py                   # Guided, automated end-to-end demonstration
 │
 ├── analysis/                     # Offline analysis & plotting utilities

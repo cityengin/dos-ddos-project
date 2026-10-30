@@ -66,10 +66,10 @@ detector (section 5) classifies D as `DDoS` and E as `BENIGN`.
 `run_scenarios.py` scenario; run it manually or via the orchestrator:
 
 ```bash
-# 1 source (DoS) — manual:
-docker exec attacker1 python3 /app/udp_flood.py 172.30.0.10 -p 80 --pps 400
+# 1 source (DoS) — manual (hping3 --udp, paced ~400 pps):
+docker exec attacker1 hping3 --udp -p 80 -i u2500 172.30.0.10
 # 6 sources, spoofed (DDoS) — orchestrator:
-./run_ddos.sh udp            # paced (scapy udp_flood);  ./run_ddos.sh udp -i max  -> hping3 --udp --flood
+./run_ddos.sh udp            # paced (hping3 --udp -i uN);  ./run_ddos.sh udp -i max  -> hping3 --udp --flood
 ```
 
 **Expected:** the detector's new `udp_s` column is high while `syn_s`/`ack_s` ≈ 0, so the alert gets a
@@ -79,7 +79,7 @@ a spare-bandwidth lab this demonstrates *classification*, not a takedown.)
 
 **Manual alternative** (two terminals): run the detector (as in step 1, add `--csv /app/attack.csv`)
 and in another terminal launch one attack, e.g.
-`docker exec attacker1 python3 /app/syn_flood.py 172.30.0.10 -p 80 --spoof`.
+`docker exec attacker1 hping3 -S -p 80 --rand-source -i u2000 172.30.0.10` (paced SYN spoof).
 
 ---
 
@@ -97,30 +97,14 @@ prints: fixed-low threshold = detects but many false positives; fixed-high = mis
 
 ---
 
-## 4. Machine learning
+## 4. Machine learning — flow-level benchmark (CICDDoS2019, earlier phase)
 
-Real dataset (recommended):
-
-```bash
-pip install kagglehub pyarrow                 # Kaggle API token in env KAGGLE_API_TOKEN or ~/.kaggle
-python -c "import kagglehub; print(kagglehub.dataset_download('dhoogla/cicddos2019'))"
-python ml/train.py --data <printed-path>      # a folder of per-attack .parquet files
-```
-
-Zero-setup fallback (no download):
-
-```bash
-python ml/make_synthetic.py
-python ml/train.py
-```
-
-**Expected (real CICDDoS2019, ~131k flows / 63 features / 13 families):** attack-detection F1
+The flow-level training scripts (`ml/train.py`, `ml/make_synthetic.py`) have been **removed** from the
+repo; this benchmark is kept as historical context (see README → "Machine Learning Pipeline"). Reported
+results on the real CICDDoS2019 dataset (~131k flows / 63 features / 13 families): attack-detection F1
 **~0.60** (single-threshold rule) → **0.999** (RandomForest) / **0.996** (HistGradientBoosting);
-multi-class accuracy **~0.93**, macro-F1 **~0.74** (volumetric NTP/TFTP/Syn/MSSQL/UDP ≥0.92 F1;
-UDP-reflection DNS/LDAP/SNMP/Portmap/NetBIOS overlap and stay low — a documented limit). Figures in
-`assets/ml_*.png`, full report in `ml/results/metrics.txt`. Add `--raw-labels` to reproduce the
-un-merged 18-label result (macro-F1 ~0.54 — the drop is the dataset's dual `DrDoS_X`/`X` labeling,
-not the model).
+multi-class accuracy **~0.93**, macro-F1 **~0.74**. The live, project-specific ML is the window-level
+model in section 5 below.
 
 ---
 
@@ -130,21 +114,26 @@ Build the dataset and train the model (host), then run the detector with `--ml` 
 each 1-second window with the model **in parallel with the rule**:
 
 ```bash
-python ml/build_window_dataset.py        # runs A..E a few times -> ml/data/windows.csv
-python ml/train_window.py                # -> detection/window_model.joblib (prints F1)
+# capture >=3 sessions at different times (1 pcap = 1 run for leave-one-run-out):
+python3 experiments/capture_session.py --session s1     # ~10 min each -> detection/cap/s1.pcap + .timeline
+python3 ml/pcap_to_windows.py detection/cap/s1.pcap --timeline detection/cap/s1.timeline --run s1
+#   ...repeat for s2, s3 -> appends to ml/data/windows_pcap.csv
+.venv/bin/python ml/train_window.py                     # -> detection/window_model.joblib (prints LORO F1)
 docker exec -it detector python3 /app/detector.py --pps 40 --syn 25 \
     --victim 172.30.0.10 --ml /app/window_model.joblib
-# then attack from another terminal, e.g.: python experiments/run_scenarios.py --only D
+# then attack from another terminal, e.g.: ./run_ddos.sh syn
 ```
 
-**Expected (`train_window.py`, 316-window lab dataset):** attack-detection F1 **~0.58 (rule) vs
-~0.99 (RF)**; multiclass macro-F1 **~0.59 vs ~0.99**; on attack windows below the rule threshold the
-rule catches **0%** while the RF catches **100%**; leave-one-run-out F1 **~0.52 (rule) vs ~0.99 (RF)**.
+**Expected (`train_window.py`, 3-run pcap dataset ~3362 windows, leave-one-run-out):** attack-detection
+F1 **~0.88 (rule) vs ~0.996 (RF)**; multiclass accuracy **~0.61 (rule) vs ~0.99 (RF)**. The naive rule
+cannot label DoS at all in the mixed benign+attack setting (a background floor pushes `n_src` to 2 so it
+calls DoS "DDoS", and sub-threshold windows "BENIGN"); the RF separates all three. Top features:
+`n_src`, `h_src`, `pps`, `rate_per_src`.
 
 **Expected (detector `--ml` live):** each row shows both the rule ALERT and `ML:<verdict>(<conf>)`.
-Baseline -> `BENIGN`, A -> `DoS`, B/C -> `DDoS`, D -> `DDoS` (the rule stays silent), E -> `BENIGN`
-(the rule fires). The model loads inside the container because `scikit-learn==1.9.1` + `joblib` are
-installed in `attacker/Dockerfile` (rebuild with `docker compose up -d --build` after changing it).
+Baseline -> `BENIGN`, 1-source SYN -> `DoS`, spoofed/multi-source -> `DDoS`. The model loads inside the
+container because `scikit-learn==1.9.1` + `joblib` are installed in `detection/Dockerfile` (the detector
+image; rebuild with `docker compose up -d --build` after changing it).
 
 ---
 
@@ -185,7 +174,7 @@ does not drop at high pps, send a fixed number of packets and compare the total 
 docker exec -d detector python3 -u /app/detector.py --pps 40 --syn 25 --victim 172.30.0.10 \
     --engine ebpf --csv /app/bnd.csv
 for a in attacker1 attacker2 attacker3 attacker4 attacker5 attacker6; do \
-    docker exec -d $a python3 /app/syn_flood.py 172.30.0.10 -p 80 --spoof -c 20000; done
+    docker exec -d $a hping3 -S -p 80 --rand-source --flood -c 20000 172.30.0.10; done
 # ... wait ~20s, then: docker exec detector pkill -f detector.py
 awk -F, 'NR>1{s+=$2} END{print s}' detection/bnd.csv      # total packets observed
 ```
@@ -229,8 +218,9 @@ probe (≪ `--block-pps`) is never blocked; `--block` is off by default.
 ## 9. Max intensity (line-rate) & real impact
 
 Two attack intensities, selectable without touching the paced default (needed for the ML dataset):
-`paced` (scapy/`http_flood.py`, rate-limited) and `max` (**line-rate** via `hping3`/`ab`, A/B/C only,
-requires `--engine ebpf`). **Isolated lab only** — keep `pkill hping3`/`pkill ab` ready.
+`paced` (hping3 `-i uN` for SYN/UDP/ICMP + `http_flood.py --pps` for L7, rate-limited) and `max`
+(**line-rate** via `hping3 --flood`/`ab`, requires `--engine ebpf`). **Isolated lab only** — keep
+`pkill hping3`/`pkill ab` ready.
 
 ```bash
 # run_scenarios: max mode (uses hping3/ab + eBPF engine). --max-rate caps hping3 (-i uN) for a safe ramp.
@@ -271,8 +261,8 @@ dropped ~100% at XDP and C-max collapses (~433k → ~28 pps) with the latency ta
 - [ ] A -> DoS, B -> DDoS, C -> DDoS (classification 3/3).
 - [ ] SYN floods: `ack≈0`; HTTP flood: `ack >> syn`; UDP flood: `udp_s` high, `syn/ack≈0`, `[UDP flood]` tag.
 - [ ] Adaptive mode detects and avoids false positives on drifting load.
-- [ ] CICDDoS2019 ML beats the single-threshold rule (F1 ~0.60 -> ~0.999).
-- [ ] Window ML: the rule misses D and false-alarms on E; the RF gets both right (F1 ~0.58 -> ~0.99).
+- [ ] CICDDoS2019 flow benchmark (historical): ML beats the single-threshold rule (F1 ~0.60 -> ~0.999).
+- [ ] Window ML (3-run pcap, LORO): RF beats the rule (F1 ~0.88 -> ~0.996); rule can't label DoS in mixed traffic.
 - [ ] Detector `--ml` prints both rule and ML verdicts; dashboard shows both lines.
 - [ ] `--engine ebpf` observes ~95% of a 120k high-rate flood vs scapy ~57% (detect-only, no drop).
 - [ ] `--block` collapses a real-source flood (C: ~136k → ~242 pps); `--block-syn-rate` cuts a spoofed SYN flood (~85%).

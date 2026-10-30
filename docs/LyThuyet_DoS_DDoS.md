@@ -21,9 +21,9 @@
 4. [Kiến trúc hệ thống thử nghiệm](#4-kiến-trúc-hệ-thống-thử-nghiệm)
    - [4.1. Kiến trúc Multi-Machine (Máy thật qua WiFi / LAN)](#41-kiến-trúc-multi-machine-máy-thật-qua-wifi--lan)
    - [4.2. Kiến trúc ảo hóa Docker (Lab cô lập)](#42-kiến-trúc-ảo-hóa-docker-lab-cô-lập)
-5. [Nguyên lý phát hiện & 9 đặc trưng thời gian thực](#5-nguyên-lý-phát-hiện--9-đặc-trưng-thời-gian-thực)
+5. [Nguyên lý phát hiện & 10 đặc trưng thời gian thực](#5-nguyên-lý-phát-hiện--10-đặc-trưng-thời-gian-thực)
    - [5.1. Mô hình phân tích cửa sổ trượt (Sliding Window)](#51-mô-hình-phân-tích-cửa-sổ-trượt-sliding-window)
-   - [5.2. Hệ thống 9 đặc trưng thời gian thực](#52-hệ-thống-9-đặc-trưng-thời-gian-thực)
+   - [5.2. Hệ thống 10 đặc trưng thời gian thực](#52-hệ-thống-10-đặc-trưng-thời-gian-thực)
    - [5.3. Toán học Entropy Shannon: Nguồn H(src) & Đích H(dport)](#53-toán-học-entropy-shannon-nguồn-hsrc--đích-hdport)
    - [5.4. Giải thuật phân loại DoS vs DDoS](#54-giải-thuật-phân-loại-dos-vs-ddos)
    - [5.5. Cơ chế phân biệt vector tấn công (SYN vs UDP vs HTTP)](#55-cơ-chế-phân-biệt-vector-tấn-công-syn-vs-udp-vs-http)
@@ -34,7 +34,7 @@
 8. [So sánh với State-of-the-Art & Học máy (Machine Learning)](#8-so-sánh-với-state-of-the-art--học-máy-machine-learning)
    - [8.1. Thử nghiệm trên Benchmark chuẩn CICDDoS2019](#81-thử-nghiệm-trên-benchmark-chuẩn-cicddos2019)
    - [8.2. So sánh bản chất: Đặc trưng mức Luồng (Flow) vs Đặc trưng mức Cửa sổ (Window)](#82-so-sánh-bản-chất-đặc-trưng-mức-luồng-flow-vs-đặc-trưng-mức-cửa-sổ-window)
-   - [8.3. Mô hình Học máy trực tiếp trên 9 đặc trưng cửa sổ (Live Window ML)](#83-mô-hình-học-máy-trực-tiếp-trên-9-đặc-trưng-cửa-sổ-live-window-ml)
+   - [8.3. Mô hình Học máy trực tiếp trên 10 đặc trưng cửa sổ (Live Window ML)](#83-mô-hình-học-máy-trực-tiếp-trên-10-đặc-trưng-cửa-sổ-live-window-ml)
 9. [Phòng thủ trong nhân Linux: Closed-Loop eBPF/XDP Drop](#9-phòng-thủ-trong-nhân-linux-closed-loop-ebpfxdp-drop)
 10. [Cường độ tối đa & Khả năng chịu tải thực tế của dịch vụ](#10-cường-độ-tối-đa--khả-năng-chịu-tải-thực-tế-của-dịch-vụ)
 11. [Giới hạn kỹ thuật & Hướng phát triển](#11-giới-hạn-kỹ-thuật--hướng-phát-triển)
@@ -46,7 +46,7 @@
 
 Đề tài tập trung giải quyết trọn vẹn chu trình an toàn thông tin đối với các cuộc tấn công từ chối dịch vụ:
 1. **Mô phỏng tấn công (Attack Simulation):** Xây dựng các kịch bản tấn công thực tế bao gồm **L4 SYN Flood**, **L3/L4 UDP Flood** và **L7 HTTP Flood**, hỗ trợ kỹ thuật giả mạo địa chỉ IP nguồn (IP spoofing).
-2. **Trích xuất đặc trưng & Phát hiện thời gian thực (Real-Time Detection):** Thu thập gói tin trực tiếp, trích xuất **9 đặc trưng thống kê** trong mỗi cửa sổ trượt 1 giây, tính toán **Entropy Shannon** đa chiều để nhận diện sự phân tán và phân loại chính xác giữa **DoS** (đơn nguồn) và **DDoS** (đa nguồn / phân tán).
+2. **Trích xuất đặc trưng & Phát hiện thời gian thực (Real-Time Detection):** Thu thập gói tin trực tiếp, trích xuất **10 đặc trưng thống kê** trong mỗi cửa sổ trượt 1 giây, tính toán **Entropy Shannon** đa chiều để nhận diện sự phân tán và phân loại chính xác giữa **DoS** (đơn nguồn) và **DDoS** (đa nguồn / phân tán).
 3. **Phòng thủ & Giảm thiểu trong nhân (Kernel-level Mitigation):** Tận dụng công nghệ **eBPF/XDP** để đếm gói ở tốc độ dây (line-rate) và kích hoạt cơ chế tự động chặn lọc gói tin độc hại (`XDP_DROP`) với bộ đếm TTL linh hoạt.
 4. **Giám sát trực quan (Victim Defense Console):** Cung cấp giao diện web hiện đại dành riêng cho máy nạn nhân (Victim), hiển thị trực quan 9 đồ thị tham số động, bảng xếp hạng IP tấn công kèm cảnh báo giả mạo, nhật ký sự kiện an ninh và trạng thái khả dụng của dịch vụ.
 
@@ -185,7 +185,7 @@ Dành cho việc kiểm thử tự động, chạy các kịch bản chuẩn (A.
   │                                                                                        │
   │  ┌────────────────────────┐      ┌────────────────────────┐     ┌───────────────────┐  │
   │  │ victim (172.30.0.10)   │      │ detector (netns victim)│     │ attacker1 (.21)   │  │
-  │  │ • nginx:alpine         │◄────►│ • eBPF XDP + detector  │◄────┤ • scapy, hping3   │  │
+  │  │ • nginx:alpine         │◄────►│ • eBPF XDP + detector  │◄────┤ • hping3, ab      │  │
   │  │ • export host:8080     │      │ • scikit-learn / joblib│     │ attacker2..6 (.26)│  │
   │  └────────────────────────┘      └────────────────────────┘     └───────────────────┘  │
   └────────────────────────────────────────────────────────────────────────────────────────┘
@@ -195,7 +195,7 @@ Dành cho việc kiểm thử tự động, chạy các kịch bản chuẩn (A.
 
 ---
 
-## 5. Nguyên lý phát hiện & 9 đặc trưng thời gian thực
+## 5. Nguyên lý phát hiện & 10 đặc trưng thời gian thực
 
 ### 5.1. Mô hình phân tích cửa sổ trượt (Sliding Window)
 
@@ -205,9 +205,9 @@ Hệ thống hỗ trợ 2 backend thu thập:
 1. **Scapy Backend (Userspace):** Đơn giản, chạy trực tiếp trên socket mạng người dùng. Phù hợp cho mạng WiFi và tốc độ gói tin vừa phải (< 5,000 pps).
 2. **eBPF/XDP Backend (In-Kernel):** Gắn chương trình đếm trực tiếp vào tầng driver mạng của nhân Linux. Đếm chính xác ở tốc độ dây (line-rate > 100,000 pps) mà không gây rớt gói tin.
 
-### 5.2. Hệ thống 9 đặc trưng thời gian thực
+### 5.2. Hệ thống 10 đặc trưng thời gian thực
 
-Hệ thống trích xuất và giám sát liên tục **9 đặc trưng thời gian thực**:
+Hệ thống trích xuất và giám sát liên tục **10 đặc trưng thời gian thực**:
 
 | STT | Tên đặc trưng | Đơn vị | Định nghĩa & Ý nghĩa toán học | Vai trò trong phân loại an ninh |
 |:---:|---|:---:|---|---|
@@ -217,9 +217,10 @@ Hệ thống trích xuất và giám sát liên tục **9 đặc trưng thời g
 | **4** | `udp_s` | gói/giây | Số lượng gói UDP datagram nhận được trong 1 giây. | Xác định cuộc tấn công thể tích UDP Flood. |
 | **5** | `h_src` | bit | Entropy Shannon tính trên phân bố địa chỉ IP nguồn: $H(src) = -\sum p_i \log_2(p_i)$ | Đo mức độ phân tán nguồn: xấp xỉ 0 (1 nguồn), tăng cao khi có nhiều nguồn/spoofing. |
 | **6** | `h_dport` | bit | Entropy Shannon tính trên phân bố cổng đích: $H(dport) = -\sum p_j \log_2(p_j)$ | Phân biệt tấn công nhắm vào 1 cổng dịch vụ ($H \approx 0$) hay quét cổng diện rộng. |
-| **7** | `n_src` | số lượng | Số lượng địa chỉ IP nguồn duy nhất quan sát được trong 1 giây. | Tiêu chí quyết định bản chất: $n\_src = 1 \implies \mathbf{DoS}$, $n\_src \ge 2 \implies \mathbf{DDoS}$. |
+| **7** | `n_src` | số lượng | Số lượng địa chỉ IP nguồn duy nhất quan sát được trong 1 giây. | Thước đo phân tán cốt lõi; kết hợp với độ "áp đảo" của nguồn lớn nhất để quyết định DoS vs DDoS. |
 | **8** | `syn_ratio` | tỷ lệ | Tỷ số giữa số gói SYN và tổng số gói tin: $\frac{syn\_s}{\max(pps, 1.0)}$ | Tiến tới $1.0$ khi bị tấn công SYN Flood thuần túy; rất thấp trong HTTP/UDP. |
 | **9** | `ack_syn_ratio`| tỷ lệ | Tỷ số giữa số gói ACK và số gói SYN: $\frac{ack\_s}{\max(syn\_s, 1.0)}$ | Rất lớn trong kết nối HTTP hoàn chỉnh ($ack \gg syn$); xấp xỉ 0 trong SYN Flood. |
+| **10** | `rate_per_src` | gói/giây/nguồn | Tốc độ gói trung bình trên mỗi nguồn: $\frac{pps}{\max(n\_src, 1)}$ | Tách **flash crowd** (nhiều nguồn, per-nguồn THẤP) khỏi **HTTP-DDoS** (nhiều nguồn, per-nguồn CAO). |
 
 ### 5.3. Toán học Entropy Shannon: Nguồn H(src) & Đích H(dport)
 
@@ -245,9 +246,9 @@ Trong đó $p_i = \frac{c_i}{N}$ là tỷ lệ gói tin thuộc về đối tư�
 
 Quy trình phân loại thực hiện theo các bước tuần tự:
 1. **Kiểm tra ngưỡng kích hoạt (Trigger):** Cảnh báo được kích hoạt khi `pps ≥ --pps` HOẶC `syn_s ≥ --syn`.
-2. **Xác định phạm vi nguồn:**
-   - Nếu số nguồn duy nhất $n\_src == 1$: Gắn nhãn **DoS** (xác thực lại bằng $H(src) \approx 0.00$).
-   - Nếu số nguồn duy nhất $n\_src \ge 2$: Gắn nhãn **DDoS** (xác thực lại bằng $H(src) > 0.00$).
+2. **Xác định phạm vi nguồn (số nguồn + độ áp đảo — bền với nhiễu nền trên mạng chia sẻ):**
+   - **DDoS** khi $n\_src \ge$ `--ddos-min-src` (mặc định 10 — rất nhiều nguồn: spoof hoặc nhiều máy) **hoặc** ($n\_src \ge 2$ **và** tỷ lệ gói của nguồn lớn nhất `top_share` $<$ `--ddos-dom-share`, mặc định 0.8 — không nguồn nào áp đảo).
+   - **DoS** còn lại (một nguồn áp đảo, `top_share` $\approx 1.0$, $H(src) \approx 0$) — kể cả khi vài gói nền đẩy $n\_src$ vượt 1.
 
 ### 5.5. Cơ chế phân biệt vector tấn công (SYN vs UDP vs HTTP)
 
@@ -270,7 +271,7 @@ Khi detector chạy trên máy victim hoặc dùng chung namespace mạng với 
 
 Phần mềm bảng điều khiển ([`dashboard/`](../dashboard/)) được thiết kế lại toàn diện thành một giao diện phòng thủ chuyên dụng (Defense Console) chạy trực tiếp trên máy nạn nhân:
 - **Kiến trúc luồng dữ liệu:** Nhận dữ liệu thời gian thực từ detector qua đường ống tiêu chuẩn (pipe `detector.py --stream | node server.js`) hoặc qua giao diện lập trình ứng dụng REST (`POST /api/metric`), truyền phát tới trình duyệt qua kết nối WebSocket.
-- **Biểu đồ trượt 9 đặc trưng:** Sử dụng canvas tối ưu để vẽ liên tục 9 biểu đồ sparkline trượt trong 60 giây, giúp người quản trị quan sát tức thời biến thiên của `pps`, `syn_s`, `ack_s`, `udp_s`, `h_src`, `h_dport`, `n_src`, `syn_ratio`, và `ack_syn_ratio`.
+- **Biểu đồ trượt 10 đặc trưng:** Sử dụng canvas tối ưu để vẽ liên tục 10 biểu đồ sparkline trượt trong 60 giây, giúp người quản trị quan sát tức thời biến thiên của `pps`, `syn_s`, `ack_s`, `udp_s`, `h_src`, `h_dport`, `n_src`, `syn_ratio`, `ack_syn_ratio`, và `rate_per_src`.
 - **Bảng Top Attacker IPs:** Liệt kê các địa chỉ IP gửi nhiều gói tin nhất trong mỗi giây, tính toán tỷ lệ phần trăm đóng góp lưu lượng, và tự động gắn cờ cảnh báo **SPOOFED IP** khi phát hiện địa chỉ nguồn thuộc các dải ngẫu nhiên.
 - **Nhật ký sự kiện (Event Log):** Ghi nhận có thứ tự thời gian các sự kiện an ninh mạng theo từng cấp độ (`safe`, `warn`, `crit`, `info`).
 - **Thăm dò sức khỏe dịch vụ (Service Health):** Liên tục gửi HTTP probe tới web server Nginx mỗi 3 giây để đo độ trễ đáp ứng (latency tính bằng mili-giây) và mã phản hồi HTTP 200, phản ánh chính xác trạng thái "sống/chết" của website.
@@ -354,13 +355,13 @@ $$\text{Ngưỡng}_t = \max\left( \mu_t + k \cdot \text{MAD}_t, \text{Sàn tối
 
 Vì mô hình CICDDoS2019 yêu cầu 63 đặc trưng mức flow (chỉ có được sau khi kết thúc luồng), nó không thể gắn trực tiếp vào vòng lặp phát hiện từng giây của detector mà không gây trễ.
 
-### 8.3. Mô hình Học máy trực tiếp trên 9 đặc trưng cửa sổ (Live Window ML)
+### 8.3. Mô hình Học máy trực tiếp trên 10 đặc trưng cửa sổ (Live Window ML)
 
 Để khắc phục giới hạn trên, đề tài xây dựng pipeline học máy thời gian thực ([`ml/train_window.py`](../ml/train_window.py)):
-1. Thu thập dữ liệu từ các kịch bản chạy trong lab thành tập dữ liệu cửa sổ [`ml/data/windows.csv`](../ml/data/windows.csv).
-2. Huấn luyện mô hình Random Forest trên chính **9 đặc trưng cửa sổ thời gian thực**.
+1. Thu thập dữ liệu: [`experiments/capture_session.py`](../experiments/capture_session.py) chạy ma trận kịch bản trong lab và ghi pcap + timeline; [`ml/pcap_to_windows.py`](../ml/pcap_to_windows.py) trích cửa sổ trượt có nhãn vào [`ml/data/windows_pcap.csv`](../ml/data/windows_pcap.csv) bằng module đặc trưng dùng chung [`detection/window_features.py`](../detection/window_features.py).
+2. Huấn luyện mô hình Random Forest trên chính **10 đặc trưng cửa sổ thời gian thực**, đánh giá bằng leave-one-run-out (1 pcap = 1 run).
 3. Lưu mô hình vào file [`detection/window_model.joblib`](../detection/window_model.joblib).
-4. Tích hợp trực tiếp vào detector qua tham số `--ml`: Mỗi giây, detector trích xuất vector 9 đặc trưng, nạp vào mô hình và đưa ra dự đoán `ml_verdict` song song với phán quyết của luật.
+4. Tích hợp trực tiếp vào detector qua tham số `--ml`: Mỗi giây, detector trích xuất vector 10 đặc trưng, nạp vào mô hình và đưa ra dự đoán `ml_verdict` song song với phán quyết của luật.
 
 **Hiệu quả giải quyết bài toán biên:**
 - **Kịch bản D (SYN spoof tốc độ thấp ~24 pps):** Nằm dưới ngưỡng của luật nên luật bỏ lọt (0% phát hiện). Mô hình ML phát hiện chính xác **100%** nhờ học được sự kết hợp giữa $H(src)$ cao và $ack\_syn\_ratio \approx 0$.

@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Restored paced HTTP for the ML dataset and synced all docs to the hping3/ab migration.** The
+  100%-hping3/ab refactor had switched `capture_session.c_http` to `ab` (which has no request-rate
+  limit), silently ignoring its `pps` argument and reverting the L7 capture phases to line-rate — the
+  domain shift the pcap pipeline had just fixed. Restored `attacks/http_flood.py` (paced `--pps`) and
+  pointed `c_http` back at it (H1 ~150 req/s, D2h ~150/src, D5h ~120/src); `ab` line-rate stays for the
+  demo tools only. Updated all Markdown (`CLAUDE.md`, `README.md`, `docs/TESTING.md`,
+  `docs/MULTI_MACHINE.md`, `docs/LyThuyet_DoS_DDoS.md`, `CONTRIBUTING.md`) to match the current code:
+  `hping3` for SYN/UDP/ICMP, `http_flood.py --pps` + `ab` for L7, the **10**-feature window model (adds
+  `rate_per_src`), the source-count-plus-dominance DoS/DDoS rule, and the pcap→LORO dataset pipeline.
+  Confirmed `PROJECT_STATUS.md` removal — dropped its mentions from `CLAUDE.md`; notable changes are
+  logged here from now on.
 - **DoS-vs-DDoS classifier now uses source count _plus dominance_**, not a bare `n_src >= 2`. Adds
   `--ddos-min-src` (default 10) and `--ddos-dom-share` (default 0.8): a window is DDoS when
   `n_src >= --ddos-min-src` (many sources — spoof or many hosts) **or** (`n_src >= 2` **and** the top

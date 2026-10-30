@@ -33,7 +33,7 @@ Every commit message follows [Conventional Commits](https://www.conventionalcomm
 feat(detector): add inbound-only counting via --victim flag
 fix(detector): stop counting victim SYN-ACK replies as a second source
 feat(experiments): add narrated one-command demo with Docker preflight
-feat(attacks): support IP spoofing in syn_flood with --spoof
+feat(attacks): add --pps pacing to http_flood for realistic L7 rates
 docs(readme): document detection mechanism and limitations
 refactor(analysis): extract episode detection into a helper
 chore(repo): add .gitignore for Python and Docker artifacts

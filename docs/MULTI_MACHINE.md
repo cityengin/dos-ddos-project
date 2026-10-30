@@ -220,12 +220,12 @@ kỳ dưới root không mật khẩu) → chỉ dùng trên máy lab, gỡ file
   năng đó trên router, hoặc dùng một AP/hotspot khác.
 - **curl victim không ra 200:** nginx chưa chạy (`sudo systemctl status nginx`), hoặc firewall chặn
   cổng 80 (`sudo ufw status`; lab thì có thể `sudo ufw disable`).
-- **syn_flood báo PermissionError / Operation not permitted:** quên `sudo` (chạy tay), hoặc chưa cấu
+- **hping3 báo Operation not permitted:** quên `sudo` (chạy tay), hoặc chưa cấu
   hình CAP_NET_RAW/NOPASSWD (khi qua SSH) — xem mục 9.
 - **B không ra nhiều nguồn (n_src~1):** AP lọc gói spoof (bình thường trên WiFi) → dùng nhiều
   attacker thật thay vì spoof.
 - **detector in pps=0 khi đang bị tấn công:** sai `--iface` (không phải card đang nhận traffic) hoặc
   sai `--victim` (IP victim đổi do DHCP) → chạy lại `ip -brief addr` lấy IP/card đúng.
 - **run_ddos_remote.sh báo không SSH được:** chưa `ssh-copy-id` tới máy đó, hoặc sai `user@ip`.
-- **Còn sót tiến trình sau khi chạy:** `ssh user@ip 'pkill -f flood.py'` (hoặc `pkill -f flood.py`
-  trên máy chạy tay).
+- **Còn sót tiến trình sau khi chạy:** `ssh user@ip 'pkill hping3; pkill -f http_flood.py'` (hoặc
+  `pkill hping3; pkill -f http_flood.py` trên máy chạy tay).
