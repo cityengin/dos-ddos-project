@@ -196,7 +196,7 @@ function handleDetectorMetric(d) {
     if (d.syn_flood) attackType = "SYN Flood (L4)";
     else if (d.udp_flood) attackType = "UDP Flood (L4)";
     else if ((d.ack || 0) > 0 || (d.syn || 0) > 0) attackType = "HTTP Flood (L7)";
-    else attackType = "Volumetric / ICMP Flood (L3)";
+    else attackType = "ICMP Flood (L3)";
   }
 
   // Detect state transitions to emit security log events

