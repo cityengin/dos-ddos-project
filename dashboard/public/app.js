@@ -3,7 +3,7 @@
 
   const $ = (id) => document.getElementById(id);
 
-  // Configuration for 9 rolling charts (60 points each, 1 per second)
+  // Configuration for 10 rolling charts (60 points each, 1 per second)
   const HISTORY_LEN = 60;
   const METRICS = [
     { key: "pps", id: "chart-pps", valId: "val-pps", statsId: "stats-pps", color: "#4f46e5", unit: "pkts/s", decimals: 0 },
@@ -15,6 +15,7 @@
     { key: "n_src", id: "chart-nsrc", valId: "val-nsrc", statsId: "stats-nsrc", color: "#e11d48", unit: "IPs", decimals: 0 },
     { key: "syn_ratio", id: "chart-synratio", valId: "val-synratio", statsId: "stats-synratio", color: "#c026d3", unit: "ratio", decimals: 2 },
     { key: "ack_syn_ratio", id: "chart-acksynratio", valId: "val-acksynratio", statsId: "stats-acksynratio", color: "#0d9488", unit: "ratio", decimals: 2 },
+    { key: "rate_per_src", id: "chart-ratepersrc", valId: "val-ratepersrc", statsId: "stats-ratepersrc", color: "#f43f5e", unit: "pkts/s/src", decimals: 1 },
   ];
 
   // Initialize history queues with zeros
@@ -110,6 +111,7 @@
       if (val === undefined || val === null) {
         if (m.key === "syn_ratio") val = (d.syn || 0) / Math.max(d.pps || 0, 1.0);
         else if (m.key === "ack_syn_ratio") val = (d.ack || 0) / Math.max(d.syn || 0, 1.0);
+        else if (m.key === "rate_per_src") val = (d.pps || 0) / Math.max(d.n_src || 0, 1);
         else val = 0;
       }
       history[m.key].push(Number(val));
@@ -168,7 +170,8 @@
     if (!attackType) {
       if (d.syn_flood) attackType = "SYN Flood (L4)";
       else if (d.udp_flood) attackType = "UDP Flood (L4)";
-      else if (isTriggered) attackType = "HTTP Flood (L7)";
+      else if ((d.ack || 0) > 0 || (d.syn || 0) > 0) attackType = "HTTP Flood (L7)";
+      else if (isTriggered) attackType = "Volumetric / ICMP Flood (L3)";
     }
 
     if (!isTriggered) {
@@ -213,6 +216,25 @@
     // Source count & Entropy
     nsrcVal.textContent = d.n_src || 0;
     entropySub.textContent = `H(src): ${(d.h_src || 0).toFixed(2)} | H(dst): ${(d.h_dport || 0).toFixed(2)}`;
+
+    // Dynamic Rule Thresholds
+    const ruleSub = $("rule-sub");
+    if (ruleSub && d.thr_pps !== undefined) {
+      ruleSub.textContent = `Ngưỡng: pps ≥ ${d.thr_pps} | syn ≥ ${d.thr_syn}`;
+    }
+
+    // eBPF/XDP Mitigation display
+    const blockedVal = $("blocked-val");
+    const blockedSub = $("blocked-sub");
+    if (blockedVal) {
+      const bPps = d.blocked_pps || 0;
+      const bSrc = d.blocked_src || 0;
+      blockedVal.innerHTML = `${bPps.toLocaleString()} <span class="unit">drop/s</span>`;
+      blockedVal.style.color = bPps > 0 ? "#dc2626" : "#64748b";
+      if (blockedSub) {
+        blockedSub.textContent = bPps > 0 ? `Active: ${bSrc} sources blocked` : "Detect-Only Mode";
+      }
+    }
   }
 
   // ---------- Update Attacker IPs Table ----------
@@ -355,8 +377,8 @@
 
     // Handle high-DPI retina display
     const dpr = window.devicePixelRatio || 1;
-    const width = canvas.parentElement.clientWidth || 380;
-    const height = 110;
+    const width = canvas.parentElement.clientWidth || 220;
+    const height = canvas.parentElement.clientHeight || 52;
 
     if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
       canvas.width = width * dpr;
@@ -369,10 +391,10 @@
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
-    const padLeft = 10;
-    const padRight = 10;
-    const padTop = 12;
-    const padBottom = 16;
+    const padLeft = 6;
+    const padRight = 6;
+    const padTop = 4;
+    const padBottom = 6;
     const plotW = width - padLeft - padRight;
     const plotH = height - padTop - padBottom;
 
@@ -433,19 +455,19 @@
     }
     ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
 
     // 5. Draw pulse point at latest value
     const lastPoint = points[points.length - 1];
     ctx.beginPath();
-    ctx.arc(lastPoint.x, lastPoint.y, 3.5, 0, Math.PI * 2);
+    ctx.arc(lastPoint.x, lastPoint.y, 2.5, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(lastPoint.x, lastPoint.y, 6, 0, Math.PI * 2);
+    ctx.arc(lastPoint.x, lastPoint.y, 4.5, 0, Math.PI * 2);
     ctx.strokeStyle = hexToRgba(color, 0.35);
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.2;
     ctx.stroke();
 
     ctx.restore();

@@ -83,15 +83,20 @@
           <div class="vbox-val mono" id="nsrc-val">0</div>
           <span class="vbox-sub" id="entropy-sub">Entropy H(src): 0.00</span>
         </div>
+        <div class="verdict-box">
+          <span class="vbox-title">eBPF/XDP Mitigation</span>
+          <div class="vbox-val mono" id="blocked-val">0 <span class="unit">drop/s</span></div>
+          <span class="vbox-sub" id="blocked-sub">Detect-Only Mode</span>
+        </div>
       </div>
     </section>
 
-    <!-- 8 + 1 Features Grid (Đồ thị thời gian thực) -->
+    <!-- 10 Features Grid (Đồ thị thời gian thực) -->
     <section class="section-container">
       <div class="section-header">
         <div>
           <h2>Đồ thị Đặc trưng Thời gian thực (Real-time Feature Metrics)</h2>
-          <p class="section-sub">Theo dõi 8 đặc trưng cốt lõi của mô hình ML và lưu lượng UDP trong 60 giây gần nhất</p>
+          <p class="section-sub">Theo dõi đầy đủ 10 đặc trưng đầu vào của mô hình Machine Learning trong 60 giây gần nhất</p>
         </div>
         <div class="metric-legend">
           <span class="legend-item"><span class="legend-dot" style="background:#4f46e5;"></span> L4/L7 Flow</span>
@@ -261,6 +266,24 @@
           <div class="chart-card-footer">
             <span class="footer-tip">&lt; 0.2 &rArr; SYN Flood (half-open)</span>
             <span class="footer-stats" id="stats-acksynratio">cur: 0.00</span>
+          </div>
+        </div>
+
+        <!-- 10. RATE_PER_SRC -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#10 &middot; rate_per_src</span>
+              <h3 class="chart-title">Tốc độ Gói / Nguồn IP</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-ratepersrc" style="color: #f43f5e;">0.0 <span class="unit">pkts/s/src</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-ratepersrc" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">pps / n_src &middot; Tách Flash-crowd vs HTTP-DDoS</span>
+            <span class="footer-stats" id="stats-ratepersrc">max: 0 &middot; avg: 0</span>
           </div>
         </div>
       </div>

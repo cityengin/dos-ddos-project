@@ -103,7 +103,8 @@ function handleDetectorMetric(d) {
   if (isTriggered) {
     if (d.syn_flood) attackType = "SYN Flood (L4)";
     else if (d.udp_flood) attackType = "UDP Flood (L4)";
-    else attackType = "HTTP Flood (L7)";
+    else if ((d.ack || 0) > 0 || (d.syn || 0) > 0) attackType = "HTTP Flood (L7)";
+    else attackType = "Volumetric / ICMP Flood (L3)";
   }
 
   // Detect state transitions to emit security log events
@@ -174,6 +175,8 @@ if (!process.stdin.isTTY) {
 // 2. Bare-metal automatic spawn of detector.py
 function findPythonCommand() {
   if (process.env.PYTHON) return process.env.PYTHON;
+  const venvPy = path.join(ROOT_DIR, ".venv", "bin", "python3");
+  if (fs.existsSync(venvPy)) return venvPy;
   return process.platform === "win32" ? "python" : "python3";
 }
 

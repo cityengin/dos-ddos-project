@@ -303,6 +303,7 @@ def main():
                 "pps": round(pps), "syn": round(syn_s), "ack": round(ack_s), "udp": round(udp_s),
                 "h_src": round(h_src, 3), "h_dport": round(h_dport, 3), "n_src": n_src,
                 "syn_ratio": syn_ratio, "ack_syn_ratio": ack_syn_ratio,
+                "rate_per_src": round(pps / max(n_src, 1), 1),
                 "triggered": bool(triggered), "verdict": verdict or "BENIGN",
                 "syn_flood": syn_flood, "udp_flood": udp_flood,
                 "thr_pps": round(thr_pps, 1), "thr_syn": round(thr_syn, 1),
