@@ -37,7 +37,8 @@ def dexec(container, *args, detach=False):
 def kill_all():
     dexec(DETECTOR, "pkill", "-f", "detector.py")
     for a in ATTACKERS:
-        dexec(a, "pkill", "-f", "flood.py")
+        dexec(a, "pkill", "-f", "hping3")
+        dexec(a, "pkill", "-f", "ab")
 
 
 def run_one(name, baseline, duration, cooldown, pps_override=None,
@@ -76,51 +77,41 @@ def run_one(name, baseline, duration, cooldown, pps_override=None,
     used = ATTACKERS[:s["n"]]
     print(f"[*] TAN CONG {duration}s tu {len(used)} nguon: {', '.join(used)}")
     for a in used:
-        if is_max and s["mode"] == "syn":
-            # SYN flood cuong do toi da bang hping3 (line-rate). --rand-source cho kich ban spoof.
+        if s["mode"] == "syn":
             cmd = ["timeout", str(duration), "hping3", "-S", "-p", "80", "-q"]
             if s["spoof"]:
                 cmd.append("--rand-source")
-            cmd += (["-i", "u%d" % max_rate_us] if max_rate_us > 0 else ["--flood"])
+            if is_max:
+                cmd += (["-i", "u%d" % max_rate_us] if max_rate_us > 0 else ["--flood"])
+            else:
+                us = 1000000 // (eff_pps or 150)
+                cmd += ["-i", "u%d" % us]
             cmd.append(VICTIM)
-        elif is_max and s["mode"] == "udp":
-            # UDP flood cuong do toi da bang hping3.
+        elif s["mode"] == "udp":
             cmd = ["timeout", str(duration), "hping3", "--udp", "-p", "80", "-q"]
             if s["spoof"]:
                 cmd.append("--rand-source")
-            cmd += (["-i", "u%d" % max_rate_us] if max_rate_us > 0 else ["--flood"])
+            if is_max:
+                cmd += (["-i", "u%d" % max_rate_us] if max_rate_us > 0 else ["--flood"])
+            else:
+                us = 1000000 // (eff_pps or 400)
+                cmd += ["-i", "u%d" % us]
             cmd.append(VICTIM)
-        elif is_max and s["mode"] == "icmp":
-            # ICMP flood cuong do toi da bang hping3.
-            cmd = ["timeout", str(duration), "hping3", "--icmp", "-q"]
-            if s["spoof"]:
-                cmd.append("--rand-source")
-            cmd += (["-i", "u%d" % max_rate_us] if max_rate_us > 0 else ["--flood"])
-            cmd.append(VICTIM)
-        elif is_max:  # L7 cuong do cao bang ab (keep-alive + concurrency cao)
-            cmd = ["timeout", str(duration), "ab", "-k", "-c", str(max_conc),
-                   "-t", str(max(duration - 1, 1)), "-n", "100000000", "http://%s/" % VICTIM]
-        elif s["mode"] == "syn":
-            cmd = ["timeout", str(duration), "python3", "/app/syn_flood.py", VICTIM, "-p", "80"]
-            if eff_pps:
-                cmd += ["--pps", str(eff_pps)]
-            if s["spoof"]:
-                cmd.append("--spoof")
-        elif s["mode"] == "udp":
-            cmd = ["timeout", str(duration), "python3", "/app/udp_flood.py", VICTIM, "-p", "80"]
-            if eff_pps:
-                cmd += ["--pps", str(eff_pps)]
-            if s["spoof"]:
-                cmd.append("--spoof")
         elif s["mode"] == "icmp":
             cmd = ["timeout", str(duration), "hping3", "--icmp", "-q"]
             if s["spoof"]:
                 cmd.append("--rand-source")
-            cmd += ["-i", "u%d" % (1000000 // (eff_pps or 400))]
+            if is_max:
+                cmd += (["-i", "u%d" % max_rate_us] if max_rate_us > 0 else ["--flood"])
+            else:
+                us = 1000000 // (eff_pps or 400)
+                cmd += ["-i", "u%d" % us]
             cmd.append(VICTIM)
         else:
-            cmd = ["python3", "/app/http_flood.py", VICTIM, "-p", "80",
-                   "-t", str(s.get("threads", 20)), "-d", str(duration)]
+            # Mode http dung ab
+            conc = max_conc if is_max else s.get("threads", 20)
+            cmd = ["timeout", str(duration), "ab", "-k", "-c", str(conc),
+                   "-t", str(max(duration - 1, 1)), "-n", "100000000", "http://%s/" % VICTIM]
         dexec(a, *cmd, detach=True)
 
     time.sleep(duration + 1)

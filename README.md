@@ -52,9 +52,10 @@ This project is developed **strictly for education and defensive cybersecurity r
 The system is organized into three cooperating pillars:
 
 1. **Attack Generation**:
-   - **L4 TCP SYN Flood** ([`attacks/syn_flood.py`](attacks/syn_flood.py)): Exploits TCP 3-way handshake half-open states; supports random IP spoofing (`--spoof`).
-   - **L3/L4 UDP Flood** ([`attacks/udp_flood.py`](attacks/udp_flood.py)): High-rate volumetric datagram flooding targeting random/fixed ports; supports IP spoofing (`--spoof`).
-   - **L7 HTTP Flood** ([`attacks/http_flood.py`](attacks/http_flood.py)): Multi-threaded GET requests consuming application worker pools and server CPU.
+   - **L4 TCP SYN Flood**: High-rate half-open state exhaustion via `hping3 -S -p 80` (supports `--rand-source` IP spoofing).
+   - **L3/L4 UDP Flood**: High-rate volumetric datagram flooding via `hping3 --udp -p 80` (supports `--rand-source`).
+   - **L3 ICMP Echo Flood**: Ping flood network saturation via `hping3 --icmp` or `ping -f`.
+   - **L7 HTTP Flood**: Application-layer resource exhaustion via `ab` (Apache Benchmark with HTTP keep-alive).
 2. **Real-Time Detection & Feature Extraction**:
    - Computes **9 window-level features** every second (`pps`, `syn_s`, `ack_s`, `udp_s`, `h_src`, `h_dport`, `n_src`, `syn_ratio`, `ack_syn_ratio`).
    - Dual thresholding: **Fixed rules** or **Adaptive EWMA + MAD** baseline learning.
@@ -79,10 +80,10 @@ Designed for realistic demonstrations and classroom testing using 3 physical Lin
 ┌───────▼──────────────┐   ┌──────▼───────────────┐  ┌──────▼───────────────┐
 │    Victim Laptop     │   │  Attacker 1 Laptop   │  │  Attacker 2 Laptop   │
 │                      │   │                      │  │                      │
-│ • Nginx Web (Port 80)│   │ • syn_flood.py       │  │ • syn_flood.py       │
-│ • detector.py        │   │ • udp_flood.py       │  │ • udp_flood.py       │
-│ • Victim Console     │   │ • http_flood.py      │  │ • http_flood.py      │
-│   (Port 3000)        │   │ • hping3 / ab        │  │ • hping3 / ab        │
+│ • Nginx Web (Port 80)│   │ • hping3 (L3/L4)     │  │ • hping3 (L3/L4)     │
+│ • detector.py        │   │ • ab (L7 HTTP)       │  │ • ab (L7 HTTP)       │
+│ • Victim Console     │   │                      │  │                      │
+│   (Port 3000)        │   │                      │  │                      │
 └──────────────────────┘   └──────────────────────┘  └──────────────────────┘
 ```
 
@@ -119,7 +120,7 @@ For automated experimentation, CI testing, and reproducible scenario benchmarks:
 
 | Property | L4 SYN Flood | L3/L4 UDP Flood | L7 HTTP Flood |
 |---|---|---|---|
-| **Script** | [`attacks/syn_flood.py`](attacks/syn_flood.py) | [`attacks/udp_flood.py`](attacks/udp_flood.py) | [`attacks/http_flood.py`](attacks/http_flood.py) |
+| **Tool** | `hping3 -S` | `hping3 --udp` | `ab -k` |
 | **OSI Layer** | Layer 4 (Transport / TCP) | Layer 3/4 (Transport / UDP) | Layer 7 (Application / HTTP) |
 | **Exhaustion Target** | TCP SYN half-open connection backlog | Network bandwidth, socket buffers, CPU | Web server thread/worker pools, CPU |
 | **3-Way Handshake** | Incomplete (Sends `SYN`, ignores `SYN-ACK`) | None (Connectionless datagrams) | Complete (Full TCP handshake + GET requests) |
@@ -287,22 +288,23 @@ Open `http://localhost:3000` in a browser.
 #### 2. Setup Attacker Laptops
 ```bash
 # On each attacker laptop
-sudo apt update && sudo apt install -y python3-scapy hping3 apache2-utils git
-git clone https://github.com/cityengin/dos-ddos-project.git ~/dos-ddos-project
-cd ~/dos-ddos-project
+sudo apt update && sudo apt install -y hping3 apache2-utils curl
 
 # Launch test attacks against Victim IP:
 # L4 SYN Flood (Single Source DoS)
-sudo python3 attacks/syn_flood.py <VICTIM_IP> -p 80 --pps 400
+sudo hping3 -S -p 80 -i u2000 <VICTIM_IP>
 
 # L4 SYN Flood (Spoofed DDoS)
-sudo python3 attacks/syn_flood.py <VICTIM_IP> -p 80 --spoof --pps 400
+sudo hping3 -S -p 80 --rand-source -i u2000 <VICTIM_IP>
 
 # L3/L4 UDP Flood (Volumetric)
-sudo python3 attacks/udp_flood.py <VICTIM_IP> -p 80 --pps 400
+sudo hping3 --udp -p 80 -i u2000 <VICTIM_IP>
+
+# L3 ICMP Echo Flood (Ping Flood)
+sudo hping3 --icmp -i u2000 <VICTIM_IP>
 
 # L7 HTTP Flood (Application Layer)
-python3 attacks/http_flood.py <VICTIM_IP> -p 80 -t 20 -d 30
+ab -k -c 50 -n 30000 http://<VICTIM_IP>/
 ```
 
 #### 3. Coordinated Multi-Attacker Orchestration (SSH)
@@ -358,10 +360,9 @@ python experiments/demo.py
 ├── run_ddos.sh                   # Docker orchestration script (6 parallel attackers)
 ├── run_ddos_remote.sh            # Multi-machine SSH orchestrator for physical laptops
 │
-├── attacks/                      # Attack generation tools
-│   ├── syn_flood.py              # L4 TCP SYN flood (Scapy, raw socket, optional --spoof)
-│   ├── udp_flood.py              # L3/L4 UDP flood (Scapy, volumetric, optional --spoof)
-│   └── http_flood.py             # L7 HTTP request flood (multi-threaded GET)
+├── attacks/                      # Traffic simulation tools
+│   ├── benign_dynamic_users.py   # Dynamic realistic benign web traffic generator
+│   └── benign_gen.py             # Baseline legitimate client traffic
 │
 ├── detection/                    # Real-time traffic analysis & detection engine
 │   ├── Dockerfile                # Detector container image (Ubuntu + BCC + scikit-learn)

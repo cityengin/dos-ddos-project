@@ -105,10 +105,10 @@ Client               Server             Attacker             Server
 ```
 
 **Cơ chế tấn công:**
-Kẻ tấn công ([`attacks/syn_flood.py`](../attacks/syn_flood.py)) liên tục bơm hàng ngàn gói tin mang cờ `SYN` với tốc độ cao nhưng **cố tình không gửi gói ACK cuối cùng**. Máy chủ phải duy trì các kết nối nửa mở (half-open) cho đến khi hết hạn thời gian chờ (timeout). Khi hàng đợi SYN Backlog bị lấp đầy, máy chủ từ chối mọi yêu cầu kết nối TCP mới từ các client hợp lệ.
+Kẻ tấn công (sử dụng công cụ chuyên dụng `hping3 -S`) liên tục bơm hàng ngàn gói tin mang cờ `SYN` với tốc độ cao nhưng **cố tình không gửi gói ACK cuối cùng**. Máy chủ phải duy trì các kết nối nửa mở (half-open) cho đến khi hết hạn thời gian chờ (timeout). Khi hàng đợi SYN Backlog bị lấp đầy, máy chủ từ chối mọi yêu cầu kết nối TCP mới từ các client hợp lệ.
 
 **Kỹ thuật IP Spoofing trong SYN Flood:**  
-Vì giao thức IP ở tầng 3 không có cơ chế xác thực nguồn gửi mặc định, kẻ tấn công có thể sinh ngẫu nhiên địa chỉ IP nguồn trong header IP (`--spoof`, ví dụ `10.x.x.x`). Khi đó:
+Vì giao thức IP ở tầng 3 không có cơ chế xác thực nguồn gửi mặc định, kẻ tấn công có thể sinh ngẫu nhiên địa chỉ IP nguồn trong header IP (cờ `--rand-source` trong `hping3`). Khi đó:
 - Gói `SYN-ACK` của server phản hồi sẽ gửi đến các địa chỉ không tồn tại hoặc các máy vô can.
 - Phía victim thấy các gói SYN dường như đến từ hàng nghìn nguồn khác nhau, biến một máy tấn công đơn lẻ thành lưu lượng phân tán tương đương botnet.
 - **Dấu hiệu nhận biết:** `syn_s` tăng vọt, `ack_s ≈ 0`, tỷ lệ `syn_ratio ≈ 1.0`, `ack_syn_ratio ≈ 0.0`.
@@ -118,7 +118,7 @@ Vì giao thức IP ở tầng 3 không có cơ chế xác thực nguồn gửi m
 Giao thức UDP (User Datagram Protocol) là giao thức **phi kết nối (Connectionless)**, không có cơ chế bắt tay và không cần xác nhận nhận gói tin.
 
 **Cơ chế tấn công:**
-Kẻ tấn công ([`attacks/udp_flood.py`](../attacks/udp_flood.py)) gửi dồn dập một lượng cực lớn các gói tin UDP datagram tới các cổng ngẫu nhiên hoặc cổng dịch vụ của nạn nhân:
+Kẻ tấn công (sử dụng công cụ `hping3 --udp`) gửi dồn dập một lượng cực lớn các gói tin UDP datagram tới các cổng ngẫu nhiên hoặc cổng dịch vụ của nạn nhân:
 - Khi nhận được gói UDP tới một cổng không có ứng dụng lắng nghe, hệ điều hành của victim phải phân tích header gói tin, xác định không có tiến trình tiếp nhận, và sinh gói tin `ICMP Destination Unreachable (Port Unreachable)` trả về.
 - Quá trình này tiêu tốn băng thông truyền dẫn của card mạng (Network Interface Card) và làm cạn kiệt tài nguyên xử lý ngắt (softirq) của CPU victim.
 - Giống như SYN flood, UDP không yêu cầu bắt tay nên kẻ tấn công có thể **giả mạo địa chỉ IP nguồn (IP spoofing)** hoàn toàn tự do.
@@ -129,7 +129,7 @@ Kẻ tấn công ([`attacks/udp_flood.py`](../attacks/udp_flood.py)) gửi dồn
 Tấn công từ chối dịch vụ tầng ứng dụng khai thác trực tiếp tài nguyên xử lý của máy chủ web (như Nginx, Apache) và tầng ứng dụng phía sau (PHP, Node.js, Python, Database).
 
 **Cơ chế tấn công:**
-Script tấn công ([`attacks/http_flood.py`](../attacks/http_flood.py)) sử dụng đa luồng (multi-threading) thiết lập các kết nối TCP **hoàn chỉnh** (đầy đủ bắt tay 3 bước `SYN -> SYN-ACK -> ACK`) và gửi dồn dập các yêu cầu HTTP `GET /` hợp lệ:
+Sử dụng công cụ Apache Benchmark (`ab -k`) thiết lập các kết nối TCP **hoàn chỉnh** (đầy đủ bắt tay 3 bước `SYN -> SYN-ACK -> ACK`) và gửi dồn dập các yêu cầu HTTP `GET /` hợp lệ:
 - Mỗi yêu cầu hợp lệ buộc Web Server phải cấp phát bộ đệm, đọc file từ đĩa, thực thi xử lý header và ghi log truy cập.
 - Làm cạn kiệt giới hạn số lượng tiến trình/luồng phục vụ đồng thời (`worker_connections`, `max_children`) của web server.
 - **Tại sao HTTP Flood không thể giả mạo IP (Spoofing)?**  
@@ -165,9 +165,9 @@ Mô hình này kiểm chứng tính thực tế của giải pháp trên các th
 │      LAPTOP NẠN NHÂN (VICTIM)     │  │       MÁY TẤN CÔNG 1          │   │       MÁY TẤN CÔNG 2          │
 │                                   │  │        (ATTACKER 1)           │   │        (ATTACKER 2)           │
 │ • IP: 192.168.1.50 (wlan0)        │  │ • IP: 192.168.1.61            │   │ • IP: 192.168.1.62            │
-│ • Nginx Web Server (Port 80)      │  │ • syn_flood.py / udp_flood.py │   │ • syn_flood.py / udp_flood.py │
-│ • Bộ phát hiện: detector.py       │  │ • http_flood.py (L7)          │   │ • http_flood.py (L7)          │
-│ • Victim Defense Console (Port 3000)│ │ • Công cụ hping3 / ab        │   │ • Phối hợp qua SSH            │
+│ • Nginx Web Server (Port 80)      │  │ • hping3 (SYN, UDP, ICMP)     │   │ • hping3 (SYN, UDP, ICMP)     │
+│ • Bộ phát hiện: detector.py       │  │ • ab (HTTP Flood L7)          │   │ • ab (HTTP Flood L7)          │
+│ • Victim Defense Console (Port 3000)│ │ • Phối hợp qua SSH / tay      │   │ • Phối hợp qua SSH / tay      │
 └───────────────────────────────────┘  └───────────────────────────────┘   └───────────────────────────────┘
 ```
 

