@@ -23,6 +23,9 @@ SCEN = {
     "D": dict(desc="low-rate SYN spoof (duoi nguong)", truth="DDoS", mode="syn", spoof=True, n=2, pps=12),
     # E: benign 1 nguon nhung tai cao -> pps VUOT ~40 (luat BAO NHAM) nhung n_src=1 + ack>>syn -> ML hoc benign.
     "E": dict(desc="benign HTTP 1 nguon tai cao (flash-crowd nhe)", truth="BENIGN", mode="http", spoof=False, n=1, threads=6),
+    # U va I: Vector L4 UDP va L3 ICMP (da dang hoa vector tan cong)
+    "U": dict(desc="6 nguon UDP flood (L4 volumetric)", truth="DDoS", mode="udp", spoof=True, n=6, pps=400),
+    "I": dict(desc="6 nguon ICMP echo flood (L3 ping)", truth="DDoS", mode="icmp", spoof=True, n=6, pps=400),
 }
 
 
@@ -43,11 +46,11 @@ def run_one(name, baseline, duration, cooldown, pps_override=None,
     # pps hieu luc: uu tien override tu CLI (chi co tac dung voi SYN), nguoc lai giu mac dinh kich ban
     eff_pps = pps_override if pps_override is not None else s.get("pps")
     # intensity: paced = scapy co dieu tiet (mac dinh, dung cho dataset ML, giu nguyen).
-    #            max   = cuong do TOI DA (hping3/ab line-rate) -> CHI ho tro A/B/C; can engine eBPF
+    #            max   = cuong do TOI DA (hping3/ab line-rate) -> ho tro A/B/C/U/I; can engine eBPF
     #            de dem kip (scapy rot goi nang o line-rate).
-    is_max = (intensity == "max" and name in ("A", "B", "C"))
+    is_max = (intensity == "max" and name in ("A", "B", "C", "U", "I"))
     if intensity == "max" and not is_max:
-        print(f"[!] intensity=max chi ho tro A/B/C; chay {name} o che do paced.")
+        print(f"[!] intensity=max chi ho tro A/B/C/U/I; chay {name} o che do paced.")
     csv = f"/app/{name}.csv"
     host_csv = os.path.join(OUT_DIR, f"{name}.csv")
     print(f"\n=== Kich ban {name}: {s['desc']}  (mong doi: {s['truth']}, "
@@ -75,8 +78,21 @@ def run_one(name, baseline, duration, cooldown, pps_override=None,
     for a in used:
         if is_max and s["mode"] == "syn":
             # SYN flood cuong do toi da bang hping3 (line-rate). --rand-source cho kich ban spoof.
-            # max_rate_us > 0 -> gioi han (-i uN) de ramp an toan; nguoc lai --flood (het toc luc).
             cmd = ["timeout", str(duration), "hping3", "-S", "-p", "80", "-q"]
+            if s["spoof"]:
+                cmd.append("--rand-source")
+            cmd += (["-i", "u%d" % max_rate_us] if max_rate_us > 0 else ["--flood"])
+            cmd.append(VICTIM)
+        elif is_max and s["mode"] == "udp":
+            # UDP flood cuong do toi da bang hping3.
+            cmd = ["timeout", str(duration), "hping3", "--udp", "-p", "80", "-q"]
+            if s["spoof"]:
+                cmd.append("--rand-source")
+            cmd += (["-i", "u%d" % max_rate_us] if max_rate_us > 0 else ["--flood"])
+            cmd.append(VICTIM)
+        elif is_max and s["mode"] == "icmp":
+            # ICMP flood cuong do toi da bang hping3.
+            cmd = ["timeout", str(duration), "hping3", "--icmp", "-q"]
             if s["spoof"]:
                 cmd.append("--rand-source")
             cmd += (["-i", "u%d" % max_rate_us] if max_rate_us > 0 else ["--flood"])
@@ -90,6 +106,18 @@ def run_one(name, baseline, duration, cooldown, pps_override=None,
                 cmd += ["--pps", str(eff_pps)]
             if s["spoof"]:
                 cmd.append("--spoof")
+        elif s["mode"] == "udp":
+            cmd = ["timeout", str(duration), "python3", "/app/udp_flood.py", VICTIM, "-p", "80"]
+            if eff_pps:
+                cmd += ["--pps", str(eff_pps)]
+            if s["spoof"]:
+                cmd.append("--spoof")
+        elif s["mode"] == "icmp":
+            cmd = ["timeout", str(duration), "hping3", "--icmp", "-q"]
+            if s["spoof"]:
+                cmd.append("--rand-source")
+            cmd += ["-i", "u%d" % (1000000 // (eff_pps or 400))]
+            cmd.append(VICTIM)
         else:
             cmd = ["python3", "/app/http_flood.py", VICTIM, "-p", "80",
                    "-t", str(s.get("threads", 20)), "-d", str(duration)]

