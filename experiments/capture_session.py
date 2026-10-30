@@ -50,9 +50,14 @@ def c_udp(pps=None, spoof=False):
         a += ["--pps", str(pps)]
     return a
 
-def c_http(threads, dur):
+def c_http(threads, dur, pps=0):
     # http_flood tu dung sau -d giay; timeout boc ngoai la lop an toan.
-    return ["python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", str(threads), "-d", str(dur)]
+    # pps>0: gioi han REQUEST/giay -> pps goi ve dai THUC TE (tranh chuc nghin pps phi thuc te cua
+    # bridge Docker; quan trong de khop mien voi demo 2 may WiFi).
+    a = ["python3", "/app/http_flood.py", VICTIM, "-p", "80", "-t", str(threads), "-d", str(dur)]
+    if pps:
+        a += ["--pps", str(pps)]
+    return a
 
 def c_benign(pps, dur):
     return ["python3", "/app/benign_gen.py", VICTIM, "--pps", str(pps), "-d", str(dur)]
@@ -82,11 +87,12 @@ def build_phases(dur):
         dict(name="B2", label="BENIGN", jobs=jobs(a15, c_benign(20, dur)),
              note="FLASH CROWD: 5(+1) nguon, per-src THAP (ca kho vs HTTP-DDoS)"),
         # --- DoS (1 nguon tan cong + a6 nen) ---
-        dict(name="S1", label="DoS", jobs=jobs(a1, c_syn(pps=20)),
-             note="SYN duoi nguong (luat bo sot)"),
+        dict(name="S1", label="DoS", jobs=jobs(a1, c_syn(pps=12)),
+             note="SYN duoi nguong (pps 12: SYN non-spoof bi phan xa RST ~gap doi -> ~24+floor<40, luat bo sot)"),
         dict(name="S2", label="DoS", jobs=jobs(a1, c_syn(pps=300)), note="SYN mid"),
         dict(name="U1", label="DoS", jobs=jobs(a1, c_udp(pps=400)), note="UDP mid (nuoi udp_s)"),
-        dict(name="H1", label="DoS", jobs=jobs(a1, c_http(20, dur)), note="HTTP 1 nguon (ack>>syn)"),
+        dict(name="H1", label="DoS", jobs=jobs(a1, c_http(20, dur, pps=150)),
+             note="HTTP 1 nguon paced ~150 req/s (~0.8-1k pps, ack>>syn, dai thuc te)"),
         dict(name="I1", label="DoS", jobs=jobs(a1, c_icmp(5000)), note="ICMP ~200pps"),
         # --- DDoS spoof (1 container -> nhieu IP gia) ---
         dict(name="S3", label="DDoS", jobs=jobs(a1, c_syn(pps=1500, spoof=True)),
@@ -96,11 +102,11 @@ def build_phases(dur):
         # --- DDoS nguon that nhieu container (khop demo + da dang pps) ---
         dict(name="D2s", label="DDoS", jobs=jobs(a12, c_syn(pps=150)),
              note="DUNG 2 nguon that, KHONG spoof (khop 2 may demo)"),
-        dict(name="D2h", label="DDoS", jobs=jobs(a12, c_http(15, dur)),
-             note="2 nguon that L7 (khop 2 may demo)"),
+        dict(name="D2h", label="DDoS", jobs=jobs(a12, c_http(15, dur, pps=150)),
+             note="2 nguon that L7 paced ~150 req/s/nguon (~1.5-2k pps tong, khop dai demo 2 may WiFi)"),
         dict(name="D3s", label="DDoS", jobs=jobs(a123, c_syn(pps=120)), note="3 nguon mid (da dang n_src)"),
-        dict(name="D5h", label="DDoS", jobs=jobs(a15, c_http(20, dur)),
-             note="5 nguon per-src CAO (tuong phan B2)"),
+        dict(name="D5h", label="DDoS", jobs=jobs(a15, c_http(20, dur, pps=120)),
+             note="5 nguon paced ~120 req/s/nguon (~3-4k pps tong, muc 'cao' thuc te, tuong phan B2)"),
     ]
 
 
@@ -128,7 +134,8 @@ def main():
                     help="ten run (1 pcap = 1 run cho LORO)")
     ap.add_argument("--dur", type=int, default=30, help="thoi luong moi pha (giay)")
     ap.add_argument("--gap", type=int, default=10, help="nghi giua cac pha (giay, benign-only)")
-    ap.add_argument("--floor-pps", type=float, default=5.0, help="toc do benign nen tren a6")
+    ap.add_argument("--floor-pps", type=float, default=2.0,
+                    help="toc do benign nen tren a6 (req/s; 2 ~ 11 pps, du thap de S1 duoi nguong)")
     ap.add_argument("--dry-run", action="store_true", help="chi IN ke hoach + lenh, KHONG chay")
     args = ap.parse_args()
 

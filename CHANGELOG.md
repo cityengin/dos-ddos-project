@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   leave-one-run-out (1 pcap = 1 run), and prints feature importance. `avg_pkt_size` is taken from the IP
   total-length header field so the `-s 100` snaplen does not corrupt it; `detection/Dockerfile` already
   ships `tcpdump`. The Docker lab, attack scripts, live detector, and scenarios A/B/C are unchanged.
+- **`http_flood.py --pps`** — paces total requests/s across the worker threads (default `0` = unlimited,
+  behaviour unchanged). Mirrors `syn_flood.py --pps` and lets the L7 capture scenarios be held to
+  realistic packet rates instead of the Docker bridge's tens-of-thousands pps, so the ML dataset does not
+  domain-shift away from a real 2-machine WiFi demo. `capture_session.py` uses it to pace H1 (~150 req/s),
+  D2h (~150/source) and D5h (~120/source), lowers the benign floor to `--floor-pps 2` (~11 pps), and drops
+  S1 to `--pps 12` so that single-source sub-threshold SYN (which doubles to ~2x pps via kernel RST
+  reflection) stays under the 40 pps / 25 syn rule — the case the window ML should catch and the rule miss.
 - **UDP flood** — a third attack type (volumetric L3/4), alongside SYN (L4) and HTTP (L7). New
   `attacks/udp_flood.py` mirrors `syn_flood.py` (scapy `IP()/UDP()`, `--spoof`, `--pps`, `--count`,
   `--size`, one reused `conf.L3socket()`). The detector now counts UDP in both engines (scapy
