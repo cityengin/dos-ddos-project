@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **DoS-vs-DDoS classifier now uses source count _plus dominance_**, not a bare `n_src >= 2`. Adds
+  `--ddos-min-src` (default 10) and `--ddos-dom-share` (default 0.8): a window is DDoS when
+  `n_src >= --ddos-min-src` (many sources — spoof or many hosts) **or** (`n_src >= 2` **and** the top
+  source's packet share `top_share < --ddos-dom-share` — no single source dominates); otherwise DoS.
+  Fixes a real-shared-network misclassification: on campus WiFi a single-source DoS picks up 1–2 stray
+  background packets to the victim each window, so the old `n_src >= 2` rule flagged it DDoS —
+  `top_share ≈ 1.0` (and `H(src) ≈ 0`) shows it is really one source (measured: A non-spoof →
+  `n=3, H(src)=0.03, top≈0.998`). The isolated Docker lab (only attacker+victim) is unaffected, so
+  A/B/C there are unchanged. Adds `top=<share>` to the DoS/DDoS alert line; CSV / `--stream` / ML /
+  `--adaptive` / `[SYN flood]` / `[UDP flood]` are all unchanged. Validated live on 2 real machines
+  over WiFi: A→DoS, B(spoof)→DDoS, C(1 source)→DoS, D(UDP)→DoS.
+
 ### Added
 
 - **UDP flood** — a third attack type (volumetric L3/4), alongside SYN (L4) and HTTP (L7). New

@@ -50,7 +50,8 @@ reload nhom docker (hoac re-login / `newgrp docker`).
 - Cua so 1 giay. Nguong dang dung: --pps 40 --syn 25
 - --victim 172.30.0.10: CHI dem goi inbound toi victim (bo goi victim tu tra ve) -> n_src/ack chinh xac
 - Threshold: alert khi pps>=nguong HOAC syn>=nguong
-- Phan loai: n_src>=2 => DDoS, nguoc lai => DoS  (dung so nguon lam tieu chi chinh)
+- Phan loai: DDoS khi n_src>=--ddos-min-src(10) HOAC (n_src>=2 VA top_share<--ddos-dom-share(0.8)); nguoc lai DoS.
+  top_share = ty le goi cua nguon lon nhat (1 nguon ap dao -> ~1.0); dung do "ap dao" de loai nhieu nen mang that.
 - SYN flood: nhan dien khi ack < syn*0.2 (half-open)
 - Entropy: H(src) dinh luong muc phan tan (DoS=0, DDoS-spoof ~6, HTTP-3-nguon ~1.58)
 - --adaptive: nguong THICH NGHI EWMA (mu + k*MAD, san = --pps/--syn), dong bang hoc khi dang alert.
@@ -121,6 +122,23 @@ reload nhom docker (hoac re-login / `newgrp docker`).
   -> ack cung bi thoi phong boi SYN-ACK cua victim nen co "[SYN flood]" (ack<syn*0.2) khong kich hoat dung.
 - DA SUA: them --victim, on_packet chi dem goi INBOUND (dst == victim). Sau khi sua: A -> n_src=1, ack=0
   => DoS [SYN flood] dung; B/C van dung. So sanh before/after la mot diem manh de trinh bay trong bao cao.
+
+## Phat hien tren MANG THAT nhieu may (WiFi) + tinh chinh phan loai (DA SUA)
+- Setup 2 may that qua WiFi truong "Sinhvien-H" (/16): victim 10.103.19.131 (card wlp0s20f3, nginx + detector) +
+  1 attacker 10.103.20.14 (docs/MULTI_MACHINE.md). WiFi nay KHONG co client isolation nen 2 may ping/curl duoc nhau.
+- Chay A (syn_flood --pps 400, KHONG spoof = 1 nguon that): detector thay pps~800, syn~400, ack~2 -> tag [SYN flood]
+  DUNG. pps gap doi syn vi moi SYN -> nginx tra SYN-ACK -> KERNEL attacker tra RST (dst=victim, cung IP attacker nen
+  khong them nguon) => ~400 SYN + ~400 RST.
+- NHUNG bi gan nham DDoS (n=3): mang /16 chia se nen moi cua so lot 1-2 goi nen tu may khac toi IP victim -> n_src=3,
+  trong khi H_src=0.03 va top_share~0.998 cho thay THUC CHAT 1 nguon ap dao. Lab Docker co lap khong gap (chi
+  attacker+victim) nen luat cu n_src>=2 du dung o Docker, GION tren mang that.
+- DA SUA: them --ddos-min-src(mac dinh 10)/--ddos-dom-share(mac dinh 0.8) vao detector.py. Luat moi = DDoS khi RAT
+  nhieu nguon (>=10) HOAC >=2 nguon ma khong nguon nao chiem >=80% goi. Kiem thu 6 case bang cong thuc that:
+  A mang that (n=3,top=.998)->DoS | A Docker (n=1)->DoS | B spoof 400 IP (top=.003)->DDoS | C http 1 may->DoS |
+  DDoS 2 may (top=.51)->DDoS | DDoS 6 may (top=.17)->DDoS => dung het. [SYN flood]/UDP/adaptive/ML/CSV khong doi
+  (CSV giu cot n_src; them 'top=' vao dong canh bao van ban cho de doc luc demo).
+- TODO xac minh live: chay lai A tren may that sau khi sua -> phai ra DoS; nen chay them B (spoof) de xac nhan van DDoS
+  (luu y AP WiFi co the loc goi spoof -> neu n_src~1 thi do AP, can attacker thu 2 that).
 
 ## Con lai (TODO)
 - [x] Do baseline chinh thuc (baseline.csv) -> xac nhan nguong (0 FP)

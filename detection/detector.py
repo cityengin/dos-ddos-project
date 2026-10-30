@@ -62,6 +62,11 @@ def main():
     ap.add_argument("--interval", type=float, default=1.0, help="do dai cua so (giay)")
     ap.add_argument("--pps", type=int, default=200, help="nguong packet/s")
     ap.add_argument("--syn", type=int, default=100, help="nguong SYN/s")
+    ap.add_argument("--ddos-min-src", type=int, default=10,
+                    help="n_src >= nguong nay => DDoS ngay (rat nhieu nguon: spoof hoac nhieu may that)")
+    ap.add_argument("--ddos-dom-share", type=float, default=0.8,
+                    help="khi 2..min-src nguon: neu nguon lon nhat chiem < nguong nay => DDoS; "
+                         "nguoc lai 1 nguon ap dao (+ nhieu nen mang that) => DoS")
     ap.add_argument("--victim", default="172.30.0.10",
                     help="chi dem goi inbound toi victim (src!=victim). De rong '' = dem tat ca")
     ap.add_argument("--adaptive", action="store_true",
@@ -209,17 +214,27 @@ def main():
         verdict = None
         syn_flood = False
         udp_flood = False
+        # ty le goi cua nguon lon nhat (do "ap dao"): ~1.0 = 1 nguon chiem gan het.
+        # Tren mang that chia se, moi cua so lot vai goi nen tu may khac -> n_src phong len,
+        # nhung top_share van ~1.0 => van la 1 nguon that su. Dung de tach "DoS + nhieu nen"
+        # khoi DDoS that (spoof: rat nhieu nguon; nhieu may: khong nguon nao ap dao).
+        total_src = sum(snap_src.values()) or 1
+        top_share = (max(snap_src.values()) / total_src) if snap_src else 1.0
         if triggered:
-            # co flood -> phan loai dua vao so nguon + entropy nguon
-            verdict = "DDoS" if n_src >= 2 else "DoS"
+            # co flood -> phan loai: rat nhieu nguon => DDoS ngay; vai nguon va khong ai
+            # ap dao => DDoS; con lai (1 nguon ap dao + nhieu nen) => DoS.
+            if n_src >= args.ddos_min_src or (n_src >= 2 and top_share < args.ddos_dom_share):
+                verdict = "DDoS"
+            else:
+                verdict = "DoS"
             syn_flood = (syn_s >= thr_syn and ack_s < syn_s * 0.2)
             # UDP flood: volumetric UDP ap dao (udp_s vuot nguong --pps VA lon hon syn_s) ->
             # khong gan nham khi vua co SYN vua co UDP. Dung args.pps (nguong --pps) lam nguong UDP.
             udp_flood = (udp_s >= args.pps and udp_s > syn_s)
             if verdict == "DDoS":
-                alert = "!! DDoS (nhieu nguon, H_src=%.2f, n=%d)" % (h_src, n_src)
+                alert = "!! DDoS (nhieu nguon, H_src=%.2f, n=%d, top=%.2f)" % (h_src, n_src, top_share)
             else:
-                alert = "!! DoS  (it nguon, H_src=%.2f, n=%d)" % (h_src, n_src)
+                alert = "!! DoS  (it nguon, H_src=%.2f, n=%d, top=%.2f)" % (h_src, n_src, top_share)
             if syn_flood:
                 alert += " [SYN flood]"
             if udp_flood:
