@@ -23,6 +23,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **PCAP-based window-dataset pipeline** for ML dataset collection, alongside the existing
+  `build_window_dataset.py` (kept as a fallback). `detection/window_features.py` is a new single source
+  of truth for the window feature formula, imported by both the offline extractor and (later) the live
+  detector so they compute identical features; it defines `FEATURES` (10 live-supplyable: the 9 canonical
+  + `rate_per_src = pps/max(n_src,1)`) and a broader `EXTRACT` set (adds `icmp_s`, `udp_ratio`,
+  `avg_pkt_size`) written to the dataset for later pruning. `attacks/benign_gen.py` generates legitimate
+  user traffic (randomized GETs, think-time, low rate) for a real BENIGN class (no longer labelling by
+  `pps==0`). `experiments/capture_session.py` orchestrates a 14-phase scenario matrix in the Docker lab
+  via `docker exec` (benign + flash-crowd, single-source DoS, spoofed DDoS, and real multi-source DDoS
+  including an exact 2-source no-spoof mode that matches a future physical demo; diverse pps low/mid/high),
+  runs `tcpdump -s 100` inside the detector container, and writes a host-clock timeline. `ml/pcap_to_windows.py`
+  extracts sliding windows (1.0s / 0.5s stride) via the shared module and labels each window by the
+  timeline (a window overlapping an attack interval gets that attack's class — "any attack packet in the
+  window ⇒ attack", early-detection bias). `ml/train_window.py` now imports `FEATURES` from the shared
+  module, **drops the random 70/30 split** (overlapping windows leak), evaluates only by
+  leave-one-run-out (1 pcap = 1 run), and prints feature importance. `avg_pkt_size` is taken from the IP
+  total-length header field so the `-s 100` snaplen does not corrupt it; `detection/Dockerfile` already
+  ships `tcpdump`. The Docker lab, attack scripts, live detector, and scenarios A/B/C are unchanged.
 - **UDP flood** — a third attack type (volumetric L3/4), alongside SYN (L4) and HTTP (L7). New
   `attacks/udp_flood.py` mirrors `syn_flood.py` (scapy `IP()/UDP()`, `--spoof`, `--pps`, `--count`,
   `--size`, one reused `conf.L3socket()`). The detector now counts UDP in both engines (scapy
