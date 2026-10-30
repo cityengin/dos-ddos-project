@@ -218,7 +218,12 @@
     // Machine Learning Prediction
     if (d.ml_verdict) {
       const mlLvl = d.ml_verdict === "DDoS" ? "#b91c1c" : (d.ml_verdict === "DoS" ? "#b45309" : "#15803d");
-      mlVal.textContent = d.ml_verdict;
+      if (d.ml_verdict !== "BENIGN" && attackType) {
+        const shortType = attackType.replace(/\s*\(L\d\)/, "");
+        mlVal.innerHTML = `${d.ml_verdict} <span class="vbox-type">(${shortType})</span>`;
+      } else {
+        mlVal.textContent = d.ml_verdict;
+      }
       mlVal.style.color = mlLvl;
       mlConf.textContent = d.ml_conf != null ? `Confidence: ${Math.round(d.ml_conf * 100)}%` : "Active";
     } else {

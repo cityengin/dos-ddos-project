@@ -72,14 +72,14 @@ body {
 }
 
 /* ==========================================================================
-   Topbar Header (Compact)
+   Topbar Header (Ultra-Compact)
    ========================================================================== */
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   background: var(--bg-card);
-  padding: 10px 18px;
+  padding: 6px 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
   box-shadow: var(--shadow-sm);
@@ -88,12 +88,12 @@ body {
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .shield-icon {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   background: #eff6ff;
   color: #2563eb;
   border-radius: var(--radius-sm);
@@ -104,40 +104,45 @@ body {
   flex-shrink: 0;
 }
 
+.shield-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 .title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .title-row h1 {
-  font-size: 1.15rem;
+  font-size: 1.02rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text-main);
 }
 
 .subtitle {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
-  margin-top: 1px;
+  margin-top: 0px;
 }
 
 .status-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .status-pill {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 5px;
+  padding: 3px 8px;
   border-radius: var(--radius-full);
   background: var(--bg-card-subtle);
   border: 1px solid var(--border-light);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 500;
   color: var(--text-muted);
 }
@@ -298,13 +303,13 @@ body {
 }
 
 /* ==========================================================================
-   Main Verdict Banner (Compact)
+   Main Verdict Banner (Ultra-Compact)
    ========================================================================== */
 .verdict-banner {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 18px;
+  padding: 6px 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
   background: var(--bg-card);
@@ -346,12 +351,12 @@ body {
 .verdict-main {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .verdict-icon-wrap {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -360,8 +365,8 @@ body {
 }
 
 .verdict-icon-wrap svg {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
 }
 
 .safe .verdict-icon-wrap {
@@ -389,11 +394,11 @@ body {
 .verdict-headline {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .verdict-primary {
-  font-size: 1.35rem;
+  font-size: 1.18rem;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
@@ -403,9 +408,9 @@ body {
 .crit .verdict-primary { color: #b91c1c; }
 
 .verdict-tag {
-  font-size: 0.75rem;
+  font-size: 0.70rem;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: var(--radius-full);
 }
 
@@ -425,46 +430,53 @@ body {
 }
 
 .verdict-desc {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .verdict-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .verdict-box {
   background: var(--bg-card);
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-light);
-  min-width: 130px;
+  min-width: 125px;
   box-shadow: var(--shadow-sm);
 }
 
 .vbox-title {
   display: block;
-  font-size: 0.65rem;
+  font-size: 0.60rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-light);
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 
 .vbox-val {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--text-main);
   line-height: 1.2;
 }
 
+.vbox-type {
+  font-size: 0.76rem;
+  font-weight: 600;
+  opacity: 0.9;
+  letter-spacing: -0.01em;
+}
+
 .vbox-sub {
   display: block;
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   color: var(--text-muted);
   margin-top: 1px;
 }
