@@ -1,38 +1,39 @@
-Du lieu: 316 window x 8 dac trung | lop: {'BENIGN': 162, 'DDoS': 114, 'DoS': 40}
-Dac trung (thu tu co dinh): ['pps', 'syn_s', 'ack_s', 'h_src', 'h_dport', 'n_src', 'syn_ratio', 'ack_syn_ratio']
+Du lieu: 3362 window x 10 dac trung | lop: {'BENIGN': 1124, 'DDoS': 1307, 'DoS': 931}
+Dac trung (thu tu co dinh, tu window_features.FEATURES): ['pps', 'syn_s', 'ack_s', 'udp_s', 'h_src', 'h_dport', 'n_src', 'syn_ratio', 'ack_syn_ratio', 'rate_per_src']
+So run (pcap) cho LORO: 3 -> [np.str_('s1'), np.str_('s2'), np.str_('s3')]
 
-===== (a) Split phan tang 70/30 (test = 95 window) =====
-Phat hien tan cong (nhi phan BENIGN vs attack) - F1:
-  Luat nguong (pps>=40 or syn>=25): F1 = 0.575
-  RandomForest (window)           : F1 = 0.989
-Phan loai da lop (BENIGN/DoS/DDoS) - macro-F1:
-  Luat nguong : macro-F1 = 0.585
-  RandomForest: macro-F1 = 0.992
+===== Leave-one-run-out (3 fold; F1_bin tren 3 fold co tan cong) =====
+  ML   : F1_bin = 0.996 +/- 0.001 | accuracy da lop = 0.994 +/- 0.000
+  Luat : F1_bin = 0.883 +/- 0.003 | accuracy da lop = 0.611 +/- 0.000
 
-Confusion matrix RandomForest (hang=that, cot=du doan; nhan=['BENIGN', 'DDoS', 'DoS']):
-[[49  0  0]
- [ 1 33  0]
- [ 0  0 12]]
-Confusion matrix Luat nguong:
-[[38  0 11]
- [18 15  1]
- [ 5  0  7]]
+Confusion matrix ML (gop LORO; hang=that, cot=du doan; nhan=['BENIGN', 'DDoS', 'DoS']):
+[[1123    1    0]
+ [  12 1294    1]
+ [   5    0  926]]
+Confusion matrix Luat (gop LORO):
+[[ 761  363    0]
+ [  15 1292    0]
+ [ 165  766    0]]
 
-Bao cao chi tiet RandomForest:
+Bao cao chi tiet ML (gop LORO):
               precision    recall  f1-score   support
 
-      BENIGN      0.980     1.000     0.990        49
-        DDoS      1.000     0.971     0.985        34
-         DoS      1.000     1.000     1.000        12
+      BENIGN      0.985     0.999     0.992      1124
+        DDoS      0.999     0.990     0.995      1307
+         DoS      0.999     0.995     0.997       931
 
-    accuracy                          0.989        95
-   macro avg      0.993     0.990     0.992        95
-weighted avg      0.990     0.989     0.989        95
+    accuracy                          0.994      3362
+   macro avg      0.994     0.995     0.994      3362
+weighted avg      0.994     0.994     0.994      3362
 
-Window ATTACK duoi nguong trong test (pps<40 va syn<25): 23
-  Luat bat dung 'attack': 0/23 (0%)
-  ML   bat dung 'attack': 23/23 (100%)  <-- diem ML hon luat
-
-===== (b) Leave-one-run-out (10 fold; F1_bin tren 8 fold co tan cong) =====
-  ML   : F1_bin = 0.993 +/- 0.012 | accuracy da lop = 0.994 +/- 0.013
-  Luat : F1_bin = 0.516 +/- 0.486 | accuracy da lop = 0.644 +/- 0.286
+Feature importance (RandomForest tren toan bo du lieu):
+  n_src            0.2831
+  h_src            0.2533
+  pps              0.1518
+  rate_per_src     0.1143
+  syn_s            0.0624
+  syn_ratio        0.0519
+  ack_s            0.0514
+  ack_syn_ratio    0.0306
+  udp_s            0.0013
+  h_dport          0.0000
