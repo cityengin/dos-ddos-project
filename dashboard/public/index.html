@@ -39,6 +39,12 @@
             <span class="status-dot"></span>
             <span class="status-text">Detector Engine</span>
           </div>
+          <!-- Compact Benign User Simulator Toggle -->
+          <button class="sim-pill active" id="btn-sim-toggle" type="button" title="Nhấn để Bật/Tắt mô phỏng người dùng ngẫu nhiên">
+            <span class="sim-dot" id="sim-dot"></span>
+            <span class="sim-text" id="sim-text">Users: ~20</span>
+            <span class="sim-switch"><span class="sim-switch-thumb"></span></span>
+          </button>
           <div class="health-card" id="card-health" title="Trạng thái Web Server Victim">
             <span class="health-label">Web Service:</span>
             <span class="health-badge" id="health-status">Checking...</span>
@@ -295,7 +301,7 @@
       <div class="panel-card panel-left">
         <div class="panel-card-header">
           <div class="panel-title-group">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="panel-icon text-red">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="panel-icon text-indigo" id="source-table-icon">
               <circle cx="12" cy="12" r="10"/>
               <line x1="22" y1="12" x2="18" y2="12"/>
               <line x1="6" y1="12" x2="2" y2="12"/>
@@ -303,8 +309,8 @@
               <line x1="12" y1="22" x2="12" y2="18"/>
             </svg>
             <div>
-              <h3>Địa chỉ IP Tấn công (Top Active Attacker IPs)</h3>
-              <p class="panel-desc">Danh sách các địa chỉ IP nguồn đang phát sinh lưu lượng lớn nhất vào máy Victim</p>
+              <h3 id="source-table-title">Nguồn Lưu lượng IP Hoạt động (Top Active Sources)</h3>
+              <p class="panel-desc" id="source-table-desc">Danh sách các địa chỉ IP nguồn đang phát sinh lưu lượng vào máy Victim</p>
             </div>
           </div>
           <span class="badge badge-neutral mono" id="active-ip-count">0 IPs Active</span>

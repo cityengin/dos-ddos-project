@@ -95,6 +95,10 @@
         onHealthReceived(msg);
         break;
 
+      case "sim_status":
+        updateSimUI(msg);
+        break;
+
       case "clear_logs":
         $("log-list").innerHTML = "";
         break;
@@ -185,6 +189,11 @@
       </svg>`;
       ruleVal.textContent = "BENIGN";
       ruleVal.style.color = "#15803d";
+      const srcTitle = $("source-table-title");
+      if (srcTitle) {
+        srcTitle.textContent = "Nguồn Lưu lượng IP Hoạt động (Top Active Sources)";
+        srcTitle.style.color = "";
+      }
     } else {
       banner.className = "verdict-banner " + (ddos ? "crit" : "warn");
       primaryText.textContent = verdict;
@@ -199,6 +208,11 @@
       </svg>`;
       ruleVal.textContent = verdict + (attackType ? ` [${attackType.split(' ')[0]}]` : "");
       ruleVal.style.color = ddos ? "#b91c1c" : "#b45309";
+      const srcTitle = $("source-table-title");
+      if (srcTitle) {
+        srcTitle.textContent = "Địa chỉ IP Tấn công (Top Attacker IPs)";
+        srcTitle.style.color = "#dc2626";
+      }
     }
 
     // Machine Learning Prediction
@@ -496,6 +510,49 @@
   window.addEventListener("resize", () => {
     renderAllCharts();
   });
+
+  // ---------- Benign User Simulator Controller ----------
+  function updateSimUI(data) {
+    if (!data) return;
+    const btn = $("btn-sim-toggle");
+    const txt = $("sim-text");
+    if (!btn || !txt) return;
+
+    if (data.running) {
+      btn.className = "sim-pill active";
+      const uCount = data.activeUsers || data.targetUsers || 20;
+      txt.textContent = `Users: ~${uCount}`;
+      btn.title = `Đang mô phỏng ${uCount} người dùng ngẫu nhiên (ra vào tự nhiên). Nhấp để Tắt.`;
+    } else {
+      btn.className = "sim-pill";
+      txt.textContent = "Users: OFF";
+      btn.title = "Mô phỏng người dùng đang Tắt. Nhấp để Bật.";
+    }
+  }
+
+  const btnSim = $("btn-sim-toggle");
+  if (btnSim) {
+    btnSim.addEventListener("click", () => {
+      btnSim.style.opacity = "0.6";
+      fetch("/api/sim/toggle", { method: "POST" })
+        .then((r) => r.json())
+        .then((res) => {
+          btnSim.style.opacity = "1";
+          if (res && res.running !== undefined) {
+            updateSimUI({ running: res.running });
+          }
+        })
+        .catch(() => {
+          btnSim.style.opacity = "1";
+        });
+    });
+  }
+
+  // Initial fetch for simulator status
+  fetch("/api/sim/status")
+    .then((r) => r.json())
+    .then(updateSimUI)
+    .catch(() => {});
 
   // Start connection
   connect();

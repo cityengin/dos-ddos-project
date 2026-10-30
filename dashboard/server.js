@@ -39,6 +39,83 @@ let lastAttackType = null;
 let wss = null;
 const eventLog = []; // in-memory event log (last 100 events)
 
+// Dynamic Benign User Simulator State
+let simProc = null;
+let simStatus = {
+  running: false,
+  activeUsers: 0,
+  targetUsers: 0,
+  pps: 0,
+};
+
+function startSimulator() {
+  if (simProc || simStatus.running) return;
+  console.log("[simulator] Starting dynamic benign user simulator on attacker6...");
+  try {
+    simProc = spawn("docker", [
+      "exec",
+      "attacker6",
+      "python3",
+      "-u",
+      "/app/benign_dynamic_users.py",
+      VICTIM || "172.30.0.10",
+      "--min-users", "12",
+      "--max-users", "24",
+    ]);
+
+    simStatus.running = true;
+    broadcast({ type: "sim_status", ...simStatus });
+    addEvent("info", "Traffic Simulator", "Mô phỏng 15-30 người dùng ngẫu nhiên đã được kích hoạt.");
+
+    const rl = readline.createInterface({ input: simProc.stdout, terminal: false });
+    rl.on("line", (line) => {
+      try {
+        const data = JSON.parse(line.trim());
+        if (data.type === "sim_stats") {
+          simStatus = {
+            running: true,
+            activeUsers: data.active_users || 0,
+            targetUsers: data.target_users || 0,
+            pps: data.req_per_s || 0,
+          };
+          broadcast({ type: "sim_status", ...simStatus });
+        }
+      } catch (e) {}
+    });
+
+    simProc.stderr.on("data", (d) => {
+      const errStr = d.toString().trim();
+      if (errStr && !errStr.includes("Don dep")) {
+        console.error(`[sim-err] ${errStr}`);
+      }
+    });
+
+    simProc.on("exit", (code) => {
+      console.log(`[simulator] Simulator process exited with code ${code}`);
+      simProc = null;
+      simStatus.running = false;
+      simStatus.activeUsers = 0;
+      broadcast({ type: "sim_status", ...simStatus });
+    });
+  } catch (err) {
+    console.error("[simulator] Failed to spawn simulator:", err.message);
+  }
+}
+
+function stopSimulator() {
+  if (!simProc && !simStatus.running) return;
+  console.log("[simulator] Stopping simulator on attacker6...");
+  spawn("docker", ["exec", "attacker6", "pkill", "-INT", "-f", "benign_dynamic_users.py"]);
+  if (simProc) {
+    try { simProc.kill("SIGINT"); } catch (e) {}
+    simProc = null;
+  }
+  simStatus.running = false;
+  simStatus.activeUsers = 0;
+  broadcast({ type: "sim_status", ...simStatus });
+  addEvent("info", "Traffic Simulator", "Đã tạm dừng mô phỏng người dùng.");
+}
+
 function addEvent(level, title, detail, verdict = "BENIGN", attackType = null) {
   const evt = {
     id: Date.now() + "_" + Math.random().toString(36).substr(2, 5),
@@ -78,7 +155,22 @@ app.get("/api/status", (req, res) => {
     iface: IFACE || "default",
     victim: VICTIM || "all",
     eventCount: eventLog.length,
+    simulator: simStatus,
   });
+});
+
+// Simulator REST APIs
+app.get("/api/sim/status", (req, res) => {
+  res.json(simStatus);
+});
+
+app.post("/api/sim/toggle", (req, res) => {
+  if (simStatus.running) {
+    stopSimulator();
+  } else {
+    startSimulator();
+  }
+  res.json({ ok: true, running: simStatus.running });
 });
 
 const server = http.createServer(app);
@@ -297,12 +389,18 @@ wss.on("connection", (ws) => {
     })
   );
 
+  // Send simulator status
+  ws.send(JSON.stringify({ type: "sim_status", ...simStatus }));
+
   ws.on("message", (raw) => {
     try {
       const msg = JSON.parse(raw.toString());
       if (msg.action === "clear_logs") {
         eventLog.length = 0;
         broadcast({ type: "clear_logs" });
+      } else if (msg.action === "toggle_sim") {
+        if (simStatus.running) stopSimulator();
+        else startSimulator();
       }
     } catch {
       /* ignore */
@@ -313,10 +411,12 @@ wss.on("connection", (ws) => {
 server.listen(PORT, HOST, () => {
   console.log(`[dashboard] Victim Defense Console running at http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
   startDetector();
+  startSimulator();
 });
 
 // Graceful cleanup
 function cleanup() {
+  stopSimulator();
   if (detectorProc) {
     try {
       detectorProc.kill("SIGTERM");
