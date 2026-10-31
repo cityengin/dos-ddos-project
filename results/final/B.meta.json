@@ -1,16 +1,21 @@
 {
   "name": "B",
-  "desc": "3 nguon SYN + spoof IP",
+  "desc": "6 nguon SYN + spoof IP",
   "truth": "DDoS",
   "mode": "syn",
   "spoof": true,
   "sources": [
     "attacker1",
     "attacker2",
-    "attacker3"
+    "attacker3",
+    "attacker4",
+    "attacker5",
+    "attacker6"
   ],
   "victim": "172.30.0.10",
-  "attack_start": "10:34:26",
-  "attack_end": "10:34:47",
-  "csv": "detection\\B.csv"
+  "pps": 400,
+  "intensity": "paced",
+  "attack_start": "16:26:31",
+  "attack_end": "16:26:44",
+  "csv": "detection/B.csv"
 }

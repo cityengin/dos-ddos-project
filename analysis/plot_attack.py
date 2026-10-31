@@ -30,6 +30,7 @@ def load(path, t_from=None, t_to=None):
         out.append({
             "sec": (t - t0).total_seconds(),
             "pps": float(r["pps"]), "syn": float(r["syn_s"]), "ack": float(r["ack_s"]),
+            "udp": float(r.get("udp_s", 0)),
             "h_src": float(r["h_src"]), "n_src": int(r["n_src"]),
             "alert": r["alert"].strip(),
         })
@@ -73,6 +74,8 @@ def main():
     ax1.plot(x, [r["pps"] for r in rows], label="pps",   color="#1f77b4", lw=1.4)
     ax1.plot(x, [r["syn"] for r in rows], label="syn/s", color="#d62728", lw=1.2)
     ax1.plot(x, [r["ack"] for r in rows], label="ack/s", color="#2ca02c", lw=1.2)
+    if any(r.get("udp", 0) > 0 for r in rows):
+        ax1.plot(x, [r["udp"] for r in rows], label="udp/s", color="#ff7f0e", lw=1.2)
     ax1.set_yscale("symlog", linthresh=10)
     ax1.set_ylabel("goi / giay (symlog)")
     ax1.grid(True, which="both", alpha=0.25)

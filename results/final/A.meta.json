@@ -8,7 +8,9 @@
     "attacker1"
   ],
   "victim": "172.30.0.10",
-  "attack_start": "10:33:48",
-  "attack_end": "10:34:10",
-  "csv": "detection\\A.csv"
+  "pps": 150,
+  "intensity": "paced",
+  "attack_start": "16:25:41",
+  "attack_end": "16:25:55",
+  "csv": "detection/A.csv"
 }

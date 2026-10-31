@@ -1,16 +1,21 @@
 {
   "name": "C",
-  "desc": "3 nguon HTTP flood (L7)",
+  "desc": "6 nguon HTTP flood (L7)",
   "truth": "DDoS",
   "mode": "http",
   "spoof": false,
   "sources": [
     "attacker1",
     "attacker2",
-    "attacker3"
+    "attacker3",
+    "attacker4",
+    "attacker5",
+    "attacker6"
   ],
   "victim": "172.30.0.10",
-  "attack_start": "10:35:03",
-  "attack_end": "10:35:25",
-  "csv": "detection\\C.csv"
+  "pps": 0,
+  "intensity": "paced",
+  "attack_start": "16:27:25",
+  "attack_end": "16:27:38",
+  "csv": "detection/C.csv"
 }

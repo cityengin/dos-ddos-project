@@ -133,7 +133,9 @@ Môi trường tự động hóa cô lập hoàn toàn trên 1 máy tính đơn 
 
 Mỗi giây, mô-đun phát hiện tổng hợp lưu lượng mạng đến thành một vector toán học 10 chiều:
 
-$$\mathbf{x} = [pps, syn\_s, ack\_s, udp\_s, H(src), H(dport), n\_src, syn\_ratio, ack\_syn\_ratio, rate\_per\_src]$$
+```text
+x = [pps, syn_s, ack_s, udp_s, H(src), H(dport), n_src, syn_ratio, ack_syn_ratio, rate_per_src]
+```
 
 ```
           ┌────────────────────────────────────────────────────────┐
@@ -154,25 +156,25 @@ $$\mathbf{x} = [pps, syn\_s, ack\_s, udp\_s, H(src), H(dport), n\_src, syn\_rati
 2. **`syn_s`**: Số gói TCP mang cờ SYN/giây (chỉ số chính nhận diện tấn công kết nối nửa mở).
 3. **`ack_s`**: Số gói TCP mang cờ ACK/giây (xác nhận các kết nối TCP đã hoàn tất bắt tay).
 4. **`udp_s`**: Số gói tin giao thức UDP/giây (phục vụ nhận dạng tấn công UDP flood).
-5. **`h_src` ($H(src)$)**: Entropy Shannon của phân bố địa chỉ IP nguồn:
-   $$H(src) = -\sum_{i=1}^{n} p_i \log_2(p_i)$$
-   Đo mức độ phân tán của nguồn gửi. 1 nguồn đơn lẻ có $H(src) = 0$; 6 botnet phân bố đều có $H(src) = \log_2 6 \approx 2.58$; IP spoofing ngẫu nhiên có $H(src) > 10.6$ bits.
-6. **`h_dport` ($H(dport)$)**: Entropy Shannon của phân bố cổng đích, giúp phân biệt tấn công dịch vụ cụ thể ($H \approx 0$) với quét cổng ngẫu nhiên ($H$ cao).
+5. **`h_src` (Entropy IP nguồn - `H(src)`):** Entropy Shannon của phân bố địa chỉ IP nguồn:
+   $$H = -\sum_{i=1}^{n} p_i \log_2(p_i)$$
+   Đo mức độ phân tán của nguồn gửi: 1 nguồn đơn lẻ có `H(src) = 0`; 6 botnet phân bố đều có `H(src) ≈ 2.58`; IP spoofing ngẫu nhiên có `H(src) > 10.6` bits.
+6. **`h_dport` (Entropy cổng đích - `H(dport)`):** Entropy Shannon của phân bố cổng đích, giúp phân biệt tấn công dịch vụ cụ thể (`H ≈ 0`) với quét cổng ngẫu nhiên (`H` cao).
 7. **`n_src`**: Số địa chỉ IP nguồn phân biệt ghi nhận trong cửa sổ 1 giây.
-8. **`syn_ratio`**: Tỷ lệ cờ SYN trên tổng số gói: $syn\_s / \max(pps, 1.0)$ (tiệm cận 1.0 khi bị SYN flood).
-9. **`ack_syn_ratio`**: Tỷ lệ cờ ACK trên cờ SYN: $ack\_s / \max(syn\_s, 1.0)$ ($\gg 1.0$ khi HTTP flood, $\approx 0$ khi SYN flood).
-10. **`rate_per_src`**: Tốc độ gói trung bình trên mỗi nguồn: $pps / \max(n\_src, 1)$ — **Đặc trưng quyết định giúp phân biệt Flash Crowd với DDoS Botnet**.
+8. **`syn_ratio`**: Tỷ lệ cờ SYN trên tổng số gói: `syn_s / max(pps, 1.0)` (tiệm cận 1.0 khi bị SYN flood).
+9. **`ack_syn_ratio`**: Tỷ lệ cờ ACK trên cờ SYN: `ack_s / max(syn_s, 1.0)` (`>> 1.0` khi HTTP flood, `≈ 0` khi SYN flood).
+10. **`rate_per_src`**: Tốc độ gói trung bình trên mỗi nguồn: `pps / max(n_src, 1)` — **Đặc trưng quyết định giúp phân biệt Flash Crowd với DDoS Botnet**.
 
 ### Quy tắc Phân loại (Luật Ngưỡng)
 
-1. **Kích hoạt Cảnh báo (Trigger)**: Bật cảnh báo khi $pps \ge \text{ngưỡng}$ HOẶC $syn\_s \ge \text{ngưỡng SYN}$.
+1. **Kích hoạt Cảnh báo (Trigger)**: Bật cảnh báo khi `pps >= threshold` HOẶC `syn_s >= syn_threshold`.
 2. **Phân biệt DoS vs DDoS**:
-   - Nhận định là **DDoS** nếu $n\_src \ge \text{ddos\_min\_src}$ (mặc định 10 - có dấu hiệu IP Spoofing hoặc hàng loạt botnet) HOẶC ($n\_src \ge 2$ VÀ tỷ lệ lưu lượng của nguồn lớn nhất $< 0.8$ - không có nguồn nào áp đảo).
-   - Nhận định là **DoS** nếu một nguồn chiếm đa số lưu lượng ($\text{top\_share} \approx 1.0$, $H(src) \approx 0$).
+   - Nhận định là **DDoS** nếu `n_src >= ddos_min_src` (mặc định 10 - có dấu hiệu IP Spoofing hoặc hàng loạt botnet) HOẶC (`n_src >= 2` VÀ tỷ lệ lưu lượng của nguồn lớn nhất `top_share < 0.8` — không có nguồn nào áp đảo).
+   - Nhận định là **DoS** nếu một nguồn chiếm đa số lưu lượng (`top_share ≈ 1.0`, `H(src) ≈ 0`).
 3. **Gắn nhãn Vector Tấn công**:
-   - `[SYN flood]`: Khi $syn\_s$ vượt ngưỡng và $ack\_s < syn\_s \times 0.2$.
-   - `[UDP flood]`: Khi $udp\_s \ge pps\_thr$ và $udp\_s > syn\_s$.
-   - `[HTTP flood]`: Khi $pps$ cao và $ack\_s \gg syn\_s$ ($ack\_syn\_ratio \gg 1.0$).
+   - `[SYN flood]`: Khi `syn_s` vượt ngưỡng và `ack_s < syn_s * 0.2`.
+   - `[UDP flood]`: Khi `udp_s >= pps_threshold` và `udp_s > syn_s`.
+   - `[HTTP flood]`: Khi `pps` cao và `ack_s >> syn_s` (`ack_syn_ratio >> 1.0`).
 
 ---
 
@@ -201,7 +203,7 @@ Dự án tiếp cận bài toán học máy theo hai giai đoạn rõ ràng:
 ### 1. Đánh giá kiểm chuẩn cấp Luồng trên CICDDoS2019
 
 Ở giai đoạn đầu, nhóm thực hiện đánh giá kiểm chuẩn trên bộ dữ liệu quốc tế **CICDDoS2019** (~131,000 luồng hai chiều, 63 đặc trưng CICFlowMeter):
-- **Phát hiện nhị phân**: Luật ngưỡng đơn đạt $F_1 \approx 0.60$, trong khi Random Forest đạt $F_1 \approx 0.999$ (Độ chính xác 99.9%).
+- **Phát hiện nhị phân**: Luật ngưỡng đơn đạt `F1 ≈ 0.60`, trong khi Random Forest đạt `F1 ≈ 0.999` (Độ chính xác 99.9%).
 - **Hạn chế cố hữu**: Tiếp cận cấp luồng (Flow-level) đòi hỏi phải đợi luồng kết thúc và phải duy trì bảng trạng thái kết nối khổng lồ trong bộ nhớ RAM, rất dễ bị chính các cuộc tấn công tràn bảng trạng thái (state exhaustion) làm sập hệ thống. Điều này thôi thúc nhóm phát triển mô hình cấp Cửa sổ thời gian thực.
 
 ### 2. Mô hình cấp Cửa sổ thời gian thực (Window-Level Model)
@@ -210,8 +212,8 @@ Nhóm xây dựng quy trình thu thập dữ liệu cửa sổ trực tiếp t�
 - **Cửa sổ trượt gối đầu**: Cửa sổ 1.0 giây, bước nhảy 0.5 giây.
 - **Phương pháp đánh giá LORO (Leave-One-Run-Out)**: Tuyệt đối không dùng phép chia ngẫu nhiên 70/30 (tránh hiện tượng **rò rỉ dữ liệu - Data Leakage** giữa các cửa sổ liền kề). Mô hình được đánh giá độc lập trên từng file PCAP hoàn chỉnh.
 - **Xử lý triệt để các trường hợp biên khó (Edge Cases)**:
-  - **Tấn công cường độ thấp (Low-Rate SYN flood pps = 15, Kịch bản D)**: Luật ngưỡng bỏ sót 100%, mô hình Học máy phát hiện chính xác 100% nhờ nhận ra $syn\_ratio \approx 1.0$ và $ack\_s = 0$.
-  - **Người dùng hợp lệ tải cao (Flash Crowd, Kịch bản E)**: Tốc độ gói vượt ngưỡng khiến luật báo nhầm; mô hình Học máy nhận diện đúng là `BENIGN` nhờ $n\_src = 1$, $ack\_s \gg syn\_s$ và $rate\_per\_src$ hợp lệ.
+  - **Tấn công cường độ thấp (Low-Rate SYN flood pps = 15, Kịch bản D)**: Luật ngưỡng bỏ sót 100%, mô hình Học máy phát hiện chính xác 100% nhờ nhận ra `syn_ratio ≈ 1.0` và `ack_s = 0`.
+  - **Người dùng hợp lệ tải cao (Flash Crowd, Kịch bản E)**: Tốc độ gói vượt ngưỡng khiến luật báo nhầm; mô hình Học máy nhận diện đúng là `BENIGN` nhờ `n_src = 1`, `ack_s >> syn_s` và `rate_per_src` hợp lệ.
 
 ---
 

@@ -63,6 +63,8 @@ def run_one(name, baseline, duration, cooldown, pps_override=None,
     # 1) khoi dong detector (--victim = chi dem inbound). Che do max -> engine eBPF.
     det_cmd = ["python3", "/app/detector.py", "--iface", "eth0",
                "--pps", "40", "--syn", "25", "--victim", VICTIM, "--csv", csv]
+    if os.path.exists(os.path.join(OUT_DIR, "window_model.joblib")):
+        det_cmd += ["--ml", "/app/window_model.joblib"]
     if is_max:
         det_cmd += ["--engine", "ebpf"]
     dexec(DETECTOR, *det_cmd, detach=True)
