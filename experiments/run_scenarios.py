@@ -24,6 +24,7 @@ SCEN = {
     # E: benign 1 nguon nhung tai cao -> pps VUOT ~40 (luat BAO NHAM) nhung n_src=1 + ack>>syn -> ML hoc benign.
     "E": dict(desc="benign HTTP 1 nguon tai cao (flash-crowd nhe)", truth="BENIGN", mode="http", spoof=False, n=1, threads=6),
     # U va I: Vector L4 UDP va L3 ICMP (da dang hoa vector tan cong)
+    "U_dos": dict(desc="1 nguon UDP flood (L4 volumetric)", truth="DoS", mode="udp", spoof=False, n=1, pps=400),
     "U": dict(desc="6 nguon UDP flood (L4 volumetric)", truth="DDoS", mode="udp", spoof=True, n=6, pps=400),
     "I": dict(desc="6 nguon ICMP echo flood (L3 ping)", truth="DDoS", mode="icmp", spoof=True, n=6, pps=400),
 }

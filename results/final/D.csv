@@ -1,0 +1,17 @@
+time,pps,syn_s,ack_s,udp_s,h_src,h_dport,n_src,alert,ml_verdict,ml_conf
+09:34:37,0,0,0,0,0.000,0.000,0,,BENIGN,0.748
+09:34:38,0,0,0,0,0.000,0.000,0,,BENIGN,0.748
+09:34:39,0,0,0,0,0.000,0.000,0,,BENIGN,0.748
+09:34:40,0,0,0,0,0.000,0.000,0,,BENIGN,0.748
+09:34:42,23,23,0,0,4.524,0.000,23,,DDoS,0.960
+09:34:43,28,28,0,0,4.807,0.000,28,!! DDoS (nhieu nguon  H_src=4.81  n=28  top=0.04) [SYN flood],DDoS,0.985
+09:34:44,28,28,0,0,4.807,0.000,28,!! DDoS (nhieu nguon  H_src=4.81  n=28  top=0.04) [SYN flood],DDoS,0.985
+09:34:45,26,26,0,0,4.700,0.000,26,!! DDoS (nhieu nguon  H_src=4.70  n=26  top=0.04) [SYN flood],DDoS,0.975
+09:34:46,28,28,0,0,4.807,0.000,28,!! DDoS (nhieu nguon  H_src=4.81  n=28  top=0.04) [SYN flood],DDoS,0.985
+09:34:47,26,26,0,0,4.700,0.000,26,!! DDoS (nhieu nguon  H_src=4.70  n=26  top=0.04) [SYN flood],DDoS,0.975
+09:34:48,28,28,0,0,4.807,0.000,28,!! DDoS (nhieu nguon  H_src=4.81  n=28  top=0.04) [SYN flood],DDoS,0.985
+09:34:50,28,28,0,0,4.807,0.000,28,!! DDoS (nhieu nguon  H_src=4.81  n=28  top=0.04) [SYN flood],DDoS,0.985
+09:34:51,25,25,0,0,4.644,0.000,25,!! DDoS (nhieu nguon  H_src=4.64  n=25  top=0.04) [SYN flood],DDoS,0.970
+09:34:52,0,0,0,0,0.000,0.000,0,,BENIGN,0.748
+09:34:53,0,0,0,0,0.000,0.000,0,,BENIGN,0.748
+09:34:54,0,0,0,0,0.000,0.000,0,,BENIGN,0.748

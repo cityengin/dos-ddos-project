@@ -51,9 +51,9 @@ python analysis/metrics.py detection/C.csv --truth DDoS
 | C — HTTP 6 nguồn (L7) | ~1800 | ~400 | ~1400 | 6 | ~2.58 | DDoS | `DDoS` (không gắn thẻ SYN) |
 
 **Điểm kiểm tra mấu chốt:**
-- Kịch bản A là **DoS** ($n\_src=1$); kịch bản B và C là **DDoS**.
-- Các đòn SYN flood có $ack \approx 0$; đòn HTTP flood có $ack \gg syn$.
-- Kịch bản B sử dụng 6 container attacker giả mạo IP nguồn ngẫu nhiên, tạo ra **hàng nghìn IP phân biệt trong một cửa sổ** ($H(src) \approx 11$ bits); kịch bản C sử dụng 6 máy thật của Docker nên $n\_src=6$.
+- Kịch bản A là **DoS** (`n_src = 1`); kịch bản B và C là **DDoS`.
+- Các đòn SYN flood có `ack ≈ 0`; đòn HTTP flood có `ack >> syn`.
+- Kịch bản B sử dụng 6 container attacker giả mạo IP nguồn ngẫu nhiên, tạo ra **hàng nghìn IP phân biệt trong một cửa sổ** (`H(src) ≈ 11` bits); kịch bản C sử dụng 6 máy thật của Docker nên `n_src = 6`.
 
 ---
 
@@ -70,7 +70,7 @@ Chạy riêng bằng cờ `--only D` hoặc `--only E` — được thiết kế
 
 ---
 
-### Kịch bản Tấn công UDP Flood (Vector thứ 3 - Volumetric L3/4)
+### Kịch bản Tấn công UDP Flood (Vector L4 Volumetric)
 
 Chạy thủ công hoặc thông qua kịch bản điều phối:
 
@@ -83,7 +83,24 @@ docker exec attacker1 hping3 --udp -p 80 -i u2500 172.30.0.10
 ./run_ddos.sh udp -i max     # chế độ tối đa -> hping3 --udp --flood
 ```
 
-**Kết quả kỳ vọng:** Cột `udp_s` tăng vọt trong khi `syn_s`/`ack_s` $\approx 0$, cảnh báo được gắn thẻ `[UDP flood]`. Các kịch bản SYN/HTTP khác không bị ảnh hưởng (`udp_s=0`).
+**Kết quả kỳ vọng:** Cột `udp_s` tăng vọt trong khi `syn_s`/`ack_s` ≈ 0, cảnh báo được gắn thẻ `[UDP flood]`. Các kịch bản SYN/HTTP khác không bị ảnh hưởng (`udp_s = 0`).
+
+---
+
+### Kịch bản Tấn công ICMP Ping Flood (Vector L3 Echo Flood)
+
+Chạy thủ công hoặc thông qua kịch bản điều phối:
+
+```bash
+# 1 nguồn (DoS) — chạy thủ công bằng hping3:
+docker exec attacker1 hping3 --icmp -i u2500 172.30.0.10
+
+# 6 nguồn, giả mạo IP (DDoS) — chạy qua script điều phối:
+./run_ddos.sh icmp           # chế độ điều tiết (paced hping3 --icmp -i uN)
+./run_ddos.sh icmp -i max    # chế độ tối đa -> hping3 --icmp --flood
+```
+
+**Kết quả kỳ vọng:** Cột `pps` tăng vọt trong khi `syn_s = 0, ack_s = 0, udp_s = 0`. Với chế độ giả mạo IP (DDoS), `n_src` tăng hàng nghìn IP trong 1 giây, entropy nguồn `H(src) > 10` bits, hệ thống cảnh báo DDoS và mô hình Học máy phân loại chính xác DDoS (độ tin cậy 99%).
 
 ---
 
@@ -247,8 +264,8 @@ while :; do curl -s -m3 -o /dev/null -w '%{http_code} %{time_total}\n' http://lo
 
 - [ ] Cả 8 container ở trạng thái `Up`; trang web `http://localhost:8080` mở được bình thường.
 - [ ] Trạng thái nghỉ (Baseline): 0 cảnh báo, 0 báo động giả.
-- [ ] Phân loại chuẩn xác: Kịch bản A $\to$ DoS, Kịch bản B $\to$ DDoS, Kịch bản C $\to$ DDoS.
-- [ ] Phân biệt đặc trưng gói: Tấn công SYN có `ack ≈ 0`; tấn công HTTP có `ack >> syn`; tấn công UDP có `udp_s` cao và gắn nhãn `[UDP flood]`.
+- [ ] Phân loại chuẩn xác: Kịch bản A -> DoS, Kịch bản B -> DDoS, Kịch bản C -> DDoS, UDP DoS -> DoS, UDP DDoS / ICMP -> DDoS.
+- [ ] Phân biệt đặc trưng gói: Tấn công SYN có `ack ≈ 0`; tấn công HTTP có `ack >> syn`; tấn công UDP có `udp_s` cao và gắn nhãn `[UDP flood]`; tấn công ICMP có `pps` cao với `syn_s = ack_s = udp_s = 0`.
 - [ ] Chế độ ngưỡng thích nghi (Adaptive EWMA) phát hiện đúng và không báo nhầm khi lưu lượng nền biến thiên.
 - [ ] Mô hình Học máy Random Forest cửa sổ (LORO) đạt độ chính xác 99.4%, phân tách chuẩn xác các trường hợp biên khó (D/E).
 - [ ] Detector hiển thị đồng thời cả kết luận của Luật ngưỡng lẫn Học máy trên console và Dashboard.

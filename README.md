@@ -240,12 +240,20 @@ Nhằm đáp ứng yêu cầu xử lý ở tốc độ dây (line-rate), mô-đu
 | **Benign** | Người dùng duyệt web (~16 users) | ~21 pps | 4 | 2.00 | **BENIGN** | **BENIGN (79%)** |
 | **A** | DoS TCP SYN Flood (1 nguồn) | ~1094 pps | 1 | 0.00 | **DoS `[SYN flood]`** | **DoS (59%)** |
 | **B** | DDoS TCP SYN Flood (Spoofing) | ~1616 pps | 1616 | 10.66 | **DDoS `[SYN flood]`** | **DDoS (100%)** |
-| **UDP DoS**| DoS UDP Flood (1 nguồn) | ~547 pps | 1 | 0.00 | **DoS `[UDP flood]`** | **DoS (58%)** |
-| **UDP DDoS**| DDoS UDP Flood (Spoofing) | ~1669 pps | 1669 | 10.71 | **DDoS `[UDP flood]`** | **DDoS (99%)** |
-| **ICMP** | DDoS ICMP Ping Flood | ~1600 pps | 1600 | 10.64 | **DDoS `[ICMP (L3)]`**| **DDoS (99%)** |
+| **UDP DoS (U_dos)**| DoS UDP Flood (1 nguồn) | ~430 pps | 1 | 0.00 | **DoS `[UDP flood]`** | **DoS (58%)** |
+| **UDP DDoS (U)**| DDoS UDP Flood (Spoofing) | ~2750 pps | ~2750 | 11.45 | **DDoS `[UDP flood]`** | **DDoS (99%)** |
+| **ICMP (I)** | DDoS ICMP Ping Flood | ~2700 pps | ~2700 | 11.40 | **DDoS (nhiều nguồn)**| **DDoS (99%)** |
 | **C** | DDoS HTTP Flood (L7 6 nốt) | ~2012 pps | 6 | 2.58 | **DDoS `[HTTP (L7)]`**| **DDoS (88%)** |
 | **D** | Low-Rate SYN Flood (Ẩn dưới ngưỡng) | ~24 pps | ~20 | ~4.2 | Bỏ sót (0%) | **DDoS (100%)** |
 | **E** | Flash Crowd (Tải cao đột biến) | ~350 pps | 1 | 0.00 | Báo nhầm (DoS) | **BENIGN (100%)** |
+
+> [!NOTE]
+> Toàn bộ dữ liệu đo đạc thực nghiệm chi tiết (`.csv`), nhãn mác kiểm chứng thực địa (`.meta.json`) và biểu đồ trực quan hóa dòng thời gian (`.png`) được lưu trữ đầy đủ tại thư mục [`results/final/`](results/final/):
+> - **L3 ICMP**: [`results/final/I.csv`](results/final/I.csv) & [`results/final/I.png`](results/final/I.png)
+> - **L4 UDP**: [`results/final/U_dos.csv`](results/final/U_dos.csv) (DoS 1 nguồn) & [`results/final/U.csv`](results/final/U.csv) (DDoS spoofing) kèm đồ thị [`U_dos.png`](results/final/U_dos.png), [`U.png`](results/final/U.png)
+> - **L4 TCP SYN**: [`results/final/A.csv`](results/final/A.csv) & [`results/final/B.csv`](results/final/B.csv) kèm đồ thị [`A.png`](results/final/A.png), [`B.png`](results/final/B.png)
+> - **L7 HTTP**: [`results/final/C.csv`](results/final/C.csv) & đồ thị [`C.png`](results/final/C.png)
+> - **Edge cases**: [`results/final/D.csv`](results/final/D.csv) (Low-rate) & [`results/final/E.csv`](results/final/E.csv) (Flash crowd) kèm đồ thị [`D.png`](results/final/D.png), [`E.png`](results/final/E.png)
 
 ---
 

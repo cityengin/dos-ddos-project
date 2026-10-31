@@ -1,0 +1,16 @@
+{
+  "name": "E",
+  "desc": "benign HTTP 1 nguon tai cao (flash-crowd nhe)",
+  "truth": "BENIGN",
+  "mode": "http",
+  "spoof": false,
+  "sources": [
+    "attacker1"
+  ],
+  "victim": "172.30.0.10",
+  "pps": null,
+  "intensity": "paced",
+  "attack_start": "16:35:11",
+  "attack_end": "16:35:22",
+  "csv": "detection/E.csv"
+}

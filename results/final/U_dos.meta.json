@@ -1,0 +1,16 @@
+{
+  "name": "U_dos",
+  "desc": "1 nguon UDP flood (L4 volumetric)",
+  "truth": "DoS",
+  "mode": "udp",
+  "spoof": false,
+  "sources": [
+    "attacker1"
+  ],
+  "victim": "172.30.0.10",
+  "pps": 400,
+  "intensity": "paced",
+  "attack_start": "16:33:19",
+  "attack_end": "16:33:31",
+  "csv": "detection/U_dos.csv"
+}

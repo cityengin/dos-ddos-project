@@ -1,0 +1,21 @@
+{
+  "name": "U",
+  "desc": "6 nguon UDP flood (L4 volumetric)",
+  "truth": "DDoS",
+  "mode": "udp",
+  "spoof": true,
+  "sources": [
+    "attacker1",
+    "attacker2",
+    "attacker3",
+    "attacker4",
+    "attacker5",
+    "attacker6"
+  ],
+  "victim": "172.30.0.10",
+  "pps": 400,
+  "intensity": "paced",
+  "attack_start": "16:31:56",
+  "attack_end": "16:32:08",
+  "csv": "detection/U.csv"
+}

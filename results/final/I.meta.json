@@ -1,0 +1,21 @@
+{
+  "name": "I",
+  "desc": "6 nguon ICMP echo flood (L3 ping)",
+  "truth": "DDoS",
+  "mode": "icmp",
+  "spoof": true,
+  "sources": [
+    "attacker1",
+    "attacker2",
+    "attacker3",
+    "attacker4",
+    "attacker5",
+    "attacker6"
+  ],
+  "victim": "172.30.0.10",
+  "pps": 400,
+  "intensity": "paced",
+  "attack_start": "16:32:35",
+  "attack_end": "16:32:46",
+  "csv": "detection/I.csv"
+}

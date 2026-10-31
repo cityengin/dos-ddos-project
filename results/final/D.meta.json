@@ -1,0 +1,17 @@
+{
+  "name": "D",
+  "desc": "low-rate SYN spoof (duoi nguong)",
+  "truth": "DDoS",
+  "mode": "syn",
+  "spoof": true,
+  "sources": [
+    "attacker1",
+    "attacker2"
+  ],
+  "victim": "172.30.0.10",
+  "pps": 12,
+  "intensity": "paced",
+  "attack_start": "16:34:40",
+  "attack_end": "16:34:51",
+  "csv": "detection/D.csv"
+}
