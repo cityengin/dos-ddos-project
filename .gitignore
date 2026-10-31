@@ -36,7 +36,9 @@ dashboard/*.log
 npm-debug.log*
 
 # ===== Local tooling / IDE / editors =====
-.claude/settings.local.json
+CLAUDE.md
+claude.md
+.claude/
 .vscode/
 .idea/
 *.code-workspace
