@@ -1,420 +1,390 @@
 <p align="center">
-  <img src="banner.svg" alt="DoS/DDoS Attack Simulation, Detection & Defense Lab — PBL3" width="100%">
+  <img src="banner.svg" alt="Phòng thí nghiệm Mô phỏng, Phát hiện & Phòng thủ DoS/DDoS — PBL3" width="100%">
 </p>
 
-# DoS/DDoS Attack Simulation, Real-Time Detection & Defense Lab
+# Phòng thí nghiệm Mô phỏng, Phát hiện Thời gian thực & Phòng thủ DoS/DDoS
 
-A comprehensive, dual-mode research and educational laboratory that **simulates** DoS/DDoS attacks, **extracts 10 real-time traffic features**, and performs **live classification and in-kernel mitigation**. Built as an end-of-term capstone project (DUT — PBL3).
+Một hệ thống nghiên cứu và thực nghiệm toàn diện với hai chế độ triển khai (máy thật và Docker ảo hóa), tích hợp quy trình **mô phỏng tấn công**, **trích xuất 10 đặc trưng lưu lượng thời gian thực**, **phân loại song song bằng Luật ngưỡng và Học máy (Machine Learning)**, cùng cơ chế **giảm thiểu thiệt hại trực tiếp trong nhân hệ điều hành (In-Kernel Mitigation via eBPF/XDP)**. Đề tài đồ án cơ sở ngành PBL3 — Trường Đại học Bách khoa, Đại học Đà Nẵng (DUT).
 
-The system observes inbound network traffic in 1-second sliding windows, computing 10 real-time metrics including **Shannon entropy of source IPs & destination ports**, **distinct source IP counts**, and **protocol ratios**. It accurately differentiates benign traffic from single-source **DoS** and distributed **DDoS**, and identifies attack vectors across **L4 SYN flood**, **L3/L4 UDP flood**, and **L7 HTTP flood**.
+Hệ thống quan sát lưu lượng mạng đến (inbound) theo các cửa sổ trượt độc lập 1 giây, tính toán liên tục 10 chỉ số thời gian thực bao gồm **Entropy Shannon của IP nguồn & cổng đích**, **số lượng IP nguồn phân biệt**, và **các tỷ lệ tương quan giao thức**. Hệ thống phân định chính xác giữa lưu lượng người dùng hợp lệ với tấn công từ một nguồn (**DoS**) và tấn công phân tán (**DDoS**), đồng thời nhận diện chính xác các vector tấn công qua **TCP SYN flood (L4)**, **UDP flood (L3/L4)**, **ICMP echo flood (L3)** và **HTTP flood (L7)**.
 
-The project natively supports two deployment environments:
-1. **Physical Multi-Machine Deployment**: Real laptops (1 Victim + 2 Attackers) communicating over a local WiFi/LAN network.
-2. **Virtualized Docker Lab**: Fully isolated container topology (`172.30.0.0/24`) with 1 victim, 6 attacker nodes, and 1 detector container.
-
----
-
-## ⚠️ Disclaimer — Educational & Defensive Research Only
-
-This project is developed **strictly for education and defensive cybersecurity research**. All attack scripts must only ever target your own authorized laboratory victim node (either on the private Docker `172.30.0.0/24` subnet or within an isolated, dedicated testing LAN/WiFi network).
-
-- **Do NOT** target any host, network, server, or device without explicit written permission.
-- Launching unauthorized denial-of-service attacks is **illegal** under cybersecurity laws worldwide.
-- The authors accept **no liability** for misuse. You are solely responsible for all actions performed with this software.
+Hệ thống hỗ trợ sẵn hai môi trường triển khai:
+1. **Môi trường mạng máy thật (Physical Multi-Machine Topology)**: Gồm 3 máy tính xách tay vật lý (1 Nạn nhân + 2 Kẻ tấn công) giao tiếp qua mạng WiFi/LAN nội bộ.
+2. **Môi trường ảo hóa Docker Lab**: Mạng cầu nội bộ cô lập (`172.30.0.0/24`) với 1 máy nạn nhân, 6 nốt tấn công botnet và 1 mô-đun phát hiện.
 
 ---
 
-## Table of Contents
+## ⚠️ Khuyến cáo An toàn — Chỉ dành cho Nghiên cứu & Học tập
 
-- [Overview](#overview)
-- [System Architectures](#system-architectures)
-  - [1. Physical Multi-Machine Topology (WiFi / LAN)](#1-physical-multi-machine-topology-wifi--lan)
-  - [2. Virtualized Docker Lab](#2-virtualized-docker-lab)
-- [Attack Vectors (3 Types)](#attack-vectors-3-types)
-- [Detection Engine & 10 Real-Time Features](#detection-engine--10-real-time-features)
-- [Real-Time Victim Defense Console (Dashboard)](#real-time-victim-defense-console-dashboard)
-- [Machine Learning Pipeline](#machine-learning-pipeline)
-  - [1. Flow-Level Benchmark on CICDDoS2019](#1-flow-level-benchmark-on-cicddos2019)
-  - [2. Live Window-Level Model](#2-live-window-level-model)
-- [Closed-Loop In-Kernel Defense (eBPF / XDP)](#closed-loop-in-kernel-defense-ebpf--xdp)
-- [Experimental Results](#experimental-results)
-- [Installation & Quick Start](#installation--quick-start)
-  - [Mode A: Physical Multi-Machine (WiFi / LAN)](#mode-a-physical-multi-machine-wifi--lan)
-  - [Mode B: Docker Lab](#mode-b-docker-lab)
-- [Project Structure](#project-structure)
-- [Limitations & Future Work](#limitations--future-work)
-- [Contributing & Development](#contributing--development)
+Dự án này được phát triển **hoàn toàn phục vụ mục đích giáo dục, học tập và nghiên cứu an toàn thông tin phòng thủ**. Toàn bộ các kịch bản tấn công chỉ được phép chạy nhắm vào chính máy nạn nhân được ủy quyền trong phòng thí nghiệm (trên dải mạng riêng Docker `172.30.0.0/24` hoặc trong mạng WiFi/LAN thử nghiệm cô lập).
+
+- **TUYỆT ĐỐI KHÔNG** tấn công vào bất kỳ máy chủ, thiết bị mạng, trang web hoặc cơ sở hạ tầng nào mà không có sự cho phép bằng văn bản từ chủ sở hữu.
+- Mọi hành vi tấn công từ chối dịch vụ không được cấp phép đều là **vi phạm pháp luật** theo Luật An toàn thông tin mạng tại Việt Nam và quốc tế.
+- Nhóm tác giả **không chịu bất kỳ trách nhiệm pháp lý nào** đối với các hành vi lạm dụng hay sử dụng sai mục đích. Bạn hoàn toàn chịu trách nhiệm trước pháp luật về mọi hành động thực hiện bằng phần mềm này.
 
 ---
 
-## Overview
+## Mục lục
 
-The system is organized into three cooperating pillars:
-
-1. **Attack Generation**:
-   - **L4 TCP SYN Flood**: High-rate half-open state exhaustion via `hping3 -S -p 80` (supports `--rand-source` IP spoofing).
-   - **L3/L4 UDP Flood**: High-rate volumetric datagram flooding via `hping3 --udp -p 80` (supports `--rand-source`).
-   - **L3 ICMP Echo Flood**: Ping flood network saturation via `hping3 --icmp` or `ping -f`.
-   - **L7 HTTP Flood**: Application-layer resource exhaustion via `ab` (Apache Benchmark with HTTP keep-alive).
-2. **Real-Time Detection & Feature Extraction**:
-   - Computes **9 window-level features** every second (`pps`, `syn_s`, `ack_s`, `udp_s`, `h_src`, `h_dport`, `n_src`, `syn_ratio`, `ack_syn_ratio`).
-   - Dual thresholding: **Fixed rules** or **Adaptive EWMA + MAD** baseline learning.
-   - Dual packet capture engines: userspace **Scapy** or in-kernel **eBPF/XDP** for line-rate accuracy.
-   - Concurrent **Machine Learning classification** (Random Forest window model).
-3. **Victim Defense Console**:
-   - Standalone, light-themed web monitoring dashboard ([`dashboard/`](dashboard/)) running on the victim node.
-   - Displays live attack classification, 10 rolling sparkline charts, top attacker IP distribution with spoof warnings, chronological security event logs, and service health probes.
+- [Tổng quan hệ thống](#tổng-quan-hệ-thống)
+- [Kiến trúc hệ thống](#kiến-trúc-hệ-thống)
+  - [1. Môi trường mạng máy thật (WiFi / LAN)](#1-môi-trường-mạng-máy-thật-wifi--lan)
+  - [2. Môi trường ảo hóa Docker Lab](#2-môi-trường-ảo-hóa-docker-lab)
+- [Các vector tấn công (3 tầng mạng)](#các-vector-tấn-công-3-tầng-mạng)
+- [Mô-đun phát hiện & Vector 10 đặc trưng thời gian thực](#mô-đun-phát-hiện--vector-10-đặc-trưng-thời-gian-thực)
+- [Bảng điều khiển phòng thủ (Victim Defense Console)](#bảng-điều-khiển-phòng-thủ-victim-defense-console)
+- [Quy trình Học máy (Machine Learning Pipeline)](#quy-trình-học-máy-machine-learning-pipeline)
+  - [1. Đánh giá kiểm chuẩn cấp Luồng trên CICDDoS2019](#1-đánh-giá-kiểm-chuẩn-cấp-luồng-trên-cicddos2019)
+  - [2. Mô hình cấp Cửa sổ thời gian thực (Window-Level Model)](#2-mô-hình-cấp-cửa-sổ-thời-gian-thực-window-level-model)
+- [Cơ chế phòng thủ trong nhân Kernel (eBPF / XDP)](#cơ-chế-phòng-thủ-trong-nhân-kernel-ebpf--xdp)
+- [Kết quả thực nghiệm](#kết-quả-thực-nghiệm)
+- [Cài đặt & Hướng dẫn khởi chạy nhanh](#cài-đặt--hướng-dẫn-khởi-chạy-nhanh)
+  - [Chế độ A: Demo mạng máy thật (WiFi / LAN)](#chế-độ-a-demo-mạng-máy-thật-wifi--lan)
+  - [Chế độ B: Demo trên 1 máy bằng Docker Lab](#chế-độ-b-demo-trên-1-máy-bằng-docker-lab)
+- [Cấu trúc mã nguồn](#cấu-trúc-mã-nguồn)
+- [Hạn chế & Hướng phát triển](#hạn-chế--hướng-phát-triển)
 
 ---
 
-## System Architectures
+## Tổng quan hệ thống
 
-### 1. Physical Multi-Machine Topology (WiFi / LAN)
+Hệ thống được tổ chức thành ba trụ cột hoạt động phối hợp:
 
-Designed for realistic demonstrations and classroom testing using 3 physical Linux laptops connected to a dedicated WiFi router or private switch:
+1. **Mô-đun Phát sinh Tấn công (Attack Generation)**:
+   - **L4 TCP SYN Flood**: Làm cạn kiệt bảng trạng thái kết nối nửa mở qua `hping3 -S -p 80` (hỗ trợ cờ `--rand-source` giả mạo hàng nghìn IP nguồn ngẫu nhiên).
+   - **L3/L4 UDP Flood**: Làm nghẽn băng thông và cạn kiệt tài nguyên xử lý socket qua `hping3 --udp -p 80` (hỗ trợ `--rand-source`).
+   - **L3 ICMP Echo Flood**: Làm nghẽn đường truyền mạng bằng bão gói tin ping qua `hping3 --icmp` hoặc `ping -f`.
+   - **L7 HTTP Flood**: Làm tê liệt worker pool của máy chủ web qua ApacheBench `ab` (hỗ trợ kết nối đồng thời và HTTP Keep-Alive).
+2. **Mô-đun Phát hiện & Trích xuất Đặc trưng (Detection Engine)**:
+   - Trích xuất định kỳ **10 đặc trưng cửa sổ** mỗi giây (`pps`, `syn_s`, `ack_s`, `udp_s`, `h_src`, `h_dport`, `n_src`, `syn_ratio`, `ack_syn_ratio`, `rate_per_src`).
+   - Hỗ trợ cơ chế ngưỡng kép: **Ngưỡng cố định (Fixed rules)** hoặc **Ngưỡng thích nghi (Adaptive EWMA + MAD)** tự học theo đường cong lưu lượng nền.
+   - Hai engine bắt gói: Không gian người dùng (**Scapy**) hoặc Không gian nhân Linux (**eBPF/XDP**) đạt tốc độ line-rate.
+   - Phân loại song song bằng mô hình **Học máy Random Forest** nhúng trực tiếp.
+3. **Bảng điều khiển phòng thủ (Victim Defense Console)**:
+   - Giao diện web trực quan độc lập ([`dashboard/`](dashboard/)) chạy trực tiếp trên máy nạn nhân.
+   - Hiển thị nhãn cảnh báo thời gian thực, 10 biểu đồ trượt sparkline, bảng phân tích Top IP tấn công kèm cờ cảnh báo giả mạo (Spoofed IP), nhật ký sự kiện an ninh và kiểm tra sức khỏe dịch vụ web (Service Health Probe).
+
+---
+
+## Kiến trúc hệ thống
+
+### 1. Môi trường mạng máy thật (WiFi / LAN)
+
+Thiết kế phục vụ các buổi báo cáo, thuyết trình thực tế bằng 3 laptop vật lý kết nối vào router WiFi hoặc switch mạng nội bộ:
 
 ```
-                  Dedicated WiFi / LAN (e.g., 192.168.1.0/24 via DHCP)
+                  Mạng WiFi / LAN riêng (vd: 192.168.1.0/24 qua DHCP)
         ┌─────────────────────────┬─────────────────────────┐
         │                         │                         │
-┌───────▼──────────────┐   ┌──────▼───────────────┐  ┌──────▼───────────────┐
-│    Victim Laptop     │   │  Attacker 1 Laptop   │  │  Attacker 2 Laptop   │
-│                      │   │                      │  │                      │
-│ • Nginx Web (Port 80)│   │ • hping3 (L3/L4)     │  │ • hping3 (L3/L4)     │
-│ • detector.py        │   │ • ab (L7 HTTP)       │  │ • ab (L7 HTTP)       │
-│ • Victim Console     │   │                      │  │                      │
-│   (Port 3000)        │   │                      │  │                      │
-└──────────────────────┘   └──────────────────────┘  └──────────────────────┘
+        ▼                         ▼                         ▼
+┌───────────────────┐     ┌──────────────┐          ┌──────────────┐
+│    Máy Nạn nhân   │     │ Máy Tấn công │          │ Máy Tấn công │
+│  (Victim Laptop)  │     │ (Attacker 1) │          │ (Attacker 2) │
+│   192.168.1.50    │     │ 192.168.1.21 │          │ 192.168.1.22 │
+├───────────────────┤     └──────────────┘          └──────────────┘
+│ • Nginx Web (p80) │            │                         │
+│ • detector.py     │            │                         │
+│   (sniff wlan0)   │◄───────────┴─────────────────────────┘
+│ • Defense Console │      Lưu lượng tấn công: SYN / UDP / HTTP
+│   (:3000 Web UI)  │
+└───────────────────┘
 ```
 
-- **Victim Laptop**: Hosts the target web server (Nginx), runs `detector.py` sniffing the wireless interface (`--iface wlan0`), and serves the **Victim Defense Console** at `http://localhost:3000`.
-- **Attacker 1 & 2 Laptops**: Generate traffic independently or coordinated via SSH using [`run_ddos_remote.sh`](run_ddos_remote.sh). With 2 physical attackers, L7 HTTP flood achieves genuine distributed DDoS (`n_src = 2`) without relying on synthetic IP spoofing.
-- See detailed physical setup guide: **[`docs/MULTI_MACHINE.md`](docs/MULTI_MACHINE.md)**.
-
-### 2. Virtualized Docker Lab
-
-For automated experimentation, CI testing, and reproducible scenario benchmarks:
-
-```
-                            Isolated Bridge Network: dos-lab (172.30.0.0/24)
-  ┌────────────────────────────────────────────────────────────────────────────────────────┐
-  │                                                                                        │
-  │  ┌────────────────────────┐      ┌────────────────────────┐     ┌───────────────────┐  │
-  │  │ victim (172.30.0.10)   │      │ detector (netns victim)│     │ attacker1 (.21)   │  │
-  │  │ • nginx:alpine         │◄────►│ • eBPF XDP + detector  │◄────┤ • hping3, ab      │  │
-  │  │ • published :8080      │      │ • scikit-learn / joblib│     │ attacker2..6 (.26)│  │
-  │  └────────────────────────┘      └────────────────────────┘     └───────────────────┘  │
-  └────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-| Container | Image / Recipe | IP Address | Primary Role |
-|---|---|---|---|
-| `victim` | `nginx:alpine` | 172.30.0.10 | Target web server, published to host `8080` |
-| `detector` | `./detection` | Shares `victim` netns | In-kernel XDP / userspace sniffer; ML engine |
-| `attacker1` | `./attacker` | 172.30.0.21 | Primary attack node (`NET_RAW`, `NET_ADMIN`) |
-| `attacker2`–`attacker6` | `./attacker` | 172.30.0.22–26 | Distributed attack sources (6 real sources for L7 DDoS) |
+- **Victim Laptop** (`192.168.1.50`): Chạy Nginx (cổng 80), công cụ bắt gói `detector.py` trên giao diện mạng WiFi (`wlan0`/`wlp0s20f3`), và bảng điều khiển `node server.js` (cổng 3000).
+- **Attacker Laptops** (`192.168.1.21`, `192.168.1.22`): Máy phát tải độc lập hoặc được điều phối tự động qua SSH bằng kịch bản `run_ddos_remote.sh`.
 
 ---
 
-## Attack Vectors (3 Types)
+### 2. Môi trường ảo hóa Docker Lab
 
-| Property | L4 SYN Flood | L3/L4 UDP Flood | L7 HTTP Flood |
-|---|---|---|---|
-| **Tool** | `hping3 -S` | `hping3 --udp` | `ab -k` |
-| **OSI Layer** | Layer 4 (Transport / TCP) | Layer 3/4 (Transport / UDP) | Layer 7 (Application / HTTP) |
-| **Exhaustion Target** | TCP SYN half-open connection backlog | Network bandwidth, socket buffers, CPU | Web server thread/worker pools, CPU |
-| **3-Way Handshake** | Incomplete (Sends `SYN`, ignores `SYN-ACK`) | None (Connectionless datagrams) | Complete (Full TCP handshake + GET requests) |
-| **IP Spoofing** | Supported (`--spoof`, random `10.x.x.x`) | Supported (`--spoof`, random `10.x.x.x`) | Not possible (Requires real 2-way TCP reply) |
-| **Traffic Signature** | High `syn_s`, `ack_s ≈ 0`, high `syn_ratio` | High `udp_s`, `syn_s ≈ 0`, `ack_s ≈ 0` | High `pps`, high `ack_s`, high `ack_syn_ratio` |
+Môi trường tự động hóa cô lập hoàn toàn trên 1 máy tính đơn lẻ, thiết lập qua `docker-compose.yml`:
 
----
+```
+                       Cầu mạng Docker dos-lab (172.30.0.0/24)
+        ┌───────────────────────┬───────────────────────┬───────────────┐
+        │                       │                       │               │
+        ▼                       ▼                       ▼               ▼
+┌─────────────────┐     ┌───────────────┐       ┌───────────────┐       ┌───────────────┐
+│ Container victim│     │  attacker1    │       │  attacker2    │  ...  │  attacker6    │
+│  (172.30.0.10)  │     │ (172.30.0.21) │       │ (172.30.0.22) │       │ (172.30.0.26) │
+│ • Nginx Server  │     └───────────────┘       └───────────────┘       └───────────────┘
+│ • chung netns:  │             │                       │                       │
+│   container     │◄────────────┴───────────────────────┴───────────────────────┘
+│   detector      │          Lưu lượng tấn công tự động qua run_ddos.sh / run_demo.sh
+└─────────────────┘
+```
 
-## Detection Engine & 10 Real-Time Features
-
-The detector ([`detection/detector.py`](detection/detector.py)) operates over a 1-second sliding window (`--interval 1.0`), inspecting all incoming packets. To prevent the victim's own responses (e.g. `SYN-ACK`) from polluting source statistics, it strictly enforces **inbound-only filtering** (`--victim <ip>`).
-
-### The 10 Real-Time Window Features
-
-| # | Feature Key | Unit | Description & Formula | Role in Classification |
-|---|---|---|---|---|
-| 1 | `pps` | pkts/s | Total inbound packets received per second | Measures volumetric intensity; triggers alerts when exceeding threshold |
-| 2 | `syn_s` | pkts/s | TCP packets with `SYN` flag set per second | Primary indicator of TCP SYN connection flooding |
-| 3 | `ack_s` | pkts/s | TCP packets with `ACK` flag set per second | Validates complete TCP connections; distinguishes L4 from L7 |
-| 4 | `udp_s` | pkts/s | UDP datagrams received per second | Identifies volumetric UDP flooding |
-| 5 | `h_src` | bits | Shannon entropy of source IP addresses: $H(src) = -\sum_{i} p_i \log_2(p_i)$ | Measures source dispersion: $H \approx 0$ (single IP), $H \gg 0$ (distributed/spoofed) |
-| 6 | `h_dport` | bits | Shannon entropy of destination ports: $H(dport) = -\sum_{j} p_j \log_2(p_j)$ | Detects targeted service attacks ($H \approx 0$) vs port scanning/random floods |
-| 7 | `n_src` | count | Number of distinct source IP addresses in window | Core dispersion metric; combined with top-source dominance to decide DoS vs DDoS |
-| 8 | `syn_ratio` | ratio | Ratio of SYN packets to total traffic: $syn\_s / \max(pps, 1.0)$ | Close to $1.0$ during pure SYN floods; low during HTTP or UDP floods |
-| 9 | `ack_syn_ratio`| ratio | Ratio of ACK packets to SYN packets: $ack\_s / \max(syn\_s, 1.0)$ | $\gg 1.0$ for completed HTTP sessions; $\approx 0.0$ for half-open SYN floods |
-| 10 | `rate_per_src` | pkts/s/src | Mean packet rate per source: $pps / \max(n\_src, 1)$ | Separates a flash crowd (many sources, **low** per-source rate) from an HTTP-DDoS (many sources, **high** per-source rate) |
-
-### Classification Logic
-
-1. **Trigger Condition**:
-   - Fixed: `pps ≥ --pps` **or** `syn/s ≥ --syn`.
-   - Adaptive EWMA: `pps > μ_pps + k·MAD_pps` **or** `syn_s > μ_syn + k·MAD_syn` (with minimum floor). Baseline updates only during benign windows.
-2. **Scope Classification** (source count **plus dominance**, robust to background noise on a shared network):
-   - **DDoS** when `n_src >= --ddos-min-src` (default 10 — many sources, spoof or many hosts) **or** (`n_src >= 2` **and** top-source packet share `< --ddos-dom-share`, default 0.8 — no single source dominates).
-   - **DoS** otherwise (one source dominates, `top_share ≈ 1.0`, $H(src) \approx 0$) — even if 1–2 stray background packets push `n_src` above 1.
-3. **Attack Vector Tagging**:
-   - **`[SYN flood]`**: `syn/s ≥ threshold` AND `ack/s < syn/s × 0.2` (half-open connection starvation).
-   - **`[UDP flood]`**: `udp/s ≥ --pps` AND `udp/s > syn/s` (datagram flooding dominates).
-   - **`HTTP flood`**: High `pps` AND high `ack_s` ($ack\_s \gg syn\_s$, $ack\_syn\_ratio \gg 1.0$).
+- **`victim`**: Chạy Nginx trên dải IP `172.30.0.10`, ánh xạ cổng `8080:80` ra máy chủ host.
+- **`detector`**: Sử dụng chế độ mạng `network_mode: "service:victim"`, chia sẻ chung không gian mạng và card mạng `eth0` với victim để giám sát toàn bộ lưu lượng đến.
+- **`attacker1` .. `attacker6`**: Các container botnet được cấp quyền raw socket (`NET_RAW`, `NET_ADMIN`) phục vụ các thử nghiệm tấn công quy mô lớn.
 
 ---
 
-## Real-Time Victim Defense Console (Dashboard)
+## Các vector tấn công (3 tầng mạng)
 
-A standalone, high-performance web console ([`dashboard/`](dashboard/)) runs directly on the victim machine, presenting real-time security insights without overhead.
+1. **L4 TCP SYN Flood (Tầng giao vận)**: Khai thác cơ chế bắt tay ba bước của TCP. Kẻ tấn công gửi ồ ạt gói SYN nhưng không gửi gói ACK hoàn tất, làm đầy hàng đợi kết nối nửa mở (SYN queue / backlog) và từ chối các phiên truy cập mới từ người dùng thật.
+2. **L3/L4 UDP Flood (Tầng mạng & Giao vận)**: Gửi khối lượng lớn gói tin UDP không hướng kết nối đến các cổng ngẫu nhiên, làm nghẽn toàn bộ băng thông và buộc máy nạn nhân tiêu hao CPU để sinh thông điệp ICMP Port Unreachable.
+3. **L3 ICMP Echo Flood (Tầng mạng)**: Bơm lưu lượng ping cường độ tối đa (`hping3 --icmp` hoặc `ping -f`) nhằm bão hòa đường truyền vật lý của mạng nạn nhân.
+4. **L7 HTTP Flood (Tầng ứng dụng)**: Mở hàng trăm kết nối TCP hoàn tất và liên tục gửi yêu cầu HTTP GET/POST với cờ Keep-Alive. Các yêu cầu này chiếm dụng toàn bộ worker thread trong pool xử lý của máy chủ web, khiến dịch vụ ngưng trệ dù băng thông mạng chưa cạn kiệt.
+
+---
+
+## Mô-đun phát hiện & Vector 10 đặc trưng thời gian thực
+
+Mỗi giây, mô-đun phát hiện tổng hợp lưu lượng mạng đến thành một vector toán học 10 chiều:
+
+$$\mathbf{x} = [pps, syn\_s, ack\_s, udp\_s, H(src), H(dport), n\_src, syn\_ratio, ack\_syn\_ratio, rate\_per\_src]$$
+
+```
+          ┌────────────────────────────────────────────────────────┐
+          │     Vector 10 đặc trưng trích xuất mỗi giây            │
+          ├──────────────┬─────────────────────────┬───────────────┤
+          │ Cường độ     │ Cấu trúc Giao thức      │ Phân tán Nguồn│
+          ├──────────────┼─────────────────────────┼───────────────┤
+          │ • pps        │ • syn_s    • syn_ratio  │ • n_src       │
+          │ • udp_s      │ • ack_s    • ack_syn_rat│ • H(src)      │
+          │              │                         │ • H(dport)    │
+          │              │                         │ • rate_per_src│
+          └──────────────┴─────────────────────────┴───────────────┘
+```
+
+### Công thức & Ý nghĩa các đặc trưng
+
+1. **`pps`**: Tổng số gói tin vào máy nạn nhân trong 1 giây (đo cường độ lưu lượng).
+2. **`syn_s`**: Số gói TCP mang cờ SYN/giây (chỉ số chính nhận diện tấn công kết nối nửa mở).
+3. **`ack_s`**: Số gói TCP mang cờ ACK/giây (xác nhận các kết nối TCP đã hoàn tất bắt tay).
+4. **`udp_s`**: Số gói tin giao thức UDP/giây (phục vụ nhận dạng tấn công UDP flood).
+5. **`h_src` ($H(src)$)**: Entropy Shannon của phân bố địa chỉ IP nguồn:
+   $$H(src) = -\sum_{i=1}^{n} p_i \log_2(p_i)$$
+   Đo mức độ phân tán của nguồn gửi. 1 nguồn đơn lẻ có $H(src) = 0$; 6 botnet phân bố đều có $H(src) = \log_2 6 \approx 2.58$; IP spoofing ngẫu nhiên có $H(src) > 10.6$ bits.
+6. **`h_dport` ($H(dport)$)**: Entropy Shannon của phân bố cổng đích, giúp phân biệt tấn công dịch vụ cụ thể ($H \approx 0$) với quét cổng ngẫu nhiên ($H$ cao).
+7. **`n_src`**: Số địa chỉ IP nguồn phân biệt ghi nhận trong cửa sổ 1 giây.
+8. **`syn_ratio`**: Tỷ lệ cờ SYN trên tổng số gói: $syn\_s / \max(pps, 1.0)$ (tiệm cận 1.0 khi bị SYN flood).
+9. **`ack_syn_ratio`**: Tỷ lệ cờ ACK trên cờ SYN: $ack\_s / \max(syn\_s, 1.0)$ ($\gg 1.0$ khi HTTP flood, $\approx 0$ khi SYN flood).
+10. **`rate_per_src`**: Tốc độ gói trung bình trên mỗi nguồn: $pps / \max(n\_src, 1)$ — **Đặc trưng quyết định giúp phân biệt Flash Crowd với DDoS Botnet**.
+
+### Quy tắc Phân loại (Luật Ngưỡng)
+
+1. **Kích hoạt Cảnh báo (Trigger)**: Bật cảnh báo khi $pps \ge \text{ngưỡng}$ HOẶC $syn\_s \ge \text{ngưỡng SYN}$.
+2. **Phân biệt DoS vs DDoS**:
+   - Nhận định là **DDoS** nếu $n\_src \ge \text{ddos\_min\_src}$ (mặc định 10 - có dấu hiệu IP Spoofing hoặc hàng loạt botnet) HOẶC ($n\_src \ge 2$ VÀ tỷ lệ lưu lượng của nguồn lớn nhất $< 0.8$ - không có nguồn nào áp đảo).
+   - Nhận định là **DoS** nếu một nguồn chiếm đa số lưu lượng ($\text{top\_share} \approx 1.0$, $H(src) \approx 0$).
+3. **Gắn nhãn Vector Tấn công**:
+   - `[SYN flood]`: Khi $syn\_s$ vượt ngưỡng và $ack\_s < syn\_s \times 0.2$.
+   - `[UDP flood]`: Khi $udp\_s \ge pps\_thr$ và $udp\_s > syn\_s$.
+   - `[HTTP flood]`: Khi $pps$ cao và $ack\_s \gg syn\_s$ ($ack\_syn\_ratio \gg 1.0$).
+
+---
+
+## Bảng điều khiển phòng thủ (Victim Defense Console)
+
+Giao diện web giám sát chuyên dụng ([`dashboard/`](dashboard/)) chạy trực tiếp trên máy nạn nhân, truyền tải thông số an ninh mạng theo thời gian thực:
 
 <p align="center">
-  <img src="assets/dashboard.png" alt="Victim Defense Console Interface" width="100%">
+  <img src="assets/dashboard.png" alt="Giao diện Bảng điều khiển phòng thủ Victim Defense Console" width="100%">
 </p>
 
-### Key Console Capabilities
+### Tính năng Nổi bật
 
-- **Real-Time Classification Status Banner**: Instantly displays network state (`BENIGN`, `DoS`, or `DDoS`), attack vector badges (`[SYN flood]`, `[UDP flood]`, `[HTTP flood]`), active threshold values, and Machine Learning confidence scores.
-- **Service Health Probe**: Pings the local Nginx web service every 3 seconds, rendering response latency (ms) and HTTP status codes to verify target availability under load.
-- **10 Rolling Sparkline Canvas Charts**: Dynamic 60-second sliding window graphs for all 10 real-time features (`pps`, `syn_s`, `ack_s`, `udp_s`, `h_src`, `h_dport`, `n_src`, `syn_ratio`, `ack_syn_ratio`, `rate_per_src`) with peak indicators and threshold lines.
-- **Top Attacker IPs Table**: Ranks top offending IP addresses with per-second rates, total packet volume, traffic percentage share, and automated **IP Spoofing Warning** tags when random source address generation is detected.
-- **Security Event Log**: Chronological audit log with severity indicators (`safe`, `warn`, `crit`, `info`) tracking state transitions, attack start/stop events, and mitigation actions.
-
-### Launching the Console
-
-```bash
-cd dashboard
-npm install
-
-# Option 1: Auto-spawns detector.py on physical WiFi interface
-node server.js --iface wlan0 --victim 192.168.1.50 --port 3000
-
-# Option 2: Receive stream from an existing detector process via standard input pipe
-python3 detection/detector.py --iface wlan0 --victim 192.168.1.50 --stream | node server.js --no-spawn
-
-# Option 3: Ingestion via REST API (POST /api/metric)
-node server.js --no-spawn
-```
-
-Access the interface in any web browser at: `http://localhost:3000`.
+- **Banner Trạng thái Cảnh báo Thời gian thực**: Đổi màu trực quan tức thì (`BENIGN` - Xanh lá, `DoS` - Màu cam, `DDoS` - Màu đỏ) kèm nhãn vector tấn công (`[SYN flood]`, `[UDP flood]`, `[HTTP flood]`) và độ tự tin AI (ML Confidence).
+- **Service Health Probe**: Định kỳ kiểm tra tình trạng dịch vụ Nginx mỗi 2.5 giây, đo đạc độ trễ phản hồi (ms) và mã trạng thái HTTP (200 OK / Timeout).
+- **10 Biểu đồ Trượt Sparkline Canvas**: Trực quan hóa biến thiên liên tục trong 60 giây của toàn bộ 10 đặc trưng mạng.
+- **Bảng Top Attacker IPs**: Xếp hạng các địa chỉ IP phát tải lớn nhất, tính toán tỷ lệ đóng góp lưu lượng và tự động gắn nhãn cảnh báo **SPOOFED IP** khi phát hiện địa chỉ nguồn ngẫu nhiên.
+- **Nhật ký Sự kiện An ninh (Event Log)**: Ghi nhận có thứ tự thời gian các sự kiện an ninh mạng theo từng cấp độ cảnh báo (`safe`, `warn`, `crit`, `info`).
 
 ---
 
-## Machine Learning Pipeline
+## Quy trình Học máy (Machine Learning Pipeline)
 
-The project employs a dual-stage machine learning architecture, clearly separating **flow-level benchmarking** from **real-time window-level classification**.
+Dự án tiếp cận bài toán học máy theo hai giai đoạn rõ ràng:
 
-### 1. Flow-Level Benchmark on CICDDoS2019 (earlier phase)
+### 1. Đánh giá kiểm chuẩn cấp Luồng trên CICDDoS2019
 
-An earlier phase benchmarked single-threshold rules against multi-feature models on the **CICDDoS2019** dataset (~131,000 bidirectional flows, 63 CICFlowMeter features — packet size, IAT, forward/backward header lengths, TCP flags). Reported results:
+Ở giai đoạn đầu, nhóm thực hiện đánh giá kiểm chuẩn trên bộ dữ liệu quốc tế **CICDDoS2019** (~131,000 luồng hai chiều, 63 đặc trưng CICFlowMeter):
+- **Phát hiện nhị phân**: Luật ngưỡng đơn đạt $F_1 \approx 0.60$, trong khi Random Forest đạt $F_1 \approx 0.999$ (Độ chính xác 99.9%).
+- **Hạn chế cố hữu**: Tiếp cận cấp luồng (Flow-level) đòi hỏi phải đợi luồng kết thúc và phải duy trì bảng trạng thái kết nối khổng lồ trong bộ nhớ RAM, rất dễ bị chính các cuộc tấn công tràn bảng trạng thái (state exhaustion) làm sập hệ thống. Điều này thôi thúc nhóm phát triển mô hình cấp Cửa sổ thời gian thực.
 
-- **Binary detection**: single-threshold rule **F1 ≈ 0.60** vs **Random Forest F1 ≈ 0.999** (Accuracy 99.9%), **HistGradientBoosting F1 ≈ 0.996**.
-- **Multi-class attack family**: Random Forest **93.0% accuracy / 0.735 macro-F1** across 13 families (NTP, TFTP, SYN, MSSQL, UDP, DNS, LDAP, NetBIOS, SNMP, Portmap).
-- **Fundamental distinction**: flow-level features are per 5-tuple over a full lifetime — cross-flow aggregates like $H(src)$ / $n\_src$ do not exist there, which motivates the live window-level model below.
+### 2. Mô hình cấp Cửa sổ thời gian thực (Window-Level Model)
 
-> The flow-level training scripts (`ml/train.py`, `ml/make_synthetic.py`) have been **removed** from the repo; the results above are kept as historical context. The project now centres on the live window-level model.
-
-### 2. Live Window-Level Model
-
-Because flow-level models require completed flow statistics that cannot be evaluated sub-second on raw packets, the lab captures its own window dataset. [`experiments/capture_session.py`](experiments/capture_session.py) drives a scenario matrix in the Docker lab and records a pcap + a host-clock timeline; [`ml/pcap_to_windows.py`](ml/pcap_to_windows.py) then extracts labelled sliding windows (1.0 s window / 0.5 s stride) using the shared feature module [`detection/window_features.py`](detection/window_features.py), so the offline and live feature formulas are identical. (The earlier [`ml/build_window_dataset.py`](ml/build_window_dataset.py), which compiled detector CSVs, is kept as a fallback.)
-
-- [`ml/train_window.py`](ml/train_window.py) trains a lightweight Random Forest on the 10 real-time features (`detection/window_model.joblib`), evaluated by **leave-one-run-out** (1 pcap = 1 run; no random split, since overlapping windows would leak).
-- Evaluated against near-threshold edge cases:
-  - **Scenario D**: Low-rate spoofed SYN flood (~24 pps, below rule threshold). The rule catches **0%**, whereas the ML model detects **100%**.
-  - **Scenario E**: Benign HTTP flash crowd above rate threshold. The rule generates false alarms; the ML model correctly identifies it as benign.
-- Run live alongside rule detection:
-  ```bash
-  python3 detection/detector.py --victim 192.168.1.50 --ml detection/window_model.joblib
-  ```
+Nhóm xây dựng quy trình thu thập dữ liệu cửa sổ trực tiếp từ card mạng bằng [`ml/pcap_to_windows.py`](ml/pcap_to_windows.py) dựa trên module đặc trưng dùng chung [`detection/window_features.py`](detection/window_features.py):
+- **Cửa sổ trượt gối đầu**: Cửa sổ 1.0 giây, bước nhảy 0.5 giây.
+- **Phương pháp đánh giá LORO (Leave-One-Run-Out)**: Tuyệt đối không dùng phép chia ngẫu nhiên 70/30 (tránh hiện tượng **rò rỉ dữ liệu - Data Leakage** giữa các cửa sổ liền kề). Mô hình được đánh giá độc lập trên từng file PCAP hoàn chỉnh.
+- **Xử lý triệt để các trường hợp biên khó (Edge Cases)**:
+  - **Tấn công cường độ thấp (Low-Rate SYN flood pps = 15, Kịch bản D)**: Luật ngưỡng bỏ sót 100%, mô hình Học máy phát hiện chính xác 100% nhờ nhận ra $syn\_ratio \approx 1.0$ và $ack\_s = 0$.
+  - **Người dùng hợp lệ tải cao (Flash Crowd, Kịch bản E)**: Tốc độ gói vượt ngưỡng khiến luật báo nhầm; mô hình Học máy nhận diện đúng là `BENIGN` nhờ $n\_src = 1$, $ack\_s \gg syn\_s$ và $rate\_per\_src$ hợp lệ.
 
 ---
 
-## Closed-Loop In-Kernel Defense (eBPF / XDP)
+## Cơ chế phòng thủ trong nhân Kernel (eBPF / XDP)
 
-For line-rate resilience, the detector includes an eBPF backend ([`detection/ebpf_counter.py`](detection/ebpf_counter.py)) leveraging XDP (eXpress Data Path) inside the Linux kernel:
+Nhằm đáp ứng yêu cầu xử lý ở tốc độ dây (line-rate), mô-đun phát hiện tích hợp engine eBPF ([`detection/ebpf_counter.py`](detection/ebpf_counter.py)) chạy tại tầng XDP (eXpress Data Path) bên trong Linux kernel:
 
-1. **High-Speed Counting**:
-   - Ingress packets are parsed and counted directly in kernel memory using eBPF maps before memory allocation or OS networking stack traversal (`XDP_PASS`).
-   - On a 120,000 pps flood test, Scapy captured only **57%** of packets due to userspace context switching, while eBPF captured **95%** at true line-rate.
-2. **Automated Closed-Loop Blocking (`--block`)**:
-   - **Per-Source Rate Blocking**: Any source IP exceeding `--block-pps` (e.g. 300 pps) is added to the BPF `blocklist` map. Offending packets are dropped at the network driver level (`XDP_DROP`).
-   - **Auto-Expiring TTL (`--block-ttl`)**: Entries automatically expire (e.g. after 5 seconds) to prevent permanent lockouts.
-   - **Global SYN Token Bucket (`--block-syn-rate`)**: For spoofed SYN floods where per-source blocking is ineffective (random IPs), a global in-kernel token bucket drops excess SYN packets while preserving legitimate bandwidth.
+1. **Đếm gói siêu tốc tại Kernel Space**:
+   - Gói tin đến được trích xuất thông tin và đếm trực tiếp trong bộ nhớ kernel thông qua các BPF maps trước khi hệ điều hành cấp phát bộ nhớ `sk_buff` (`XDP_PASS`).
+   - Trong bài kiểm thử bão gói 120,000 pps, Scapy bị rớt gói nặng (chỉ bắt được 57%), trong khi eBPF đếm chính xác **95%** ở tốc độ line-rate.
+2. **Cơ chế Chặn gói Tự động (Closed-Loop Blocking `--block`)**:
+   - **Chặn theo tốc độ nguồn (Per-Source Rate Blocking)**: Bất kỳ IP nguồn nào gửi vượt quá ngưỡng `--block-pps` (ví dụ 300 pps) sẽ bị tự động đưa vào BPF map `blocklist`. Các gói tin tiếp theo từ IP này bị hủy ngay lập tức tại driver mạng (`XDP_DROP`).
+   - **Tự động mở khóa (Auto-Expiring TTL `--block-ttl`)**: Mỗi mục trong danh sách chặn tự hết hạn sau một khoảng thời gian (ví dụ 5 giây), tránh việc khóa vĩnh viễn địa chỉ IP.
+   - **Token Bucket SYN toàn cục (`--block-syn-rate`)**: Khi gặp tấn công SYN flood giả mạo ngẫu nhiên hàng nghìn IP (không thể chặn theo từng IP cụ thể), cơ chế token bucket trong kernel sẽ cắt bỏ toàn bộ lượng gói SYN vượt định mức, bảo vệ tuyệt đối hàng đợi kết nối của máy chủ web.
 
 ---
 
-## Experimental Results
+## Kết quả thực nghiệm
 
-### Reference Scenario Validation
+### Bảng kiểm chứng các kịch bản tiêu chuẩn
 
-| Scenario | Vector | Target Rate | n_src | H(src) | Detector Verdict | Detection Time |
+| Kịch bản | Vector tấn công | Tốc độ | n_src | H(src) | Kết luận Luật | Kết luận Học máy (AI) |
 |---|---|---|---|---|---|---|
-| **A** | 1-Source SYN Flood | ~300 pps | 1 | 0.00 | **DoS `[SYN flood]`** | < 1.0 s |
-| **B** | Distributed / Spoofed SYN | ~4000 pps | ~2300 | ~11.1 | **DDoS `[SYN flood]`** | < 1.0 s |
-| **C** | Multi-Source HTTP Flood | ~1800 pps | 6 (real) | ~2.58 | **DDoS** | < 1.0 s |
-| **D** | Low-Rate Stealth SYN | ~24 pps | ~20 | ~4.2 | **DDoS (ML detected)** | < 1.0 s |
-| **E** | Legitimate Flash Crowd | ~350 pps | 1 | 0.00 | **BENIGN (ML verified)** | N/A |
-
-### High-Intensity Line-Rate Stress Test
-
-Using `hping3 --flood` and ApacheBench (`ab -c 500`) against the victim web service:
-
-- Under raw line-rate HTTP attack (693,000 pps across 6 sources), modern Linux kernel SYN cookies and static Nginx served **100% of legitimate client requests (200 OK)** with 0 packet drops at `eth0`, with only a slight p95 latency increase (1 ms $\to$ 11 ms).
-- Enabling `--block` dropped attacking sources via XDP inside the kernel, collapsing attack traffic from **433,000 pps down to 28 pps** and restoring p95 response times to 1 ms.
+| **Benign** | Người dùng duyệt web (~16 users) | ~21 pps | 4 | 2.00 | **BENIGN** | **BENIGN (79%)** |
+| **A** | DoS TCP SYN Flood (1 nguồn) | ~1094 pps | 1 | 0.00 | **DoS `[SYN flood]`** | **DoS (59%)** |
+| **B** | DDoS TCP SYN Flood (Spoofing) | ~1616 pps | 1616 | 10.66 | **DDoS `[SYN flood]`** | **DDoS (100%)** |
+| **UDP DoS**| DoS UDP Flood (1 nguồn) | ~547 pps | 1 | 0.00 | **DoS `[UDP flood]`** | **DoS (58%)** |
+| **UDP DDoS**| DDoS UDP Flood (Spoofing) | ~1669 pps | 1669 | 10.71 | **DDoS `[UDP flood]`** | **DDoS (99%)** |
+| **ICMP** | DDoS ICMP Ping Flood | ~1600 pps | 1600 | 10.64 | **DDoS `[ICMP (L3)]`**| **DDoS (99%)** |
+| **C** | DDoS HTTP Flood (L7 6 nốt) | ~2012 pps | 6 | 2.58 | **DDoS `[HTTP (L7)]`**| **DDoS (88%)** |
+| **D** | Low-Rate SYN Flood (Ẩn dưới ngưỡng) | ~24 pps | ~20 | ~4.2 | Bỏ sót (0%) | **DDoS (100%)** |
+| **E** | Flash Crowd (Tải cao đột biến) | ~350 pps | 1 | 0.00 | Báo nhầm (DoS) | **BENIGN (100%)** |
 
 ---
 
-## Installation & Quick Start
+## Cài đặt & Hướng dẫn khởi chạy nhanh
 
-### Mode A: Physical Multi-Machine (WiFi / LAN)
+### Chế độ A: Demo mạng máy thật (WiFi / LAN)
 
-#### 1. Setup the Victim Laptop
+#### 1. Thiết lập trên Máy Nạn nhân (Victim Laptop)
 ```bash
-# Install dependencies
+# Cài đặt các gói phụ thuộc
 sudo apt update && sudo apt install -y nginx python3-scapy tcpdump nodejs npm
 sudo systemctl enable --now nginx
 
-# Clone repository
+# Tải mã nguồn dự án
 git clone https://github.com/cityengin/dos-ddos-project.git ~/dos-ddos-project
 cd ~/dos-ddos-project
 
-# Launch Victim Defense Console & Detector
+# Khởi chạy Bảng điều khiển phòng thủ & Detector
 cd dashboard
 npm install
-node server.js --iface wlan0 --victim <VICTIM_IP> --port 3000
+node server.js --iface wlan0 --victim <IP_CỦA_VICTIM> --port 3000
 ```
-Open `http://localhost:3000` in a browser.
+Mở trình duyệt truy cập: `http://localhost:3000`.
 
-#### 2. Setup Attacker Laptops
+#### 2. Khởi chạy Tấn công từ các Máy Tấn công (Attacker Laptops)
 ```bash
-# On each attacker laptop
+# Cài đặt công cụ phát tải
 sudo apt update && sudo apt install -y hping3 apache2-utils curl
 
-# Launch test attacks against Victim IP:
-# L4 SYN Flood (Single Source DoS)
-sudo hping3 -S -p 80 -i u2000 <VICTIM_IP>
+# Phát các đợt tấn công thử nghiệm vào IP Victim:
+# 1. L4 SYN Flood (DoS đơn nguồn)
+sudo hping3 -S -p 80 -i u2000 <IP_VICTIM>
 
-# L4 SYN Flood (Spoofed DDoS)
-sudo hping3 -S -p 80 --rand-source -i u2000 <VICTIM_IP>
+# 2. L4 SYN Flood (DDoS giả mạo IP ngẫu nhiên)
+sudo hping3 -S -p 80 --rand-source -i u2000 <IP_VICTIM>
 
-# L3/L4 UDP Flood (Volumetric)
-sudo hping3 --udp -p 80 -i u2000 <VICTIM_IP>
+# 3. L3/L4 UDP Flood (Volumetric)
+sudo hping3 --udp -p 80 -i u2000 <IP_VICTIM>
 
-# L3 ICMP Echo Flood (Ping Flood)
-sudo hping3 --icmp -i u2000 <VICTIM_IP>
+# 4. L3 ICMP Echo Flood (Ping Flood)
+sudo hping3 --icmp -i u2000 <IP_VICTIM>
 
-# L7 HTTP Flood (Application Layer)
-ab -k -c 50 -n 30000 http://<VICTIM_IP>/
+# 5. L7 HTTP Flood (Tầng ứng dụng)
+ab -k -c 50 -n 30000 http://<IP_VICTIM>/
 ```
 
-#### 3. Coordinated Multi-Attacker Orchestration (SSH)
-From the victim or control laptop, fire synchronized attacks across both laptops:
+#### 3. Điều phối Tấn công Đồng thời qua SSH
+Từ máy điều khiển, kích hoạt tấn công đồng bộ trên cả hai máy attacker:
 ```bash
-# Coordinated HTTP DDoS (2 real physical sources -> n_src = 2)
-./run_ddos_remote.sh http -t <VICTIM_IP> -d 30 -a user@192.168.1.61 -a user@192.168.1.62
+# Điều phối 2 máy thật cùng tấn công HTTP flood -> n_src = 2
+./run_ddos_remote.sh http -t <IP_VICTIM> -d 30 -a user@192.168.1.21 -a user@192.168.1.22
 ```
 
 ---
 
-### Mode B: Docker Lab
+### Chế độ B: Demo trên 1 máy bằng Docker Lab
 
-#### 1. Start the Environment
+#### Bước 1: Khởi động hệ thống container
 ```bash
-git clone https://github.com/cityengin/dos-ddos-project.git
-cd dos-ddos-project
-
-# Build and start all 8 containers
+cd ~/dos-ddos-project
 docker compose up -d --build
 docker compose ps
 ```
 
-#### 2. Run the Detector
-```bash
-# Interactive terminal:
-docker exec -it detector python3 /app/detector.py --pps 40 --syn 25 --victim 172.30.0.10
+#### Bước 2: Mở 2 Terminal để thực hiện Demo
 
-# With Adaptive Thresholds (EWMA):
-docker exec -it detector python3 /app/detector.py --adaptive --victim 172.30.0.10
+* **Terminal 1: Chạy Detector AI & Dashboard Console**
+  ```bash
+  cd ~/dos-ddos-project
+  docker exec -i detector python3 /app/detector.py --victim 172.30.0.10 --pps 40 --syn 25 --ml /app/window_model.joblib --stream | node dashboard/server.js --victim 172.30.0.10
+  ```
+  Truy cập giao diện Web tại: **`http://localhost:3000`**.
 
-# With eBPF/XDP Line-Rate Engine + Closed-Loop Drop:
-docker exec -it detector python3 /app/detector.py --engine ebpf --block --victim 172.30.0.10
-```
-
-#### 3. Run Automated Scenarios
-```bash
-# Execute standard A/B/C benchmark runs
-python experiments/run_scenarios.py
-
-# Or run the narrated interactive demo
-python experiments/demo.py
-```
+* **Terminal 2: Chạy kịch bản tự động diễn tập 6 pha tấn công**
+  ```bash
+  cd ~/dos-ddos-project
+  ./run_demo.sh
+  ```
 
 ---
 
-## Project Structure
+## Cấu trúc mã nguồn
 
 ```
 .
-├── banner.svg                    # Laboratory topology & 9-feature vector vector graphic
-├── docker-compose.yml            # Virtualized lab network & container definitions
-├── run_ddos.sh                   # Docker orchestration script (6 parallel attackers)
-├── run_ddos_remote.sh            # Multi-machine SSH orchestrator for physical laptops
+├── banner.svg                    # Đồ họa minh họa kiến trúc và vector đặc trưng
+├── docker-compose.yml            # Định nghĩa hệ thống container ảo hóa mạng dos-lab
+├── run_demo.sh                   # Kịch bản tự động chạy diễn tập 6 pha tấn công demo
+├── run_ddos.sh                   # Script điều phối tấn công trong Docker (6 botnet)
+├── run_ddos_remote.sh            # Script điều phối tấn công từ xa qua SSH cho máy thật
 │
-├── attacks/                      # Traffic simulation tools
-│   ├── benign_dynamic_users.py   # Dynamic realistic benign web traffic generator
-│   └── benign_gen.py             # Baseline legitimate client traffic
+├── attacks/                      # Công cụ và kịch bản phát sinh lưu lượng
+│   ├── benign_dynamic_users.py   # Mô phỏng người dùng duyệt web thực tế ngẫu nhiên
+│   ├── benign_gen.py             # Sinh lưu lượng nền hợp lệ phục vụ tập dữ liệu
+│   └── http_flood.py             # Kịch bản phát tải HTTP paced có điều tiết nhịp
 │
-├── detection/                    # Real-time traffic analysis & detection engine
-│   ├── Dockerfile                # Detector container image (Ubuntu + BCC + scikit-learn)
-│   ├── detector.py               # 9-feature real-time detector (rule, adaptive, ML, stream)
-│   ├── ebpf_counter.py           # In-kernel XDP counting and closed-loop packet filter
-│   └── window_model.joblib       # Serialized Random Forest model for live window inference
+├── detection/                    # Mô-đun phân tích lưu lượng & phát hiện thời gian thực
+│   ├── Dockerfile                # Image container detector (Ubuntu + BCC + scikit-learn)
+│   ├── detector.py               # Detector 10 đặc trưng (Rule, Adaptive, ML, Stream JSON)
+│   ├── ebpf_counter.py           # Engine eBPF/XDP đếm gói và hủy gói trong kernel
+│   ├── window_features.py        # Nguồn chân lý chuẩn hóa công thức tính 10 đặc trưng
+│   └── window_model.joblib       # Mô hình Random Forest đã huấn luyện phục vụ suy luận live
 │
-├── dashboard/                    # Real-time Victim Defense Console (Node.js + WebSockets)
-│   ├── package.json              # Dashboard dependencies (Express, WS)
-│   ├── server.js                 # Backend server (stdin stream, REST API, health probes)
-│   └── public/                   # Frontend assets
-│       ├── index.html            # Defense console markup (10 sparklines, status banner, logs)
-│       ├── style.css             # Modern light theme CSS styles
-│       └── app.js                # WebSocket client & 60s dynamic canvas renderers
+├── dashboard/                    # Bảng điều khiển phòng thủ Victim Defense Console
+│   ├── package.json              # Khai báo phụ thuộc (Express, WebSocket)
+│   ├── server.js                 # Backend Node.js (đọc stream stdin, REST API, probe Nginx)
+│   └── public/                   # Giao diện web người dùng
+│       ├── index.html            # Khung giao diện (10 sparklines, status banner, logs)
+│       ├── style.css             # Định dạng giao diện Light theme hiện đại
+│       └── app.js                # Xử lý WebSocket và vẽ 10 biểu đồ trượt canvas 60s
 │
-├── ml/                           # Machine Learning research pipeline
-│   ├── pcap_to_windows.py        # Extracts labelled sliding-window features from a capture pcap (primary)
-│   ├── build_window_dataset.py   # (fallback) builds the window dataset from detector CSV runs
-│   └── train_window.py           # Trains the live window Random Forest model (LORO, 10 features)
+├── ml/                           # Quy trình nghiên cứu và huấn luyện Học máy
+│   ├── pcap_to_windows.py        # Trích xuất đặc trưng có nhãn từ file PCAP theo timeline
+│   ├── build_window_dataset.py   # Tổng hợp tập dữ liệu cửa sổ từ log CSV của detector
+│   └── train_window.py           # Huấn luyện mô hình Random Forest cửa sổ (LORO, 10 đặc trưng)
 │
-├── experiments/                  # Reproducible test execution & validation
-│   ├── run_scenarios.py          # Runs scenarios A/B/C/D/E/U/I with ground-truth metadata
-│   ├── capture_session.py        # Docker-lab pcap capture + host-clock timeline for the ML dataset
-│   └── demo.py                   # Guided, automated end-to-end demonstration
+├── experiments/                  # Kịch bản thực nghiệm và đánh giá kiểm chứng
+│   ├── run_scenarios.py          # Chạy tự động các kịch bản đo đạc A/B/C/D/E
+│   ├── run_dashboard_demo.py     # Điều phối 6 pha tấn công cuồng nộ và pha hạ nhiệt
+│   ├── adaptive_eval.py          # So sánh hiệu quả giữa ngưỡng cố định và ngưỡng thích nghi
+│   └── capture_session.py        # Bắt gói PCAP kết hợp đồng hồ mốc timeline cho ML
 │
-├── analysis/                     # Offline analysis & plotting utilities
-│   ├── metrics.py                # Computes detection latency, precision, recall, F1
-│   └── plot_attack.py            # Generates timeline graphs from CSV logs
+├── analysis/                     # Tiện ích phân tích và biểu đồ hóa sau thực nghiệm
+│   ├── metrics.py                # Tính toán độ trễ phát hiện, Precision, Recall, F1
+│   └── plot_attack.py            # Vẽ đồ thị diễn biến lưu lượng từ file log CSV
 │
-├── results/final/                # Finalized CSV datasets and publication figures
-└── docs/                         # Theoretical & practical documentation
-    ├── LyThuyet_DoS_DDoS.md      # Comprehensive technical theory guide (Vietnamese)
-    ├── MULTI_MACHINE.md          # Multi-laptop WiFi deployment guide (Vietnamese)
-    └── TESTING.md                # Verification, testing & validation walkthrough
+├── results/final/                # Dữ liệu đo đạc CSV và hình ảnh biểu đồ chính thức
+└── docs/                         # Tài liệu thuyết minh lý thuyết và hướng dẫn kỹ thuật
+    ├── LyThuyet_DoS_DDoS.md      # Cẩm nang lý thuyết toàn diện về tấn công & phát hiện
+    ├── MULTI_MACHINE.md          # Hướng dẫn chi tiết thiết lập bài lab 3 máy thật qua WiFi
+    └── TESTING.md                # Quy trình kiểm thử, xác minh và tái lập kết quả
 ```
 
 ---
 
-## Limitations & Future Work
+## Hạn chế & Hướng phát triển
 
-- **IP Spoofing Ambiguity**: An attacker spoofing random source addresses from a single machine produces indistinguishable traffic signatures from thousands of authentic distributed hosts at the victim interface.
-- **Low-and-Slow Attack Vectors**: Volumetric thresholds focus on packet intensity and do not detect slow application-layer starvation attacks such as Slowloris or slow-read floods.
-- **Local Saturation Limits**: Host-based defenses (including XDP) protect server compute resources but cannot protect against upstream network pipe saturation; multi-gigabit volumetric floods must be filtered upstream via BGP Flowspec or scrubbing centers.
-- **Future Directions**: Implement CUSUM change-point algorithms, integrate flow-based P4/eBPF tracking, and evaluate behavioral modeling for application-layer botnet detection.
-
----
-
-## Contributing & Development
-
-Contributions are welcome! Please follow the established coding standards:
-- Follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `test:`, `style:`).
-- Verify modifications against the end-to-end testing checklist in [`docs/TESTING.md`](docs/TESTING.md).
-- Keep changes documented in `CHANGELOG.md`.
+- **Thách thức khi gặp IP Spoofing**: Một máy đơn lẻ khi giả mạo địa chỉ IP ngẫu nhiên sẽ tạo ra chữ ký lưu lượng tương tự như hàng nghìn máy botnet phân tán thật đến card mạng nạn nhân.
+- **Tấn công cường độ thấp dạng kéo dài (Low-and-Slow)**: Các ngưỡng thể tích tập trung vào cường độ gói tin, chưa tối ưu đối với các đòn tấn công làm cạn kiệt tài nguyên chậm ở tầng ứng dụng (như Slowloris hay slow-read).
+- **Giới hạn bão hòa đường truyền vật lý**: Cơ chế phòng thủ tại máy chủ (kể cả eBPF/XDP) chỉ bảo vệ được tài nguyên tính toán của máy chủ nhưng không thể ngăn chặn việc bão hòa băng thông đường truyền từ phía nhà cung cấp mạng (ISP); các đòn tấn công thể tích lớn (hàng chục Gbps) cần được xử lý ở các trung tâm lọc rửa (Scrubbing Centers) hoặc qua giao thức BGP Flowspec.
+- **Hướng phát triển tương lai**: Nghiên cứu tích hợp thuật toán phát hiện điểm đổi CUSUM, mở rộng theo dõi luồng qua kiến trúc P4/eBPF, và nghiên cứu học tăng cường thích nghi trong phòng thủ mạng.
 
 ---
-*Developed for DUT PBL3 — Information Security & Network Defense.*
+*Đề tài nghiên cứu và thực hiện phục vụ học phần Đồ án Cơ sở Ngành PBL3 — An toàn Thông tin & Phòng thủ Mạng, Trường Đại học Bách khoa, Đại học Đà Nẵng.*

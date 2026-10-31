@@ -1,304 +1,66 @@
-# Changelog
+# Nhật ký thay đổi (Changelog)
 
-All notable changes to this project will be documented in this file.
+Mọi thay đổi đáng chú ý của dự án sẽ được ghi nhận chi tiết trong tài liệu này.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Định dạng tài liệu dựa trên tiêu chuẩn [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+và tuân thủ quy tắc đánh số phiên bản [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Chưa phát hành]
 
-### Changed
+### Thay đổi
 
-- **Restored paced HTTP for the ML dataset and synced all docs to the hping3/ab migration.** The
-  100%-hping3/ab refactor had switched `capture_session.c_http` to `ab` (which has no request-rate
-  limit), silently ignoring its `pps` argument and reverting the L7 capture phases to line-rate — the
-  domain shift the pcap pipeline had just fixed. Restored `attacks/http_flood.py` (paced `--pps`) and
-  pointed `c_http` back at it (H1 ~150 req/s, D2h ~150/src, D5h ~120/src); `ab` line-rate stays for the
-  demo tools only. Updated all Markdown (`CLAUDE.md`, `README.md`, `docs/TESTING.md`,
-  `docs/MULTI_MACHINE.md`, `docs/LyThuyet_DoS_DDoS.md`, `CONTRIBUTING.md`) to match the current code:
-  `hping3` for SYN/UDP/ICMP, `http_flood.py --pps` + `ab` for L7, the **10**-feature window model (adds
-  `rate_per_src`), the source-count-plus-dominance DoS/DDoS rule, and the pcap→LORO dataset pipeline.
-  Confirmed `PROJECT_STATUS.md` removal — dropped its mentions from `CLAUDE.md`; notable changes are
-  logged here from now on.
-- **DoS-vs-DDoS classifier now uses source count _plus dominance_**, not a bare `n_src >= 2`. Adds
-  `--ddos-min-src` (default 10) and `--ddos-dom-share` (default 0.8): a window is DDoS when
-  `n_src >= --ddos-min-src` (many sources — spoof or many hosts) **or** (`n_src >= 2` **and** the top
-  source's packet share `top_share < --ddos-dom-share` — no single source dominates); otherwise DoS.
-  Fixes a real-shared-network misclassification: on campus WiFi a single-source DoS picks up 1–2 stray
-  background packets to the victim each window, so the old `n_src >= 2` rule flagged it DDoS —
-  `top_share ≈ 1.0` (and `H(src) ≈ 0`) shows it is really one source (measured: A non-spoof →
-  `n=3, H(src)=0.03, top≈0.998`). The isolated Docker lab (only attacker+victim) is unaffected, so
-  A/B/C there are unchanged. Adds `top=<share>` to the DoS/DDoS alert line; CSV / `--stream` / ML /
-  `--adaptive` / `[SYN flood]` / `[UDP flood]` are all unchanged. Validated live on 2 real machines
-  over WiFi: A→DoS, B(spoof)→DDoS, C(1 source)→DoS, D(UDP)→DoS.
-- **`detector.py --ml` now supplies the full 10-feature vector** — `udp_s` and `rate_per_src` were
-  added to the live ML feature dict to match `window_features.FEATURES`, so `--ml` loads the
-  pcap-trained 10-feature window model without a `KeyError`, while staying back-compatible with the
-  old 8-feature model (the vector is built from `ml["features"]`). `detection/window_model.joblib` is
-  retrained on the 3-run pcap dataset (3362 windows, sklearn 1.9.1). Live sanity passed: idle→BENIGN,
-  1-source SYN→DoS, spoofed SYN→DDoS for both the rule and the ML head.
+- **Khôi phục kịch bản HTTP paced phục vụ tập dữ liệu ML và đồng bộ hóa tài liệu theo công cụ hping3/ab.** Quá trình chuyển đổi 100% sang hping3/ab trước đó đã chuyển `capture_session.c_http` sang `ab` (vốn không giới hạn tốc độ yêu cầu), vô tình bỏ qua tham số `pps` và đẩy pha thu thập L7 lên tốc độ line-rate — gây ra hiện tượng lệch phân phối dữ liệu (domain shift). Dự án đã khôi phục `attacks/http_flood.py` (hỗ trợ điều tiết `--pps`) và trỏ `c_http` trở lại kịch bản này (H1 ~150 req/s, D2h ~150/nguồn, D5h ~120/nguồn); công cụ `ab` ở tốc độ line-rate được giữ lại phục vụ riêng cho các kịch bản demo tải tối đa. Đồng bộ hóa toàn bộ tài liệu Markdown (`README.md`, `docs/TESTING.md`, `docs/MULTI_MACHINE.md`, `docs/LyThuyet_DoS_DDoS.md`) khớp với mã nguồn hiện tại: dùng `hping3` cho SYN/UDP/ICMP, `http_flood.py --pps` kết hợp `ab` cho L7, mô hình cửa sổ **10** đặc trưng (bổ sung `rate_per_src`), quy tắc phân loại DoS/DDoS dựa trên số lượng nguồn kết hợp mức độ áp đảo, và quy trình dữ liệu PCAP→LORO.
+- **Bộ phân loại DoS và DDoS cải tiến dựa trên số lượng nguồn kết hợp độ áp đảo (Dominance)**, thay vì chỉ xét điều kiện đơn giản `n_src >= 2`. Bổ sung hai cờ `--ddos-min-src` (mặc định 10) và `--ddos-dom-share` (mặc định 0.8): một cửa sổ được xác định là DDoS khi `n_src >= --ddos-min-src` (rất nhiều nguồn do IP spoofing hoặc botnet lớn) HOẶC (`n_src >= 2` VÀ tỷ lệ gói của nguồn lớn nhất `top_share < --ddos-dom-share` — không có nguồn đơn lẻ nào áp đảo); ngược lại được phân loại là DoS. Khắc phục triệt để lỗi phân loại sai trên mạng thực tế: khi kết nối WiFi trường học/công ty, một đòn DoS đơn nguồn thường bắt dính 1–2 gói tin nền ngẫu nhiên đến victim trong mỗi cửa sổ, khiến luật cũ `n_src >= 2` báo nhầm thành DDoS — chỉ số `top_share ≈ 1.0` (và $H(src) \approx 0$) chứng minh đây thực chất là DoS đơn nguồn. Bổ sung trường `top=<share>` trên dòng cảnh báo DoS/DDoS; các định dạng CSV / `--stream` / ML / `--adaptive` / `[SYN flood]` / `[UDP flood]` được giữ nguyên tính tương thích.
+- **`detector.py --ml` cung cấp đầy đủ vector 10 đặc trưng**: Bổ sung `udp_s` và `rate_per_src` vào từ điển đặc trưng ML chạy live để khớp hoàn toàn với `window_features.FEATURES`, giúp `--ml` nạp mô hình cửa sổ 10 đặc trưng mà không gặp lỗi `KeyError`, đồng thời vẫn tương thích ngược với mô hình 8 đặc trưng cũ. File nhị phân `detection/window_model.joblib` được huấn luyện lại trên tập dữ liệu PCAP 3 lần chạy (3,362 cửa sổ, scikit-learn 1.9.1). Thử nghiệm live đạt độ chính xác cao: trạng thái nghỉ $\to$ `BENIGN`, SYN 1 nguồn $\to$ `DoS`, SYN spoof $\to$ `DDoS` trên cả nhánh Luật ngưỡng và nhánh AI.
 
-### Added
+### Thêm mới
 
-- **PCAP-based window-dataset pipeline** for ML dataset collection, alongside the existing
-  `build_window_dataset.py` (kept as a fallback). `detection/window_features.py` is a new single source
-  of truth for the window feature formula, imported by both the offline extractor and (later) the live
-  detector so they compute identical features; it defines `FEATURES` (10 live-supplyable: the 9 canonical
-  + `rate_per_src = pps/max(n_src,1)`) and a broader `EXTRACT` set (adds `icmp_s`, `udp_ratio`,
-  `avg_pkt_size`) written to the dataset for later pruning. `attacks/benign_gen.py` generates legitimate
-  user traffic (randomized GETs, think-time, low rate) for a real BENIGN class (no longer labelling by
-  `pps==0`). `experiments/capture_session.py` orchestrates a 14-phase scenario matrix in the Docker lab
-  via `docker exec` (benign + flash-crowd, single-source DoS, spoofed DDoS, and real multi-source DDoS
-  including an exact 2-source no-spoof mode that matches a future physical demo; diverse pps low/mid/high),
-  runs `tcpdump -s 100` inside the detector container, and writes a host-clock timeline. `ml/pcap_to_windows.py`
-  extracts sliding windows (1.0s / 0.5s stride) via the shared module and labels each window by the
-  timeline (a window overlapping an attack interval gets that attack's class — "any attack packet in the
-  window ⇒ attack", early-detection bias). `ml/train_window.py` now imports `FEATURES` from the shared
-  module, **drops the random 70/30 split** (overlapping windows leak), evaluates only by
-  leave-one-run-out (1 pcap = 1 run), and prints feature importance. `avg_pkt_size` is taken from the IP
-  total-length header field so the `-s 100` snaplen does not corrupt it; `detection/Dockerfile` already
-  ships `tcpdump`. The Docker lab, attack scripts, live detector, and scenarios A/B/C are unchanged.
-- **`http_flood.py --pps`** — paces total requests/s across the worker threads (default `0` = unlimited,
-  behaviour unchanged). Mirrors `syn_flood.py --pps` and lets the L7 capture scenarios be held to
-  realistic packet rates instead of the Docker bridge's tens-of-thousands pps, so the ML dataset does not
-  domain-shift away from a real 2-machine WiFi demo. `capture_session.py` uses it to pace H1 (~150 req/s),
-  D2h (~150/source) and D5h (~120/source), lowers the benign floor to `--floor-pps 2` (~11 pps), and drops
-  S1 to `--pps 12` so that single-source sub-threshold SYN (which doubles to ~2x pps via kernel RST
-  reflection) stays under the 40 pps / 25 syn rule — the case the window ML should catch and the rule miss.
-- **UDP flood** — a third attack type (volumetric L3/4), alongside SYN (L4) and HTTP (L7). New
-  `attacks/udp_flood.py` mirrors `syn_flood.py` (scapy `IP()/UDP()`, `--spoof`, `--pps`, `--count`,
-  `--size`, one reused `conf.L3socket()`). The detector now counts UDP in both engines (scapy
-  `on_packet` gained a UDP branch; `ebpf_counter.py` surfaces the already-present `counters[3]`), adds
-  a `udp_s` CSV column (after `ack_s`) and a `udp` field to the `--stream` JSON, and tags
-  `[UDP flood]` when `udp_s >= --pps` and `udp_s > syn_s` (UDP dominates — so a mixed SYN+UDP window
-  isn't mislabeled). `--engine`/`--block`/`--ml`/`--adaptive` and the DoS-vs-DDoS/`n_src`/entropy
-  logic are unchanged; the ML window model and its 8 features are untouched (the dataset builder reads
-  the CSV by column name, so the extra column is ignored). SYN/HTTP scenarios A/B/C produce identical
-  output with `udp_s=0`. `udp` mode added to both orchestrators: `run_ddos.sh udp` (paced scapy, or
-  `-i max` → `hping3 --udp --flood`) and `run_ddos_remote.sh udp` (which routes UDP through the same
-  raw-socket privilege path as SYN — `CAP_NET_RAW` or `-s`/NOPASSWD — not HTTP's). Docs: a UDP
-  scenario in `docs/MULTI_MACHINE.md` and `docs/TESTING.md`.
-- **Multi-machine (physical) support** — run the lab on real Linux laptops over a shared private
-  WiFi, additively (the Docker lab and every existing script are untouched). The attack scripts and
-  `detection/detector.py` already take all addresses as parameters, so they run bare-metal unchanged
-  (`--iface wlan0 --victim <dhcp-ip>`). Adds `run_ddos_remote.sh`, an SSH orchestrator that fires one
-  or more real attackers in parallel via a repeatable `-a user@ip` flag (`timeout`-bounded, runs each
-  over background SSH then `wait`s), with an SSH preflight check and a `-s` flag for the NOPASSWD-sudo
-  path. Adds `docs/MULTI_MACHINE.md` (Vietnamese): 3-machine model, DHCP IP discovery, software to
-  install, the A/B/C commands, the "2 machines now vs add a 3rd" note (C needs 2 real attackers to be
-  a true DDoS), differences from Docker, and the `CAP_NET_RAW` (recommended, with a scope warning) vs
-  NOPASSWD-sudoers options for the SYN flood's raw socket over SSH. README gains a "Multi-machine
-  (physical)" section.
-- **Max-intensity attack mode** (`intensity=paced|max`) alongside the paced default. `max` drives
-  **line-rate** tools instead of the scapy/urllib scripts — `hping3 -S --flood` (SYN, `--rand-source`
-  to spoof) and `ab -k -c 500` (L7) — for scenarios **A/B/C only**, and forces `--engine ebpf` (scapy
-  can't count at line-rate). Wired into `experiments/run_scenarios.py` (`--intensity`, plus `--max-rate`
-  to cap hping3 for a safe ramp and `--max-conc` for ab), `run_ddos.sh` (`-i paced|max`), and the
-  dashboard (a **"Max intensity"** toggle). The paced path (scapy with rate limiting, used for the ML
-  dataset) is unchanged. `ab` is added to the attacker image (`apache2-utils`).
-- **Real-impact measurement** of the max floods (detect-only, no blocking), reported honestly in
-  `PROJECT_STATUS.md` / `docs/`: A-max ~190k pps, B-max ~123k pps, C-max ~693k pps, with **zero eth0 rx
-  drops** and a legit client staying **100% 200-OK** in every state (only C-max's p95 latency rises
-  ~1→11ms). Modern defaults (kernel SYN cookies + fast static nginx) absorb all three; downing this
-  victim would need a weaker target or far larger scale. With `--block` on, A-max is dropped ~100% at
-  XDP and C-max collapses (~433k→~28 pps) with the latency tail back to ~1ms.
-- The dashboard detector now **always runs the eBPF engine** (accurate at line-rate), so the new
-  Max-intensity toggle needs no detector restart; `--block` is still added only when Blocking is on.
-  `stopAttack`/`cleanup` now also kill `hping3`/`ab` (not just the `*_flood.py` scripts).
-- Dashboard **Blocking ON/OFF** toggle and a `blocked/s` tile. Turning it on restarts the detector with
-  `--engine ebpf --block --block-pps 200 --block-ttl 5 --block-syn-rate 2000`; the stream's
-  `blocked_src`/`blocked_pps` are shown live. In the lab a 6-source HTTP flood's rate collapses
-  (~15k → ~36 pps) once blocking engages. Off by default (detect-only). A `detStarting` guard serializes
-  detector (re)starts so a toggle can't spawn overlapping detectors that kill each other.
-- Detection-driven blocking (closed-loop IPS) via **eBPF `XDP_DROP`** (`detection/detector.py --block`,
-  default off, requires `--engine ebpf`). The XDP program **counts first, then drops**: sources whose
-  per-window rate exceeds `--block-pps` are added to a `blocklist` BPF map with a TTL (`--block-ttl`,
-  auto-expiring — no permanent block) and dropped; `--block-syn-rate N` adds a global SYN token-bucket
-  (`bpf_spin_lock`) that drops SYNs above `N`/s to handle spoofed floods where per-source blocking is
-  useless. Reports `blocked_src`/`blocked_pps` in the table / `--stream` / `--csv`. Lab demo: a stateful
-  HTTP flood (C) collapses from **~136k to ~242 pps** once its 6 sources are blocked; a spoofed SYN
-  flood (B) is unaffected by per-source blocking but `--block-syn-rate 2000` drops **~85%** of it
-  (trade-off: some legitimate SYNs dropped). Safety: TTL auto-expiry, bounded map, low-rate clients and
-  the health probe stay under the threshold; `--block` is off by default so detect-only is unchanged.
-- eBPF/XDP counting engine for the detector (`detection/detector.py --engine scapy|ebpf`, default
-  `scapy`). `detection/ebpf_counter.py` (BCC) attaches an **XDP ingress** program to the victim's
-  `eth0` that counts packets/syn/ack and per-source-IP / per-dest-port histograms into BPF maps and
-  always returns `XDP_PASS` (**detect-only, never drops**); userspace reads and clears the maps every
-  second. Both engines return the same per-window counters, so the rule, `--adaptive`, `--ml`,
-  `--stream`, `--csv` are unchanged. The detector now builds from its own `detection/Dockerfile`
-  (ubuntu + scapy + `python3-bpfcc`) and `docker-compose.yml` grants it `CAP_BPF`/`CAP_PERFMON`/
-  `CAP_NET_ADMIN` + read-only mounts of `/lib/modules`, `/usr/src`, `/sys/kernel/debug`. On a
-  120,000-packet high-rate flood the scapy engine observed only **57%** (peak ~6.9k pps, its
-  processing ceiling) while the XDP engine observed **95%** and captured the true ~30k pps peak; at
-  low rate both are exact (5,000-packet test: eBPF 4,986). Detect-only — no packets are dropped.
-- SVG project banner (`banner.svg`), displayed at the top of the README.
-- Adaptive EWMA thresholding in the detector (`--adaptive`): dynamic threshold
-  `μ + k·MAD` with `--pps/--syn` as a floor, and baseline learning frozen during alerts.
-- Synthetic fixed-vs-adaptive evaluation (`experiments/adaptive_eval.py`) and its figure
-  (`assets/adaptive_eval.png`), showing adaptive catches an attack a fixed threshold misses
-  while avoiding false positives on drifting legitimate traffic.
-- Markdown theory guide (`docs/LyThuyet_DoS_DDoS.md`) for on-GitHub study, including the
-  adaptive-threshold and state-of-the-art sections.
-- Machine-learning pipeline (`ml/`): `train.py` trains RandomForest + HistGradientBoosting on
-  flow features, compares against a single-threshold rule, and plots F1 / confusion matrix.
-  `make_synthetic.py` generates a CICDDoS2019-style sample so it runs out of the box.
-- `ml/train.py` reads large CSVs in chunks with size-estimated sampling and accepts a directory
-  of files, so it scales to the full CICDDoS2019 flow data without exhausting memory.
-- `detector.py --stream`: emit one JSON object per window to stdout (for the dashboard), keeping the
-  existing human-readable table and CSV output unchanged.
-- Local-only realtime dashboard (`dashboard/`, Node + Express + WebSocket): network-topology view
-  (with a service-health probe) and attack control (A/B/C scenarios), all driven by the detector's
-  live stream. Binds to 127.0.0.1 only; control actions are fixed `docker exec` argument arrays
-  (no shell interpolation of client input).
-- Testing & verification guide (`docs/TESTING.md`) covering every component with expected results.
-- `ml/train.py` now reads **parquet** as well as CSV, and label canonicalization (`--raw-labels`
-  to disable) that merges CICDDoS2019's dual `DrDoS_X`/`X` labels for the same attack family into
-  one canonical family — the dataset labels the same families two ways across capture days.
-- Scaled the lab to **6 attacker containers** (`attacker1..6`, IPs `.21..26`) so an L7/HTTP DDoS
-  shows 6 real sources; `run_ddos.ps1` and `experiments/run_scenarios.py` drive all six.
-- `attacks/syn_flood.py` reuses one `conf.L3socket()` (far faster than per-packet `send()`) and takes
-  `--pps` to pace the send rate; spoofing at a high rate now reaches **n_src ~2300** distinct source
-  IPs per window (H(src) ~11) instead of ~66.
-- `run_ddos.sh`: Bash orchestrator for Linux (equivalent of the PowerShell `run_ddos.ps1`) that
-  launches all six attackers in parallel for `syn`/`http` mode. Self-elevates through `sg docker`
-  when the login session has not reloaded the `docker` group, so it runs without a prior re-login.
-- `experiments/bench_syn_throughput.sh`: SYN packet-generation benchmark. Uses a two-point
-  (short/long duration) measurement to cancel scapy start-up cost and reports per-source and
-  aggregate pps for 1 and 6 sources — the number to compare host platforms with. On the Ubuntu
-  native host it reaches **~1,470 pps per source** and **~9,460 pps aggregate** (6 sources), showing
-  the paced scenario B (`--pps 400` ×6 = 2,400 pps) is pacing-limited, not hardware-limited.
-- `experiments/run_scenarios.py`: `--pps` optionally overrides the per-source SYN rate for the SYN
-  scenarios; backward-compatible (omit = keep the built-in rates). Two **near-threshold scenarios**
-  were added to make the ML-vs-rule comparison non-trivial: **D** (low-rate spoofed SYN, 2 sources,
-  ~24 pps total — below the 40/25 rule threshold, so the rule misses a real attack) and **E** (a
-  benign single-source HTTP flash-crowd whose rate exceeds the threshold, so the rule false-alarms).
-  HTTP scenarios take a `threads` field to set their rate; the effective pps is recorded in each
-  scenario's `.meta.json`.
-- `ml/build_window_dataset.py`: builds a **window-level** labeled dataset from the detector's own
-  per-window features (the detector has window features, not the flow features CICDDoS2019 needs, so
-  the live ML model is trained on these instead). It orchestrates repeated scenario runs (A/B/C plus
-  the near-threshold D/E, varying duration/pps), labels each 1-second window `BENIGN` (pps==0) or the
-  run's ground truth, adds derived features `syn_ratio` and `ack_syn_ratio`, records the originating
-  `run` (for leave-one-run-out), and writes `ml/data/windows.csv` with a class-balance report. It
-  warns loudly if any run yields 0 windows (a sign the detector sniff was disrupted). Lab dataset:
-  316 windows (BENIGN 162 / DDoS 114 / DoS 40), with ~48% of attack windows below the rule threshold.
-- `ml/train_window.py`: trains a single multiclass RandomForest (BENIGN/DoS/DDoS) on the detector's
-  own per-window features and saves it to `detection/window_model.joblib` (bundled with feature
-  order, label order and the sklearn version) for the detector to use live. It compares against the
-  project rule (pps>=40 or syn>=25; n_src>=2 => DDoS) on a 70/30 split and with leave-one-run-out
-  (binary F1 averaged only over folds that contain attack windows). The near-threshold D/E make the
-  rule fail both ways (false negatives on D, false positives on E): attack-detection F1 is
-  **0.58 (rule) vs 0.99 (RF)**, multiclass macro-F1 **0.59 (rule) vs 0.99 (RF)**; on attack windows
-  below the rule threshold the rule catches **0%** vs the RF's **100%**; leave-one-run-out F1 is
-  **0.52 (rule) vs 0.99 (RF)**. The RF is no longer perfect (it misses ~1 near-threshold window);
-  pushing it lower would need a multi-source benign flash-crowd overlapping the HTTP-DDoS class.
-- `detection/detector.py --ml PATH`: load a window-model `.joblib` (from `train_window.py`) at
-  startup and classify every 1-second window with it **in parallel with the threshold rule**, so the
-  table, `--stream` JSON (`ml_verdict`/`ml_conf`) and `--csv` (two extra columns, only when `--ml`)
-  all show both verdicts. It fails loudly (exits) if the model/scikit-learn/joblib is missing or the
-  bundle is malformed. The rule stays the default; `--ml` is additive. Verified live in the lab:
-  baseline -> `BENIGN`, scenario A -> `DoS`, B/C -> `DDoS`; the first partial HTTP window (a single
-  source, ACK-heavy) reads `BENIGN` at low confidence — the flash-crowd behavior learned from
-  scenario E.
-- `attacker/Dockerfile`: install `scikit-learn==1.9.1` + `joblib==1.6.0` (pinned to the training
-  version) so the detector container can load the window model for `--ml`.
-- Dashboard shows the **ML verdict beside the rule verdict**. The backend starts the detector with
-  `--ml` when `detection/window_model.joblib` exists (rule-only otherwise) and relays `ml_verdict`/
-  `ml_conf`; the Attack panel's verdict box now reads `rule: <X>` with an `ML: <Y> · <conf>%` line
-  below it, colored green/amber/red by the ML verdict so a rule-vs-ML disagreement is visible at a
-  glance. Styling reuses the existing tokens (no new colors).
+- **Quy trình tập dữ liệu cửa sổ từ file PCAP** phục vụ huấn luyện Học máy (Machine Learning), song song với `build_window_dataset.py` (được giữ làm phương án dự phòng). Tạo module `detection/window_features.py` làm nguồn chân lý duy nhất cho công thức tính toán đặc trưng cửa sổ, được import bởi cả bộ trích xuất offline và detector live để đảm bảo tính đồng nhất 100%; module định nghĩa `FEATURES` (10 đặc trưng cung cấp live: 9 đặc trưng chuẩn + `rate_per_src = pps/max(n_src,1)`) và tập mở rộng `EXTRACT` (bổ sung `icmp_s`, `udp_ratio`, `avg_pkt_size`). Tạo `attacks/benign_gen.py` sinh lưu lượng người dùng hợp lệ ngẫu nhiên cho lớp `BENIGN` thực tế. Script `experiments/capture_session.py` điều phối 14 pha kịch bản trong Docker lab, chạy `tcpdump -s 100` trong container detector và ghi nhận mốc thời gian host-clock timeline. `ml/pcap_to_windows.py` trích xuất các cửa sổ trượt (1.0s / stride 0.5s) và gán nhãn theo timeline. Script `ml/train_window.py` import `FEATURES` từ module dùng chung, **bỏ phép chia ngẫu nhiên 70/30** (tránh rò rỉ dữ liệu giữa các cửa sổ chồng lấn), đánh giá duy nhất bằng **Leave-One-Run-Out (LORO)** (1 pcap = 1 run) và xuất độ quan trọng đặc trưng (Feature Importance).
+- **Kịch bản `http_flood.py --pps`**: Điều tiết tốc độ yêu cầu/giây trên toàn bộ các luồng worker (mặc định `0` = không giới hạn). Tương tự như `syn_flood.py --pps`, giúp các kịch bản thu thập L7 được giới hạn ở tốc độ gói thực tế thay vì hàng chục nghìn pps ảo của bridge Docker, tránh hiện tượng lệch phân phối dữ liệu so với mạng WiFi máy thật.
+- **Vector tấn công UDP flood**: Nhóm tấn công thứ 3 (tầng giao vận/mạng volumetric L3/4), bên cạnh SYN (L4) và HTTP (L7). Tạo mới script `attacks/udp_flood.py` tương tự `syn_flood.py` (sử dụng Scapy `IP()/UDP()`, hỗ trợ `--spoof`, `--pps`, `--count`, `--size`). Detector hỗ trợ đếm UDP trên cả hai engine (Scapy và eBPF), bổ sung cột `udp_s` trong CSV và trường `udp` trong JSON stream, gắn nhãn `[UDP flood]` khi `udp_s >= --pps` và `udp_s > syn_s`. Bổ sung chế độ UDP vào các script điều phối: `run_ddos.sh udp` và `run_ddos_remote.sh udp`.
+- **Hỗ trợ triển khai mạng máy thật (Physical Multi-Machine)**: Chạy bài lab trên các máy tính xách tay Linux thật thông qua mạng WiFi nội bộ dùng chung mà không làm ảnh hưởng đến môi trường Docker lab. Bổ sung script `run_ddos_remote.sh` điều phối các máy tấn công từ xa qua giao thức SSH bằng cờ lặp `-a user@ip`. Bổ sung tài liệu `docs/MULTI_MACHINE.md` (tiếng Việt) hướng dẫn mô hình 3 máy, dò IP DHCP, các lệnh kịch bản và phân quyền `CAP_NET_RAW` cho raw socket qua SSH.
+- **Chế độ tấn công công suất tối đa (Max-Intensity Mode)** (`intensity=paced|max`): Chế độ `max` kích hoạt các công cụ phát tải ở tốc độ dây (line-rate) thay cho Scapy/urllib — gồm `hping3 -S --flood` (SYN, `--rand-source` để spoof) và `ab -k -c 500` (L7) cho các kịch bản A/B/C, tự động chuyển sang engine `--engine ebpf`. Tích hợp vào `experiments/run_scenarios.py`, `run_ddos.sh` và công tắc gạt **"Max intensity"** trên Dashboard.
+- **Đo đạc tác động thực tế của bão gói line-rate** (chế độ chỉ phát hiện, không chặn): Ghi nhận A-max ~190k pps, B-max ~123k pps, C-max ~693k pps mà **không làm rớt gói tại card mạng `eth0`**, đồng thời người dùng hợp lệ vẫn nhận phản hồi **100% mã 200 OK** nhờ nhân Linux hiện đại kích hoạt SYN cookies và máy chủ Nginx tĩnh tối ưu (độ trễ p95 chỉ tăng từ 1ms lên 11ms). Khi kích hoạt cơ chế chặn `--block`, A-max bị hủy gần 100% tại XDP và C-max giảm mạnh từ ~433k pps xuống ~28 pps, kéo độ trễ phản hồi về mức 1ms.
+- **Cơ chế chặn gói tự động trong nhân Linux qua eBPF `XDP_DROP`** (`detection/detector.py --block`, yêu cầu `--engine ebpf`): Chương trình XDP **đếm gói trước, hủy gói sau**: các IP nguồn có tốc độ vượt ngưỡng `--block-pps` sẽ bị đưa vào BPF map `blocklist` kèm thời gian sống TTL (`--block-ttl`, tự động hết hạn — không khóa vĩnh viễn) và bị hủy gói; cờ `--block-syn-rate N` bổ sung cơ chế token bucket cho gói SYN toàn cục trong kernel để cắt giảm bão gói SYN spoof ngẫu nhiên. Báo cáo số lượng nguồn bị chặn và số gói bị drop (`blocked_src`/`blocked_pps`) lên bảng điều khiển thời gian thực.
+- **Engine đếm gói eBPF/XDP cho Detector** (`detection/detector.py --engine scapy|ebpf`, mặc định `scapy`): `detection/ebpf_counter.py` nạp chương trình **XDP ingress** vào card `eth0` của máy nạn nhân, đếm gói tin/SYN/ACK và phân bố IP nguồn/cổng đích trực tiếp vào BPF maps và luôn trả về `XDP_PASS` (chế độ chỉ phát hiện). Trong bài kiểm thử 120,000 gói tin tốc độ cao, engine Scapy chỉ bắt được **57%** (đạt ngưỡng xử lý tối đa ~6.9k pps), trong khi engine XDP bắt chính xác **95%** và ghi nhận đúng đỉnh ~30k pps.
+- **Ảnh biểu ngữ SVG dự án (`banner.svg`)**, hiển thị trang trọng ở đầu tài liệu `README.md`.
+- **Cơ chế ngưỡng thích nghi EWMA trong Detector (`--adaptive`)**: Ngưỡng động tính theo công thức `μ + k·MAD` với sàn tối thiểu `--pps/--syn`, tự động đóng băng việc học đường cơ sở trong thời gian diễn ra cảnh báo.
+- **Script đánh giá kiểm thử ngưỡng cố định vs ngưỡng thích nghi (`experiments/adaptive_eval.py`)** và đồ thị kết quả (`assets/adaptive_eval.png`), chứng minh ngưỡng thích nghi vừa bắt được tấn công khi baseline thấp, vừa triệt tiêu báo động giả khi lưu lượng hợp lệ tăng trôi theo thời gian.
+- **Tài liệu lý thuyết Markdown (`docs/LyThuyet_DoS_DDoS.md`)** phục vụ nghiên cứu và thuyết minh, bao gồm cơ sở lý thuyết DoS/DDoS, thuật toán entropy và cơ chế thích nghi.
+- **Quy trình Học máy trên tập dữ liệu CICDDoS2019**: Huấn luyện Random Forest và HistGradientBoosting trên các đặc trưng cấp luồng, so sánh với luật ngưỡng đơn và trực quan hóa ma trận nhầm lẫn (Confusion Matrix).
+- **Hỗ trợ cờ `detector.py --stream`**: Xuất luồng dữ liệu JSON định kỳ mỗi giây ra stdout phục vụ Web Dashboard, đồng thời giữ nguyên bảng console và đầu ra log CSV.
+- **Bảng điều khiển phòng thủ thời gian thực (`dashboard/`, Node.js + Express + WebSocket)**: Giám sát sơ đồ mạng, kiểm tra sức khỏe dịch vụ web (Service Health Probe) và điều khiển tấn công trực quan.
 
-### Changed
+### Đã sửa
 
-- Docs updated for the live-ML work: `README.md` (detector `--ml`, the window-ML pipeline, the
-  dashboard's dual rule/ML verdict, and a Linux `run_ddos.sh` usage example), `docs/TESTING.md`
-  (near-threshold scenarios D/E, a window-ML section, the dashboard ML line, refreshed checklist),
-  and `docs/LyThuyet_DoS_DDoS.md` (new section 8.2 on ML trained on the detector's own features).
-- Machine learning now runs on the **real CICDDoS2019** dataset (the cleaned parquet release
-  `dhoogla/cicddos2019`, fetched via `kagglehub`) instead of only the synthetic sample. On ~131k
-  flows / 63 features / 13 families, attack-detection F1 goes from **0.60** (single-threshold rule)
-  to **0.999** (RandomForest; 0.996 HistGradientBoosting); family classification reaches **0.93**
-  accuracy / **0.74** macro-F1. The synthetic sample stays as a zero-download fallback. Regenerated
-  `assets/ml_f1_compare.png`, `assets/ml_confusion.png`, and `ml/results/metrics.txt`.
-- Theory guide (`docs/LyThuyet_DoS_DDoS.md`): ML section updated to the real CICDDoS2019 results,
-  plus a note explaining why the source count differs by layer (6 real containers for an L7 DDoS;
-  L4 SYN spoofing reaches ~2300 source IPs).
-- Dashboard: scenarios B/C relabelled to **6 sources** and the network view renders 6 attacker nodes;
-  the event log moved **below the console (off-screen)** so it no longer takes space from the panels
-  (scroll down to see it), which also stops the attack panel from being clipped. Scenario B/C attack
-  commands now pace SYN with `--pps` (A 150, B 400 per source).
-- Full pass over every `.md` file to match the current code and stay consistent across files:
-  fixed the detector's build path (`./detection`, not `./attacker`) in README's architecture table;
-  fixed a stale `attacker/Dockerfile` reference to the window-model ML deps (they live in
-  `detection/Dockerfile`, the detector's own image) in the theory guide; fixed a leftover "3
-  container" comparison (the lab has 6) in the theory guide's state-of-the-art table; resolved a
-  numeric mismatch for scenario B between `docs/TESTING.md` and the other three files (pps/syn/
-  n_src/H(src) now read ~4000/~2000/~2300/~11.1 everywhere); removed a stale "will rebuild
-  mitigation later" TODO from `PROJECT_STATUS.md` left over from before closed-loop blocking
-  shipped; `CLAUDE.md`'s host-environment line and command block now say Ubuntu native / bash
-  (were Windows + Docker Desktop / PowerShell); README's Requirements, Usage, Detection Mechanism,
-  Results, Dashboard, and Project Structure sections now cover the eBPF engine, closed-loop
-  `--block`, max-intensity mode, and the dashboard's Blocking/Max-intensity toggles, none of which
-  were documented there before.
+- Engine eBPF không còn bị treo khi gặp bão gói SYN flood `--rand-source`: BPF hash map `src_ip` được **giới hạn kích thước tối đa 8,192 mục** (thay vì 65,536), giúp khống chế thời gian đọc/xóa map từ userspace trong mỗi cửa sổ 1 giây. Số lượng gói tin/SYN/ACK (PERCPU) luôn chính xác tuyệt đối; chỉ số `n_src` chạm ngưỡng tối đa (~8192) vẫn thể hiện rõ bản chất phân tán cao độ của đòn DDoS ($H(src) \approx 13$).
+- Khi thoát Dashboard, hệ thống tự động tắt tiến trình detector **bên trong container** (`docker exec detector pkill -f detector.py`), thay vì chỉ ngắt tiến trình `docker exec` ở máy host.
+- Image container detector (`detection/Dockerfile`) được bổ sung đầy đủ thư viện `scikit-learn==1.9.1` và `joblib==1.6.0`, khắc phục lỗi thiếu module khi kích hoạt `--ml`.
+- Detector lập tức thoát và báo lỗi rõ ràng nếu việc bắt gói thất bại (ví dụ khi khởi động lại container victim làm hỏng network namespace `service:victim`), thay vì im lặng xuất `pps=0`.
+- Cơ chế kiểm tra sức khỏe dịch vụ trên Dashboard chạy qua giao diện loopback nội bộ của victim, không còn xuất hiện trên giao diện mạng bị giám sát làm sai lệch số lượng nguồn `n_src`.
+- Nhật ký sự kiện Dashboard hiển thị bản ghi mới nhất ở dưới cùng (theo phong cách terminal) và chỉ tự động cuộn khi người dùng đang ở cuối trang.
 
-### Fixed
+### Đã xóa
 
-- eBPF counter no longer stalls under a `--rand-source` SYN flood: the `src_ip` BPF hash is **capped at
-  8192** entries (was 65536), bounding the per-window userspace read/clear (tens of thousands of distinct
-  spoofed IPs/s previously froze window output). Packet/SYN/ACK counts (PERCPU) stay exact; only `n_src`
-  saturates (~8192), which still reads unambiguously as a highly dispersed DDoS (`H(src)`≈13).
-- Dashboard exit now stops the **in-container** detector (`docker exec detector pkill -f detector.py`),
-  not just the local `docker exec` client. Previously, stopping `node server.js` left the detector
-  running — and if blocking was on it kept dropping packets with its XDP program still attached, which
-  also made standalone detector runs intermittently fail to attach XDP.
-- The dedicated detector image (`detection/Dockerfile`) regained `scikit-learn==1.9.1` + `joblib==1.6.0`:
-  the eBPF-engine rebuild moved the detector off the attacker image and silently dropped them, so
-  `detector --ml` (and the dashboard's ML line) crashed with `No module named 'joblib'`.
-- Detector exits loudly if its packet sniff fails (e.g. after recreating only the victim, which
-  breaks the `network_mode: service:victim` namespace) instead of silently streaming `pps=0`.
-- Dashboard service-health probe runs over the victim loopback, so it no longer appears on the
-  sniffed interface and inflates `n_src` — scenario A reads **DoS** again (not DDoS).
-- Dashboard event log appends the newest entry at the bottom (chronological, terminal-style) and
-  auto-scrolls only when already near the bottom, so reading history is not yanked down.
-
-### Removed
-
-- `run_ddos.ps1` (the PowerShell orchestrator): the project now runs on Linux only, and
-  `run_ddos.sh` (bash) has covered the same job since it was added. All active docs now reference
-  `run_ddos.sh`; historical CHANGELOG entries about `run_ddos.ps1` are left as-is.
-- L7 mitigation (nginx per-IP rate-limit): the `mitigation/` directory (`demo_mitigation.py`,
-  `nginx/default.conf`), its figure, the dashboard Defense panel / toggle, and all docs references.
-  Defense will be rebuilt as detection-driven blocking (closed-loop: the detector triggers the
-  block) rather than a standalone rate-limit. The dashboard keeps the Service health probe (an
-  impact indicator), moved into the Network panel.
+- Script điều phối PowerShell cũ `run_ddos.ps1`: Dự án hiện tại chạy chuẩn mực trên nền tảng Linux và sử dụng script Bash `run_ddos.sh`.
+- Cơ chế giới hạn tốc độ Nginx cũ (Rate-limit L7 thủ công): Đã được thay thế hoàn toàn bằng cơ chế phòng thủ tự động trong nhân kernel eBPF/XDP theo vòng lặp khép kín (Closed-loop IPS).
 
 ## [1.0.0] - 2026-09-30
 
-First tagged release. Captures the current state of the lab, attacks, detector, tooling, and docs.
+Phiên bản phát hành đầu tiên. Ghi nhận toàn bộ trạng thái nền tảng ban đầu của phòng lab, các công cụ tấn công, mô-đun phát hiện, bộ công cụ phân tích và hệ thống tài liệu.
 
-### Added
+### Thêm mới
 
-- Isolated Docker lab (`docker-compose.yml`): `victim` (nginx), three attackers, and a
-  `detector` that shares the victim's network namespace on `dos-lab` (`172.30.0.0/24`).
-- Attacker/detector image (`attacker/Dockerfile`) with scapy, hping3, and tcpdump.
-- SYN flood attack (L4) with optional IP spoofing (`attacks/syn_flood.py`).
-- HTTP flood attack (L7), multi-threaded (`attacks/http_flood.py`).
-- Real-time detector (`detection/detector.py`): per-second thresholds (`pps`, `syn/s`),
-  Shannon entropy of source IPs, distinct-source classification (DoS vs DDoS), and a
-  `[SYN flood]` tag based on the ACK/SYN ratio.
-- Inbound-only counting (`--victim`) so the victim's own replies are not miscounted as a source.
-- PowerShell orchestrator to run three attackers in parallel (`run_ddos.ps1`).
-- Reproducible scenario runner for baseline + A/B/C with ground-truth metadata
-  (`experiments/run_scenarios.py`).
-- Guided one-command demo with Docker/container preflight checks and live detector streaming
-  (`experiments/demo.py`).
-- Analysis tools: timeline plots (`analysis/plot_attack.py`) and evaluation metrics —
-  detection time, false positives/negatives, classification table (`analysis/metrics.py`).
-- Finalized experiment dataset and figures used in the report (`results/final/`).
-- Project documentation: `README.md`, theory document `docs/TaiLieu_LyThuyet_DoS_DDoS.docx`,
-  and internal status notes `PROJECT_STATUS.md`.
-- Repository scaffolding: `.gitignore`, `CONTRIBUTING.md` (Conventional Commits + workflow),
-  and an ASCII project banner (`banner.txt`) printed by the demo.
+- Môi trường ảo hóa Docker Lab cô lập (`docker-compose.yml`): Gồm container `victim` (Nginx), các container tấn công và `detector` chia sẻ chung network namespace trên dải mạng `dos-lab` (`172.30.0.0/24`).
+- Tấn công SYN flood (L4) hỗ trợ giả mạo IP nguồn (`attacks/syn_flood.py`).
+- Tấn công HTTP flood (L7) đa luồng (`attacks/http_flood.py`).
+- Bộ phát hiện thời gian thực (`detection/detector.py`): Giám sát ngưỡng mỗi giây (`pps`, `syn/s`), tính toán Shannon entropy địa chỉ IP nguồn, phân loại đơn nguồn vs phân tán (DoS vs DDoS), và gắn thẻ `[SYN flood]` dựa trên tỷ lệ ACK/SYN.
+- Lọc gói tin inbound (`--victim`) để không đếm nhầm các gói tin phản hồi do chính nạn nhân gửi đi.
+- Kịch bản chạy tự động các kịch bản chuẩn hóa A/B/C kèm siêu dữ liệu ground-truth (`experiments/run_scenarios.py`).
+- Bản demo có hướng dẫn chạy bằng 1 lệnh duy nhất kèm kiểm tra môi trường container (`experiments/demo.py`).
+- Công cụ phân tích offline: Vẽ đồ thị timeline (`analysis/plot_attack.py`) và tính toán độ trễ, Precision, Recall, F1 (`analysis/metrics.py`).
+- Tập dữ liệu đo đạc và đồ thị hoàn chỉnh lưu tại `results/final/`.
+- Hệ thống tài liệu dự án: `README.md`, tài liệu lý thuyết và cẩm nang kiểm thử `docs/TESTING.md`.
 
-[Unreleased]: https://github.com/cityengin/dos-ddos-project/compare/v1.0.0...HEAD
+[Chưa phát hành]: https://github.com/cityengin/dos-ddos-project/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/cityengin/dos-ddos-project/releases/tag/v1.0.0
