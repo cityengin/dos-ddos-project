@@ -526,12 +526,12 @@ body {
 }
 
 /* ==========================================================================
-   Charts Grid (Full-Width 5x2 = 10 Metrics)
+   Charts Grid (4-4-2 Layout = 10 Metrics)
    ========================================================================== */
 .charts-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
   width: 100%;
 }
 
@@ -539,11 +539,17 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
-  padding: 6px 8px;
+  padding: 8px 10px;
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chart-card.card-span-2,
+.chart-card:nth-child(9),
+.chart-card:nth-child(10) {
+  grid-column: span 2;
 }
 
 .chart-card:hover {
@@ -555,11 +561,11 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
 .chart-code {
-  font-size: 0.54rem;
+  font-size: 0.56rem;
   font-weight: 600;
   text-transform: uppercase;
   color: var(--text-light);
@@ -568,7 +574,7 @@ body {
 }
 
 .chart-title {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-main);
   margin-top: 1px;
@@ -579,7 +585,7 @@ body {
 }
 
 .chart-current-val {
-  font-size: 0.88rem;
+  font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   text-align: right;
@@ -587,14 +593,14 @@ body {
 }
 
 .chart-current-val .unit {
-  font-size: 0.58rem;
+  font-size: 0.60rem;
   font-weight: 500;
   color: var(--text-muted);
 }
 
 .canvas-wrap {
   width: 100%;
-  height: 110px;
+  height: 135px;
   position: relative;
 }
 
@@ -608,10 +614,10 @@ body {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  margin-top: 2px;
-  padding-top: 2px;
+  margin-top: 3px;
+  padding-top: 3px;
   border-top: 1px solid var(--border-subtle);
-  font-size: 0.58rem;
+  font-size: 0.60rem;
 }
 
 .footer-tip {
@@ -621,7 +627,7 @@ body {
 .footer-stats {
   font-family: var(--font-mono);
   color: var(--text-muted);
-  font-size: 0.58rem;
+  font-size: 0.60rem;
 }
 
 /* ==========================================================================
@@ -630,8 +636,10 @@ body {
 .split-section {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
-  gap: 12px;
-  margin-top: 8px;
+  gap: 14px;
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-light);
 }
 
 .panel-card {
