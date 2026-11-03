@@ -29,7 +29,7 @@ BPF_TEXT = r"""
 #include <uapi/linux/udp.h>
 #include <uapi/linux/in.h>
 
-BPF_PERCPU_ARRAY(counters, u64, 5);          // 0=packets 1=syn 2=ack 3=udp 4=blocked
+BPF_PERCPU_ARRAY(counters, u64, 6);          // 0=packets 1=syn 2=ack 3=udp 4=blocked 5=dns(udp sport 53)
 // src_ips bi CHAN kich thuoc o 8192: mot SYN flood spoof (--rand-source) sinh hang chuc nghin
 // IP khac nhau/giay; neu de 65536 thi userspace doc+xoa map moi cua so se khung (hang chuc nghin
 // syscall) -> detector khung viec in window. Cap 8192 giu readback nhanh; khi day thi update()
@@ -95,6 +95,10 @@ int xdp_count(struct xdp_md *ctx) {
         if (tcp->ack) bump(2);
     } else if (ip->protocol == IPPROTO_UDP) {
         bump(3); is_udp = 1;
+        u32 ihl = ip->ihl * 4;
+        if (ihl < sizeof(struct iphdr)) return XDP_PASS;
+        struct udphdr *udp = (void *)ip + ihl;
+        if ((void *)(udp + 1) <= data_end && ntohs(udp->source) == 53) bump(5);  // phan hoi DNS -> DNS amp
     } else if (ip->protocol == IPPROTO_ICMP) {
         is_icmp = 1;
     }
@@ -148,7 +152,7 @@ class EbpfCounter:
         self.last_blocked = 0   # so goi drop trong cua so vua roi (userspace doc tu counters[4])
 
     def snapshot(self):
-        """Doc + XOA maps cho cua so vua roi. Tra (packets, syn, ack, udp, src_counter, dport_counter).
+        """Doc + XOA maps cho cua so vua roi. Tra (packets, syn, ack, udp, dns, src_counter, dport_counter).
         Dong thoi luu so goi da chan (counters[4]) vao self.last_blocked."""
         def total(idx):
             return int(sum(x for x in self._counters[ctypes.c_int(idx)]))
@@ -158,6 +162,7 @@ class EbpfCounter:
         ack = total(2)
         udp = total(3)
         self.last_blocked = total(4)
+        dns = total(5)
 
         src_counter = Counter()
         for k, v in self._src.items():
@@ -169,7 +174,7 @@ class EbpfCounter:
         self._counters.clear()
         self._src.clear()
         self._dports.clear()
-        return packets, syn, ack, udp, src_counter, dport_counter
+        return packets, syn, ack, udp, dns, src_counter, dport_counter
 
     # ----- closed-loop IPS (chi goi khi --block) -----
     def block_sources(self, src_ints, ttl_s):
