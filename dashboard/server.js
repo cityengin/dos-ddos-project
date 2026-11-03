@@ -38,6 +38,7 @@ let lastVerdict = "BENIGN";
 let lastAttackType = null;
 let wss = null;
 const eventLog = []; // in-memory event log (last 100 events)
+const metricHistory = []; // in-memory rolling metric history (last 60 windows)
 
 // Dynamic Benign User Simulator State
 let simProc = null;
@@ -219,6 +220,13 @@ function handleDetectorMetric(d) {
     lastAttackType = attackType;
   }
 
+  // Record into rolling history buffer
+  metricHistory.push({
+    ...d,
+    attackType,
+  });
+  if (metricHistory.length > 60) metricHistory.shift();
+
   // Broadcast metric data
   broadcast({
     type: "metric",
@@ -385,6 +393,7 @@ wss.on("connection", (ws) => {
       victim: VICTIM || "all",
       lastVerdict,
       lastAttackType,
+      history: metricHistory,
       events: eventLog.slice(0, 50),
     })
   );

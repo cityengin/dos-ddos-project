@@ -72,25 +72,33 @@ def main():
     print("=> Adaptive  : bat tan cong VA khong bao gia (nguong bam theo baseline).")
 
     # ---- do thi ----
-    fig, ax = plt.subplots(figsize=(11, 5.2))
-    ax.plot(t, pps, color="#1f77b4", lw=1.6, label="pps (luu luong)")
-    ax.axhline(FIXED_LOW, color="#ff7f0e", ls="--", lw=1.3, label=f"Fixed thap = {FIXED_LOW:.0f}")
-    ax.axhline(FIXED_HIGH, color="#9467bd", ls="--", lw=1.3, label=f"Fixed cao = {FIXED_HIGH:.0f}")
-    ax.plot(t, thr_adap, color="#2ca02c", lw=1.8, label="Nguong thich nghi (EWMA)")
-    ax.axvspan(35, 55, color="red", alpha=0.10)
-    ax.text(45, ax.get_ylim()[1], " TAN CONG", ha="center", va="top",
-            fontsize=10, fontweight="bold", color="#7a0000")
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Liberation Sans"]
+    plt.rcParams["axes.unicode_minus"] = False
+
+    fig, ax = plt.subplots(figsize=(11, 5.4), dpi=150)
+    ax.plot(t, pps, color="#1f77b4", lw=1.8, label="Lưu lượng gói thực tế (pps)")
+    ax.axhline(FIXED_LOW, color="#ff7f0e", ls="--", lw=1.4, label=f"Ngưỡng cố định thấp ({FIXED_LOW:.0f} pps)")
+    ax.axhline(FIXED_HIGH, color="#9467bd", ls="--", lw=1.4, label=f"Ngưỡng cố định cao ({FIXED_HIGH:.0f} pps)")
+    ax.plot(t, thr_adap, color="#2ca02c", lw=2.0, label="Ngưỡng thích nghi động (EWMA: $\\mu + k \\cdot \\mathrm{MAD}$)")
+    ax.axvspan(35, 55, color="red", alpha=0.12)
+    ax.set_ylim(40, 370)
+    ax.text(45, 235, "TẤN CÔNG\n(t=35..55s)", ha="center", va="center",
+            fontsize=9.5, fontweight="bold", color="#990000",
+            bbox=dict(boxstyle="round,pad=0.35", fc="#ffebee", ec="#ef9a9a", lw=1.2))
+    
     # danh dau false positive cua fixed-thap (luc luu luong hop le cao)
     fp_low = np.where(alert_low & ~atk)[0]
-    ax.scatter(fp_low, pps[fp_low], s=16, color="#ff7f0e", zorder=5,
-               label="False positive (fixed thap)")
-    ax.set_xlabel("thoi gian (giay)")
-    ax.set_ylabel("pps")
-    ax.set_title("Nguong co dinh vs thich nghi khi baseline hop le troi theo thoi gian")
-    ax.grid(True, alpha=0.25)
-    ax.legend(loc="upper left", fontsize=8.5, ncol=2)
+    ax.scatter(fp_low, pps[fp_low], s=22, color="#d9534f", zorder=5,
+               label=f"Báo động nhầm (Ngưỡng thấp: {len(fp_low)} mẫu)", edgecolor="black", linewidth=0.5)
+    
+    ax.set_xlabel("Thời gian (giây)", fontsize=10, fontweight="bold")
+    ax.set_ylabel("Tốc độ gói tin (gói/giây - pps)", fontsize=10, fontweight="bold")
+    ax.set_title("So sánh Ngưỡng Cố định vs Ngưỡng Thích nghi EWMA khi Lưu lượng Nền Biến thiên",
+                 fontsize=12, fontweight="bold", pad=12)
+    ax.grid(True, alpha=0.3, linestyle=":")
+    ax.legend(loc="upper left", fontsize=8.5, ncol=2, framealpha=0.92, edgecolor="#cccccc")
     fig.tight_layout()
-    fig.savefig(args.out, dpi=130)
+    fig.savefig(args.out, dpi=150)
     print("\n[*] Da luu do thi:", args.out)
 
 

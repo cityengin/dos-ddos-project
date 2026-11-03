@@ -77,6 +77,11 @@
           list.innerHTML = "";
           msg.events.forEach((evt) => appendEventLog(evt, false));
         }
+        if (msg.history && Array.isArray(msg.history) && msg.history.length > 0) {
+          msg.history.forEach((data) => {
+            onMetricReceived(data);
+          });
+        }
         break;
 
       case "detector":
