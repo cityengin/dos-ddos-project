@@ -68,6 +68,13 @@ services:
       dos-lab:
         ipv4_address: 172.30.0.26
 
+  dns:
+    build: ./dns                   # reflector bind9 cho mo phong DNS Amplification (zone amp.lab, TXT lon)
+    container_name: dns
+    networks:
+      dos-lab:
+        ipv4_address: 172.30.0.30
+
   detector:
     build: ./detection             # image rieng co scapy + eBPF/BCC (xem detection/Dockerfile)
     container_name: detector
