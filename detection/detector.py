@@ -243,19 +243,20 @@ def main():
             # UDP flood: volumetric UDP ap dao (udp_s vuot nguong --pps VA lon hon syn_s) ->
             # khong gan nham khi vua co SYN vua co UDP. Dung args.pps (nguong --pps) lam nguong UDP.
             udp_flood = (udp_s >= args.pps and udp_s > syn_s)
-            # DNS amplification: phan lon UDP la phan hoi DNS (source port 53) -> reflection.
-            # dns_s la tap con cua udp_s; neu chiem >= 50% udp thi la DNS amp, gan [DNS amp] THAY cho [UDP flood].
-            dns_amp = (udp_flood and dns_s >= udp_s * 0.5)
+            # DNS amplification: flood phan hoi DNS (UDP source port 53) doi ve victim = reflection.
+            # Dinh nghia theo dns_s vuot nguong (KHONG theo ty le dns/udp): phan hoi lon hay bi phan
+            # manh IP -> eBPF dem moi manh la 1 goi UDP nen udp_s phong len, ty le dns/udp se sai lech.
+            dns_amp = (dns_s >= args.pps and dns_s > syn_s)
             if verdict == "DDoS":
                 alert = "!! DDoS (nhieu nguon, H_src=%.2f, n=%d, top=%.2f)" % (h_src, n_src, top_share)
             else:
                 alert = "!! DoS  (it nguon, H_src=%.2f, n=%d, top=%.2f)" % (h_src, n_src, top_share)
             if syn_flood:
                 alert += " [SYN flood]"
-            if udp_flood and not dns_amp:
-                alert += " [UDP flood]"
-            if dns_amp:
+            if dns_amp:          # DNS amp uu tien hon [UDP flood] (no la UDP sport 53 chuyen biet)
                 alert += " [DNS amp]"
+            elif udp_flood:
+                alert += " [UDP flood]"
 
         # ====== closed-loop CHAN (neu --block; chi engine ebpf) ======
         blocked_src, blocked_pps = 0, 0
