@@ -89,6 +89,10 @@ def main():
                     help="TTL (giay) cua muc blocklist -> tu het han, khong chan vinh vien")
     ap.add_argument("--block-syn-rate", type=int, default=0,
                     help="token-bucket SYN toan cuc: drop SYN vuot N/giay (0=tat). De cat SYN spoof")
+    ap.add_argument("--block-udp-rate", type=int, default=0,
+                    help="token-bucket UDP toan cuc: drop UDP vuot N/giay (0=tat). De cat UDP flood spoof")
+    ap.add_argument("--block-icmp-rate", type=int, default=0,
+                    help="token-bucket ICMP toan cuc: drop ICMP vuot N/giay (0=tat). De cat ICMP flood spoof")
     args = ap.parse_args()
 
     global VICTIM
@@ -123,8 +127,9 @@ def main():
         if ml:
             print("[*] ML song song: model=%s | lop=%s" % (args.ml, ml["labels"]))
         if args.block:
-            print("[*] CHAN (closed-loop IPS): block-pps=%d ttl=%.0fs syn-rate=%s"
-                  % (args.block_pps, args.block_ttl, args.block_syn_rate or "tat"))
+            print("[*] CHAN (closed-loop IPS): block-pps=%d ttl=%.0fs syn-rate=%s udp-rate=%s icmp-rate=%s"
+                  % (args.block_pps, args.block_ttl, args.block_syn_rate or "tat",
+                     args.block_udp_rate or "tat", args.block_icmp_rate or "tat"))
         print("%-8s %8s %8s %8s %8s %10s %10s   %s" %
               ("time","pkts/s","syn/s","ack/s","udp/s","H(src)","H(dport)","ALERT (luat) | ML" if ml else "ALERT"))
     csvf = open(args.csv, "w") if args.csv else None
@@ -180,7 +185,9 @@ def main():
     signal.signal(signal.SIGINT, _cleanup)
 
     if args.block and ebpf:
-        ebpf.set_syn_rate(args.block_syn_rate)   # token-bucket SYN (0=tat)
+        ebpf.set_syn_rate(args.block_syn_rate)     # token-bucket SYN (0=tat)
+        ebpf.set_udp_rate(args.block_udp_rate)     # token-bucket UDP (0=tat) - xu UDP flood spoof
+        ebpf.set_icmp_rate(args.block_icmp_rate)   # token-bucket ICMP (0=tat) - xu ICMP flood spoof
 
     ew = {"mu_pps": 0.0, "mad_pps": 0.0, "mu_syn": 0.0, "mad_syn": 0.0}  # trang thai EWMA
     wcount = 0

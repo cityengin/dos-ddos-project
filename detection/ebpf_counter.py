@@ -8,7 +8,8 @@ DEM (mac dinh): gan XDP vao eth0 (netns victim), dem goi inbound toi victim vao 
 
 CHAN (closed-loop IPS, chi kich hoat khi userspace ghi vao - mac dinh TRO):
   - blocklist[saddr] = expire_ns: neu src bi chan & chua het han -> XDP_DROP (++blocked)
-  - token-bucket SYN toan cuc (synb + cfg[0]=rate pps): drop SYN vuot rate (xu SYN spoof)
+  - token-bucket TOAN CUC theo giao thuc (cfg[0/1/2] = syn/udp/icmp rate pps): drop goi vuot rate.
+    Dung cho tan cong SPOOF (SYN/UDP/ICMP) vi per-source vo dung khi moi goi mot IP gia.
 Luon DEM TRUOC roi moi chan -> detector van thay dung cuong do tan cong. Khong chan => XDP_PASS.
 
 Can: BCC (python3-bpfcc), kernel headers, CAP_BPF + CAP_NET_ADMIN (xem docker-compose).
@@ -40,11 +41,29 @@ BPF_HASH(dports,  u16, u64, 65536);          // key = TCP dport (host order)
 // ----- closed-loop IPS (tro neu userspace khong ghi) -----
 BPF_HASH(blocklist, u32, u64, 65536);                 // key=saddr, val=expire_ns (bpf_ktime_get_ns)
 struct synb_t { struct bpf_spin_lock lock; u64 tokens; u64 last_ns; };
-BPF_ARRAY(synb, struct synb_t, 1);                    // token-bucket SYN toan cuc (nano-token)
-BPF_ARRAY(cfg,  u64, 1);                              // cfg[0] = syn_rate (pps); 0 = tat
+BPF_ARRAY(synb,  struct synb_t, 1);                   // token-bucket SYN toan cuc (nano-token)
+BPF_ARRAY(udpb,  struct synb_t, 1);                   // token-bucket UDP toan cuc (xu UDP spoof)
+BPF_ARRAY(icmpb, struct synb_t, 1);                   // token-bucket ICMP toan cuc (xu ICMP spoof)
+BPF_ARRAY(cfg,   u64, 3);                             // cfg[0]=syn cfg[1]=udp cfg[2]=icmp rate (pps); 0=tat
 
 static __always_inline void bump(int k) {
     u64 *v = counters.lookup(&k); if (v) *v += 1;
+}
+
+// token-bucket toan cuc (nano-token, burst = 1 giay). Tra 1 neu phai DROP (het token), 0 = cho qua.
+static __always_inline int tb_drop(struct synb_t *s, u64 rate, u64 now) {
+    int drop = 0;
+    u64 cap = rate * 1000000000ULL;
+    bpf_spin_lock(&s->lock);
+    if (s->last_ns == 0) { s->last_ns = now; s->tokens = cap; }
+    u64 elapsed = now - s->last_ns;
+    s->last_ns = now;
+    u64 tok = s->tokens + elapsed * rate;                  // moi ns nap (rate) nano-token
+    if (tok > cap) tok = cap;
+    if (tok >= 1000000000ULL) { tok -= 1000000000ULL; } else { drop = 1; }
+    s->tokens = tok;
+    bpf_spin_unlock(&s->lock);
+    return drop;
 }
 
 int xdp_count(struct xdp_md *ctx) {
@@ -64,7 +83,7 @@ int xdp_count(struct xdp_md *ctx) {
     bump(0);                                                     // packets
     v = src_ips.lookup(&saddr); if (v) lock_xadd(v, 1); else src_ips.update(&saddr, &one);
 
-    int is_syn = 0;
+    int is_syn = 0, is_udp = 0, is_icmp = 0;
     if (ip->protocol == IPPROTO_TCP) {
         u32 ihl = ip->ihl * 4;
         if (ihl < sizeof(struct iphdr)) return XDP_PASS;
@@ -75,7 +94,9 @@ int xdp_count(struct xdp_md *ctx) {
         if (tcp->syn) { bump(1); is_syn = 1; }
         if (tcp->ack) bump(2);
     } else if (ip->protocol == IPPROTO_UDP) {
-        bump(3);
+        bump(3); is_udp = 1;
+    } else if (ip->protocol == IPPROTO_ICMP) {
+        is_icmp = 1;
     }
 
     // ===== ROI MOI CHAN (detect-only neu cac map rong) =====
@@ -85,28 +106,15 @@ int xdp_count(struct xdp_md *ctx) {
     u64 *exp = blocklist.lookup(&saddr);
     if (exp && now < *exp) { bump(4); return XDP_DROP; }
 
-    // (2) token-bucket SYN toan cuc: cat SYN vuot rate (xu tan cong SYN spoof)
-    if (is_syn) {
-        int zero = 0;
-        u64 *rate = cfg.lookup(&zero);
-        if (rate && *rate > 0) {
-            struct synb_t *s = synb.lookup(&zero);
-            if (s) {
-                int drop = 0;
-                u64 cap = (*rate) * 1000000000ULL;            // burst = 1 giay
-                bpf_spin_lock(&s->lock);
-                if (s->last_ns == 0) { s->last_ns = now; s->tokens = cap; }
-                u64 elapsed = now - s->last_ns;
-                s->last_ns = now;
-                u64 tok = s->tokens + elapsed * (*rate);       // moi ns nap (rate) nano-token
-                if (tok > cap) tok = cap;
-                if (tok >= 1000000000ULL) { tok -= 1000000000ULL; } else { drop = 1; }
-                s->tokens = tok;
-                bpf_spin_unlock(&s->lock);
-                if (drop) { bump(4); return XDP_DROP; }
-            }
-        }
-    }
+    // (2) token-bucket toan cuc theo giao thuc: cat goi SPOOF (SYN/UDP/ICMP) vuot rate.
+    //     per-source o tren vo dung voi spoof (moi goi mot IP moi) nen phai gioi han theo proto.
+    int k0 = 0, k1 = 1, k2 = 2;
+    if (is_syn)  { u64 *r = cfg.lookup(&k0); struct synb_t *s = synb.lookup(&k0);
+                   if (r && *r > 0 && s && tb_drop(s, *r, now)) { bump(4); return XDP_DROP; } }
+    if (is_udp)  { u64 *r = cfg.lookup(&k1); struct synb_t *s = udpb.lookup(&k0);
+                   if (r && *r > 0 && s && tb_drop(s, *r, now)) { bump(4); return XDP_DROP; } }
+    if (is_icmp) { u64 *r = cfg.lookup(&k2); struct synb_t *s = icmpb.lookup(&k0);
+                   if (r && *r > 0 && s && tb_drop(s, *r, now)) { bump(4); return XDP_DROP; } }
     return XDP_PASS;
 }
 """
@@ -184,8 +192,16 @@ class EbpfCounter:
         return sum(1 for _ in self._blocklist.items())
 
     def set_syn_rate(self, rate):
-        """Dat rate (pps) cho token-bucket SYN toan cuc; 0 = tat."""
+        """Dat rate (pps) cho token-bucket SYN toan cuc (cfg[0]); 0 = tat."""
         self._cfg[ctypes.c_int(0)] = ctypes.c_ulonglong(int(rate))
+
+    def set_udp_rate(self, rate):
+        """Dat rate (pps) cho token-bucket UDP toan cuc (cfg[1]); 0 = tat. Xu UDP flood spoof."""
+        self._cfg[ctypes.c_int(1)] = ctypes.c_ulonglong(int(rate))
+
+    def set_icmp_rate(self, rate):
+        """Dat rate (pps) cho token-bucket ICMP toan cuc (cfg[2]); 0 = tat. Xu ICMP flood spoof."""
+        self._cfg[ctypes.c_int(2)] = ctypes.c_ulonglong(int(rate))
 
     def stop(self):
         try:
