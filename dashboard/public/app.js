@@ -3,7 +3,7 @@
 
   const $ = (id) => document.getElementById(id);
 
-  // Configuration for 10 rolling charts (60 points each, 1 per second)
+  // Configuration for 11 rolling charts (60 points each, 1 per second)
   const HISTORY_LEN = 60;
   const METRICS = [
     { key: "pps", id: "chart-pps", valId: "val-pps", statsId: "stats-pps", color: "#4f46e5", unit: "pkts/s", decimals: 0 },
@@ -16,6 +16,7 @@
     { key: "syn_ratio", id: "chart-synratio", valId: "val-synratio", statsId: "stats-synratio", color: "#c026d3", unit: "ratio", decimals: 2 },
     { key: "ack_syn_ratio", id: "chart-acksynratio", valId: "val-acksynratio", statsId: "stats-acksynratio", color: "#0d9488", unit: "ratio", decimals: 2 },
     { key: "rate_per_src", id: "chart-ratepersrc", valId: "val-ratepersrc", statsId: "stats-ratepersrc", color: "#f43f5e", unit: "pkts/s/src", decimals: 1 },
+    { key: "dns", id: "chart-dns", valId: "val-dns", statsId: "stats-dns", color: "#9333ea", unit: "dns/s", decimals: 0 },
   ];
 
   // Initialize history queues with zeros
@@ -181,6 +182,7 @@
     let attackType = d.attackType;
     if (!attackType) {
       if (d.syn_flood) attackType = "SYN Flood (L4)";
+      else if (d.dns_amp) attackType = "DNS Amplification (reflection)";
       else if (d.udp_flood) attackType = "UDP Flood (L4)";
       else if ((d.ack || 0) > 0 || (d.syn || 0) > 0) attackType = "HTTP Flood (L7)";
       else if (isTriggered) attackType = "Volumetric / ICMP Flood (L3)";

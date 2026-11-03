@@ -258,7 +258,7 @@
         </div>
 
         <!-- 9. ACK_SYN_RATIO -->
-        <div class="chart-card card-span-2">
+        <div class="chart-card card-wide">
           <div class="chart-card-header">
             <div>
               <span class="chart-code">#9 &middot; ack_syn_ratio</span>
@@ -276,7 +276,7 @@
         </div>
 
         <!-- 10. RATE_PER_SRC -->
-        <div class="chart-card card-span-2">
+        <div class="chart-card card-wide">
           <div class="chart-card-header">
             <div>
               <span class="chart-code">#10 &middot; rate_per_src</span>
@@ -290,6 +290,23 @@
           <div class="chart-card-footer">
             <span class="footer-tip">pps / n_src &middot; Tách Flash-crowd vs HTTP-DDoS</span>
             <span class="footer-stats" id="stats-ratepersrc">max: 0 &middot; avg: 0</span>
+          </div>
+        </div>
+
+        <div class="chart-card card-wide">
+          <div class="chart-card-header">
+            <div>
+              <span class="chart-code">#11 &middot; DNS/s</span>
+              <h3 class="chart-title">Phản hồi DNS (port 53)</h3>
+            </div>
+            <div class="chart-current-val mono" id="val-dns" style="color: #9333ea;">0 <span class="unit">dns/s</span></div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="chart-dns" width="380" height="120"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span class="footer-tip">UDP source port 53 &middot; Dấu hiệu DNS amplification</span>
+            <span class="footer-stats" id="stats-dns">max: 0 &middot; avg: 0</span>
           </div>
         </div>
       </div>

@@ -530,7 +530,8 @@ body {
    ========================================================================== */
 .charts-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* 12 cot: chart thuong span 3 (4/hang), chart "wide" span 4 (3/hang) o hang cuoi 4-4-3 */
+  grid-template-columns: repeat(12, 1fr);
   gap: 10px;
   width: 100%;
 }
@@ -543,13 +544,12 @@ body {
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
+  grid-column: span 3;          /* mac dinh: 4 chart/hang (12/3) */
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.chart-card.card-span-2,
-.chart-card:nth-child(9),
-.chart-card:nth-child(10) {
-  grid-column: span 2;
+.chart-card.card-wide {
+  grid-column: span 4;          /* hang cuoi: 3 chart/hang (12/4) */
 }
 
 .chart-card:hover {
