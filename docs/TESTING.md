@@ -230,6 +230,7 @@ for a in attacker1 attacker2 attacker3 attacker4 attacker5 attacker6; do \
 **Kết quả kỳ vọng:**
 - **Kịch bản C (HTTP 6 nguồn thật)**: Hệ thống nhận diện và đưa cả 6 IP vào danh sách chặn (`blocked_src=6`), lưu lượng tấn công sụp đổ hoàn toàn từ **~136,000 pps xuống chỉ còn ~242 pps**; người dùng hợp lệ bên ngoài vẫn nhận phản hồi 200 OK bình thường.
 - **Kịch bản B (SYN Spoof ngẫu nhiên)**: Chặn theo IP nguồn đơn lẻ không có tác dụng do mỗi gói mang một IP mới. Khi bổ sung cờ giới hạn tốc độ SYN toàn cục `--block-syn-rate 2000`, hệ thống cắt bỏ thành công **~85%** lượng gói SYN rác.
+- **Kịch bản U (UDP Spoof) và I (ICMP Spoof)**: Tương tự B, chặn theo IP vô dụng với gói giả mạo. Token-bucket toàn cục theo giao thức xử lý được: `--block-udp-rate 1000` cắt **~90%** UDP flood 6 nguồn spoof; `--block-icmp-rate 500` cắt **~95%** ICMP flood spoof (`blocked_src=0`, phần vượt định mức bị drop). Đánh đổi: một phần lưu lượng hợp lệ cùng giao thức cũng rớt.
 - **Tính an toàn**: Danh sách chặn có thời gian sống TTL tự động giải phóng (không chặn vĩnh viễn); các máy khách gửi tốc độ thấp không bao giờ bị chặn nhầm.
 
 ---

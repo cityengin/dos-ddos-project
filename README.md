@@ -227,7 +227,7 @@ Nhằm đáp ứng yêu cầu xử lý ở tốc độ dây (line-rate), mô-đu
 2. **Cơ chế Chặn gói Tự động (Closed-Loop Blocking `--block`)**:
    - **Chặn theo tốc độ nguồn (Per-Source Rate Blocking)**: Bất kỳ IP nguồn nào gửi vượt quá ngưỡng `--block-pps` (ví dụ 300 pps) sẽ bị tự động đưa vào BPF map `blocklist`. Các gói tin tiếp theo từ IP này bị hủy ngay lập tức tại driver mạng (`XDP_DROP`).
    - **Tự động mở khóa (Auto-Expiring TTL `--block-ttl`)**: Mỗi mục trong danh sách chặn tự hết hạn sau một khoảng thời gian (ví dụ 5 giây), tránh việc khóa vĩnh viễn địa chỉ IP.
-   - **Token Bucket SYN toàn cục (`--block-syn-rate`)**: Khi gặp tấn công SYN flood giả mạo ngẫu nhiên hàng nghìn IP (không thể chặn theo từng IP cụ thể), cơ chế token bucket trong kernel sẽ cắt bỏ toàn bộ lượng gói SYN vượt định mức, bảo vệ tuyệt đối hàng đợi kết nối của máy chủ web.
+   - **Token Bucket toàn cục theo giao thức (`--block-syn-rate` / `--block-udp-rate` / `--block-icmp-rate`)**: Khi gặp tấn công giả mạo ngẫu nhiên hàng nghìn IP (không thể chặn theo từng IP cụ thể), cơ chế token bucket trong kernel cắt bỏ phần lưu lượng vượt định mức **theo từng giao thức** — SYN cho SYN flood, UDP cho UDP flood, ICMP cho ICMP flood — bảo vệ hàng đợi kết nối và băng thông của máy chủ. Đo trong lab: `--block-udp-rate 1000` chặn **~90%** UDP flood spoof 6 nguồn; `--block-icmp-rate 500` chặn **~95%** ICMP flood spoof. Đánh đổi: một phần lưu lượng hợp lệ cùng giao thức cũng bị rớt khi vượt ngưỡng.
 
 ---
 
