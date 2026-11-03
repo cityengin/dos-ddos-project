@@ -344,43 +344,58 @@ function startDetector() {
 
 // 3. Victim Service Health Probe (checks local Nginx/Web Server availability)
 const PROBE_TARGET = VICTIM || "127.0.0.1";
-setInterval(() => {
+let lastHealth = null;
+
+function probeHealth() {
   const startTime = Date.now();
   const req = http.get(`http://${PROBE_TARGET}:80/`, { timeout: 2000 }, (res) => {
     const latency = Date.now() - startTime;
     const ok = res.statusCode >= 200 && res.statusCode < 400;
-    broadcast({
-      type: "health",
+    lastHealth = {
       ok,
       status: String(res.statusCode),
       ms: latency,
       target: `http://${PROBE_TARGET}:80/`,
+    };
+    broadcast({
+      type: "health",
+      ...lastHealth,
     });
     res.resume(); // consume response to free memory
   });
 
   req.on("error", (err) => {
-    broadcast({
-      type: "health",
+    lastHealth = {
       ok: false,
       status: "ERR",
       ms: null,
       error: err.code || err.message,
       target: `http://${PROBE_TARGET}:80/`,
+    };
+    broadcast({
+      type: "health",
+      ...lastHealth,
     });
   });
 
   req.on("timeout", () => {
     req.destroy();
-    broadcast({
-      type: "health",
+    lastHealth = {
       ok: false,
       status: "TIMEOUT",
       ms: 2000,
       target: `http://${PROBE_TARGET}:80/`,
+    };
+    broadcast({
+      type: "health",
+      ...lastHealth,
     });
   });
-}, 2500);
+}
+
+// Initial probe + interval
+probeHealth();
+setInterval(probeHealth, 2500);
 
 // WebSocket connection handling
 wss.on("connection", (ws) => {
@@ -393,6 +408,7 @@ wss.on("connection", (ws) => {
       victim: VICTIM || "all",
       lastVerdict,
       lastAttackType,
+      health: lastHealth,
       history: metricHistory,
       events: eventLog.slice(0, 50),
     })

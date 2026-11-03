@@ -72,6 +72,9 @@
     switch (msg.type) {
       case "snapshot":
         setPill("pill-detector", !!msg.detectorOnline, msg.detectorOnline ? "Detector Online" : "Detector Standby");
+        if (msg.health) {
+          onHealthReceived(msg.health);
+        }
         if (msg.events && Array.isArray(msg.events)) {
           const list = $("log-list");
           list.innerHTML = "";
@@ -428,7 +431,7 @@
 
     // 1. Draw subtle horizontal grid lines (3 lines)
     ctx.strokeStyle = "#f1f5f9";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 0.5;
     for (let i = 0; i <= 2; i++) {
       const y = padTop + (plotH / 2) * i;
       ctx.beginPath();
@@ -451,7 +454,7 @@
 
     // 3. Draw gradient filled area
     const grad = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
-    grad.addColorStop(0, hexToRgba(color, 0.22));
+    grad.addColorStop(0, hexToRgba(color, 0.12));
     grad.addColorStop(1, hexToRgba(color, 0.0));
 
     ctx.beginPath();
@@ -469,7 +472,7 @@
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // 4. Draw smooth stroke curve
+    // 4. Draw smooth stroke curve (thin & sharp)
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 0; i < points.length - 1; i++) {
@@ -479,19 +482,19 @@
     }
     ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.0;
     ctx.stroke();
 
     // 5. Draw pulse point at latest value
     const lastPoint = points[points.length - 1];
     ctx.beginPath();
-    ctx.arc(lastPoint.x, lastPoint.y, 2.5, 0, Math.PI * 2);
+    ctx.arc(lastPoint.x, lastPoint.y, 1.8, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(lastPoint.x, lastPoint.y, 4.5, 0, Math.PI * 2);
+    ctx.arc(lastPoint.x, lastPoint.y, 3.2, 0, Math.PI * 2);
     ctx.strokeStyle = hexToRgba(color, 0.35);
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = 0.8;
     ctx.stroke();
 
     ctx.restore();
