@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Chay lai 3 kich ban A/B/C, moi kich ban ghi CSV rieng + meta ground truth.
-Chi dung trong lab co lap. Chay tren HOST (Windows/WSL) - dieu khien qua docker exec.
+"""Chay lai cac kich ban tan cong, moi kich ban ghi CSV rieng + meta ground truth.
+Chi dung trong lab co lap. Chay tren HOST - dieu khien qua docker exec.
 
-  python experiments/run_scenarios.py            # chay ca A,B,C
-  python experiments/run_scenarios.py --only A   # chi 1 kich ban
+  python experiments/run_scenarios.py              # chay tat ca (A/B/C/D/E/U_dos/U/I/DNS)
+  python experiments/run_scenarios.py --only DNS   # chi 1 kich ban (vd DNS amplification)
 """
 import argparse, json, subprocess, time, datetime as dt, os
 
 VICTIM = "172.30.0.10"
+RESOLVER = "172.30.0.30"   # DNS reflector (bind9) cho kich ban DNS amplification
 DETECTOR = "detector"
 ATTACKERS = ["attacker1", "attacker2", "attacker3", "attacker4", "attacker5", "attacker6"]
 OUT_DIR = "detection"   # bind-mount /app cua detector -> ./detection tren host
@@ -27,6 +28,9 @@ SCEN = {
     "U_dos": dict(desc="1 nguon UDP flood (L4 volumetric)", truth="DoS", mode="udp", spoof=False, n=1, pps=400),
     "U": dict(desc="6 nguon UDP flood (L4 volumetric)", truth="DDoS", mode="udp", spoof=True, n=6, pps=400),
     "I": dict(desc="6 nguon ICMP echo flood (L3 ping)", truth="DDoS", mode="icmp", spoof=True, n=6, pps=400),
+    # DNS: DNS amplification (reflection). Attacker hoi resolver .30 + spoof src=victim -> phan hoi
+    # lon doi ve victim. Victim thay 1 nguon THAT (resolver) -> DoS (lab chi co 1 reflector).
+    "DNS": dict(desc="DNS amplification qua reflector .30 (reflection)", truth="DoS", mode="dns_amp", spoof=True, n=1, pps=300),
 }
 
 
@@ -40,6 +44,7 @@ def kill_all():
     for a in ATTACKERS:
         dexec(a, "pkill", "-f", "hping3")
         dexec(a, "pkill", "-f", "ab")
+        dexec(a, "pkill", "-f", "dns_amp")
 
 
 def run_one(name, baseline, duration, cooldown, pps_override=None,
@@ -50,9 +55,9 @@ def run_one(name, baseline, duration, cooldown, pps_override=None,
     # intensity: paced = scapy co dieu tiet (mac dinh, dung cho dataset ML, giu nguyen).
     #            max   = cuong do TOI DA (hping3/ab line-rate) -> ho tro A/B/C/U/I; can engine eBPF
     #            de dem kip (scapy rot goi nang o line-rate).
-    is_max = (intensity == "max" and name in ("A", "B", "C", "U", "I"))
+    is_max = (intensity == "max" and name in ("A", "B", "C", "U", "I", "DNS"))
     if intensity == "max" and not is_max:
-        print(f"[!] intensity=max chi ho tro A/B/C/U/I; chay {name} o che do paced.")
+        print(f"[!] intensity=max chi ho tro A/B/C/U/I/DNS; chay {name} o che do paced.")
     csv = f"/app/{name}.csv"
     host_csv = os.path.join(OUT_DIR, f"{name}.csv")
     print(f"\n=== Kich ban {name}: {s['desc']}  (mong doi: {s['truth']}, "
@@ -110,6 +115,11 @@ def run_one(name, baseline, duration, cooldown, pps_override=None,
                 us = 1000000 // (eff_pps or 400)
                 cmd += ["-i", "u%d" % us]
             cmd.append(VICTIM)
+        elif s["mode"] == "dns_amp":
+            # DNS amplification: ban query toi RESOLVER (khong phai victim), spoof src=victim ->
+            # resolver doi phan hoi LON ve victim. Detector tren victim thay phan hoi UDP sport 53.
+            cmd = ["timeout", str(duration), "python3", "/app/dns_amp.py", RESOLVER, "--victim", VICTIM]
+            cmd += ["--pps", "0" if is_max else str(eff_pps or 300)]
         else:
             # Mode http dung ab
             conc = max_conc if is_max else s.get("threads", 20)
