@@ -104,6 +104,22 @@ docker exec attacker1 hping3 --icmp -i u2500 172.30.0.10
 
 ---
 
+### Kịch bản Tấn công DNS Amplification (Phản xạ & Khuếch đại)
+
+Khác các flood trực tiếp: attacker nhắm vào **reflector `172.30.0.30`** và **giả mạo IP nguồn = victim**, nên phản hồi khuếch đại dội về victim.
+
+```bash
+# Chạy qua script điều phối (attacker hỏi reflector, spoof victim):
+python experiments/run_scenarios.py --only DNS --duration 10
+
+# Hoặc thủ công từ 1 attacker:
+docker exec -d attacker1 python3 /app/dns_amp.py 172.30.0.30 --victim 172.30.0.10 --pps 300
+```
+
+**Kết quả kỳ vọng:** Cột `dns_s` (gói UDP source-port 53) tăng cao, cảnh báo gắn nhãn `[DNS amp]`. Vì victim chỉ thấy **1 reflector thật** nên phân loại **DoS** (`n_src = 1`, `top = 1.00`). Hệ số khuếch đại đo được ~40–50× (truy vấn ~40 byte → phản hồi ~2.5 KB). Các kịch bản khác không bị ảnh hưởng (`dns_s = 0`).
+
+---
+
 ## 3. Kiểm thử Ngưỡng Thích nghi (Adaptive EWMA)
 
 ```bash
@@ -231,6 +247,7 @@ for a in attacker1 attacker2 attacker3 attacker4 attacker5 attacker6; do \
 - **Kịch bản C (HTTP 6 nguồn thật)**: Hệ thống nhận diện và đưa cả 6 IP vào danh sách chặn (`blocked_src=6`), lưu lượng tấn công sụp đổ hoàn toàn từ **~136,000 pps xuống chỉ còn ~242 pps**; người dùng hợp lệ bên ngoài vẫn nhận phản hồi 200 OK bình thường.
 - **Kịch bản B (SYN Spoof ngẫu nhiên)**: Chặn theo IP nguồn đơn lẻ không có tác dụng do mỗi gói mang một IP mới. Khi bổ sung cờ giới hạn tốc độ SYN toàn cục `--block-syn-rate 2000`, hệ thống cắt bỏ thành công **~85%** lượng gói SYN rác.
 - **Kịch bản U (UDP Spoof) và I (ICMP Spoof)**: Tương tự B, chặn theo IP vô dụng với gói giả mạo. Token-bucket toàn cục theo giao thức xử lý được: `--block-udp-rate 1000` cắt **~90%** UDP flood 6 nguồn spoof; `--block-icmp-rate 500` cắt **~95%** ICMP flood spoof (`blocked_src=0`, phần vượt định mức bị drop). Đánh đổi: một phần lưu lượng hợp lệ cùng giao thức cũng rớt.
+- **Kịch bản DNS (DNS Amplification)**: Ngược lại với spoof trực tiếp — tại victim chỉ có **ít reflector THẬT** nên **chặn per-source lại hiệu quả**: reflector `.30` vượt `--block-pps` bị đưa vào blocklist, đo được **~100%** phản hồi khuếch đại bị drop (`blocked_src=1`, `blocked_pps ≈ pps`), khách hợp lệ vẫn 200 OK.
 - **Tính an toàn**: Danh sách chặn có thời gian sống TTL tự động giải phóng (không chặn vĩnh viễn); các máy khách gửi tốc độ thấp không bao giờ bị chặn nhầm.
 
 ---
@@ -266,7 +283,7 @@ while :; do curl -s -m3 -o /dev/null -w '%{http_code} %{time_total}\n' http://lo
 - [ ] Cả 8 container ở trạng thái `Up`; trang web `http://localhost:8080` mở được bình thường.
 - [ ] Trạng thái nghỉ (Baseline): 0 cảnh báo, 0 báo động giả.
 - [ ] Phân loại chuẩn xác: Kịch bản A -> DoS, Kịch bản B -> DDoS, Kịch bản C -> DDoS, UDP DoS -> DoS, UDP DDoS / ICMP -> DDoS.
-- [ ] Phân biệt đặc trưng gói: Tấn công SYN có `ack ≈ 0`; tấn công HTTP có `ack >> syn`; tấn công UDP có `udp_s` cao và gắn nhãn `[UDP flood]`; tấn công ICMP có `pps` cao với `syn_s = ack_s = udp_s = 0`.
+- [ ] Phân biệt đặc trưng gói: Tấn công SYN có `ack ≈ 0`; tấn công HTTP có `ack >> syn`; tấn công UDP có `udp_s` cao và gắn nhãn `[UDP flood]`; tấn công ICMP có `pps` cao với `syn_s = ack_s = udp_s = 0`; DNS amplification có `dns_s` cao (UDP sport 53) và gắn nhãn `[DNS amp]`.
 - [ ] Chế độ ngưỡng thích nghi (Adaptive EWMA) phát hiện đúng và không báo nhầm khi lưu lượng nền biến thiên.
 - [ ] Mô hình Học máy Random Forest cửa sổ (LORO) đạt độ chính xác 99.4%, phân tách chuẩn xác các trường hợp biên khó (D/E).
 - [ ] Detector hiển thị đồng thời cả kết luận của Luật ngưỡng lẫn Học máy trên console và Dashboard.

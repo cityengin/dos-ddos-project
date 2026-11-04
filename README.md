@@ -55,8 +55,9 @@ Hệ thống được tổ chức thành ba trụ cột hoạt động phối h�
    - **L3/L4 UDP Flood**: Làm nghẽn băng thông và cạn kiệt tài nguyên xử lý socket qua `hping3 --udp -p 80` (hỗ trợ `--rand-source`).
    - **L3 ICMP Echo Flood**: Làm nghẽn đường truyền mạng bằng bão gói tin ping qua `hping3 --icmp` hoặc `ping -f`.
    - **L7 HTTP Flood**: Làm tê liệt worker pool của máy chủ web qua ApacheBench `ab` (hỗ trợ kết nối đồng thời và HTTP Keep-Alive).
+   - **DNS Amplification (phản xạ/khuếch đại)**: `attacks/dns_amp.py` gửi truy vấn DNS nhỏ (EDNS0) tới một reflector bind9, **giả mạo IP nguồn = victim**, khiến phản hồi lớn (~40–50×) dội về victim (gói UDP source-port 53).
 2. **Mô-đun Phát hiện & Trích xuất Đặc trưng (Detection Engine)**:
-   - Trích xuất định kỳ **10 đặc trưng cửa sổ** mỗi giây (`pps`, `syn_s`, `ack_s`, `udp_s`, `h_src`, `h_dport`, `n_src`, `syn_ratio`, `ack_syn_ratio`, `rate_per_src`).
+   - Trích xuất định kỳ **10 đặc trưng cửa sổ** mỗi giây (`pps`, `syn_s`, `ack_s`, `udp_s`, `h_src`, `h_dport`, `n_src`, `syn_ratio`, `ack_syn_ratio`, `rate_per_src`) cùng bộ đếm `dns_s` (UDP source-port 53) để nhận diện DNS amplification.
    - Hỗ trợ cơ chế ngưỡng kép: **Ngưỡng cố định (Fixed rules)** hoặc **Ngưỡng thích nghi (Adaptive EWMA + MAD)** tự học theo đường cong lưu lượng nền.
    - Hai engine bắt gói: Không gian người dùng (**Scapy**) hoặc Không gian nhân Linux (**eBPF/XDP**) đạt tốc độ line-rate.
    - Phân loại song song bằng mô hình **Học máy Random Forest** nhúng trực tiếp.
@@ -117,15 +118,17 @@ Môi trường tự động hóa cô lập hoàn toàn trên 1 máy tính đơn 
 - **`victim`**: Chạy Nginx trên dải IP `172.30.0.10`, ánh xạ cổng `8080:80` ra máy chủ host.
 - **`detector`**: Sử dụng chế độ mạng `network_mode: "service:victim"`, chia sẻ chung không gian mạng và card mạng `eth0` với victim để giám sát toàn bộ lưu lượng đến.
 - **`attacker1` .. `attacker6`**: Các container botnet được cấp quyền raw socket (`NET_RAW`, `NET_ADMIN`) phục vụ các thử nghiệm tấn công quy mô lớn.
+- **`dns`** (`172.30.0.30`): Máy chủ DNS reflector (bind9, zone `amp.lab` với bản ghi TXT lớn) phục vụ kịch bản **DNS Amplification**. Chỉ authoritative, **không recursion** → không phải open resolver thật, cô lập trong lab.
 
 ---
 
-## Các vector tấn công (3 tầng mạng)
+## Các vector tấn công (các tầng mạng)
 
 1. **L4 TCP SYN Flood (Tầng giao vận)**: Khai thác cơ chế bắt tay ba bước của TCP. Kẻ tấn công gửi ồ ạt gói SYN nhưng không gửi gói ACK hoàn tất, làm đầy hàng đợi kết nối nửa mở (SYN queue / backlog) và từ chối các phiên truy cập mới từ người dùng thật.
 2. **L3/L4 UDP Flood (Tầng mạng & Giao vận)**: Gửi khối lượng lớn gói tin UDP không hướng kết nối đến các cổng ngẫu nhiên, làm nghẽn toàn bộ băng thông và buộc máy nạn nhân tiêu hao CPU để sinh thông điệp ICMP Port Unreachable.
 3. **L3 ICMP Echo Flood (Tầng mạng)**: Bơm lưu lượng ping cường độ tối đa (`hping3 --icmp` hoặc `ping -f`) nhằm bão hòa đường truyền vật lý của mạng nạn nhân.
 4. **L7 HTTP Flood (Tầng ứng dụng)**: Mở hàng trăm kết nối TCP hoàn tất và liên tục gửi yêu cầu HTTP GET/POST với cờ Keep-Alive. Các yêu cầu này chiếm dụng toàn bộ worker thread trong pool xử lý của máy chủ web, khiến dịch vụ ngưng trệ dù băng thông mạng chưa cạn kiệt.
+5. **DNS Amplification (Phản xạ & Khuếch đại)**: Gửi truy vấn DNS nhỏ (EDNS0) tới reflector `172.30.0.30`, **giả mạo IP nguồn = victim**, khiến reflector dội phản hồi lớn (~40–50×) về victim. Victim nhận gói UDP source-port 53; detector gắn nhãn `[DNS amp]`. Chặn **per-source** trị được (ít reflector thật). Chi tiết: [`docs/LyThuyet_DoS_DDoS.md`](docs/LyThuyet_DoS_DDoS.md) §3.4.
 
 ---
 
