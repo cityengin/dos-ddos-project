@@ -250,6 +250,18 @@ for a in attacker1 attacker2 attacker3 attacker4 attacker5 attacker6; do \
 - **Kịch bản DNS (DNS Amplification)**: Ngược lại với spoof trực tiếp — tại victim chỉ có **ít reflector THẬT** nên **chặn per-source lại hiệu quả**: reflector `.30` vượt `--block-pps` bị đưa vào blocklist, đo được **~100%** phản hồi khuếch đại bị drop (`blocked_src=1`, `blocked_pps ≈ pps`), khách hợp lệ vẫn 200 OK.
 - **Tính an toàn**: Danh sách chặn có thời gian sống TTL tự động giải phóng (không chặn vĩnh viễn); các máy khách gửi tốc độ thấp không bao giờ bị chặn nhầm.
 
+### Bảng So sánh Định lượng Hiệu quả Phòng thủ eBPF/XDP IPS
+
+| Kịch bản tấn công | Khi không phòng thủ (Detect-only) | Khi phòng thủ (Active IPS eBPF/XDP) |
+|---|---|---|
+| **DoS SYN Flood** *(1 nguồn)* | Tải ~50,000 pps dồn dập vào cổng 80; hàng đợi TCP SYN backlog của Nginx cạn kiệt hoàn toàn; Web Service: **TIMEOUT (> 2000 ms)**, từ chối mọi kết nối mới; 0 drop/s (0%). | eBPF đưa IP vi phạm vào blocklist (`blocked_src=1`, TTL 5s); loại bỏ **100%** gói SYN rác ngay tại driver card mạng (~50,000 drop/s); Web Service: **UP 200 OK (1–2 ms)**. |
+| **DDoS SYN Flood** *(Spoof IP)* | Tải ~15,000 pps với hàng ngàn IP ngẫu nhiên; CPU nhân Linux quá tải xử lý kết nối TCP nửa mở; Web Service: **TIMEOUT (> 2000 ms)**; 0 drop/s (0%). | Token-Bucket toàn cục (`--block-syn-rate 2000`) với `bpf_spin_lock` cắt giảm **~85%** lượng gói SYN rác tại tầng XDP; bảo vệ hàng đợi socket; Web Service: **UP 200 OK (2–4 ms)**. |
+| **DoS UDP Flood** *(1 nguồn)* | Tải UDP ~30,000 pps gây nghẽn băng thông và bão hòa hàng đợi card mạng; Web Service: **SLOW / TIMEOUT (> 1500 ms)**, rớt gói tin hợp lệ; 0 drop/s (0%). | eBPF đưa IP nguồn vào blocklist (`blocked_src=1`); loại bỏ **100%** gói UDP rác tại tầng XDP; đường truyền thông suốt; Web Service: **UP 200 OK (1 ms)**. |
+| **DDoS UDP Flood** *(Spoof IP)* | Bão gói UDP đa nguồn giả mạo dồn dập (~10,000 pps); ngập lụt băng thông tầng mạng; Web Service: **TIMEOUT (> 2000 ms)**; 0 drop/s (0%). | Token-Bucket toàn cục (`--block-udp-rate 1000`) loại bỏ **~90%** lưu lượng UDP flood tại tầng kernel trước khi cấp phát `sk_buff`; Web Service: **UP 200 OK (2–3 ms)**. |
+| **DDoS ICMP Flood** *(Ping Flood)* | Lưu lượng ICMP dồn dập (~10,000 pps); CPU kernel liên tục tiêu hao tài nguyên phân tích và phản hồi Echo Reply; Web Service: **SLOW (> 1800 ms)**; 0 drop/s (0%). | Token-Bucket toàn cục (`--block-icmp-rate 500`) loại bỏ **~95%** gói ICMP vượt trần ngay tại XDP; giải phóng chu kỳ CPU; Web Service: **UP 200 OK (1–2 ms)**. |
+| **DDoS HTTP Flood** *(L7 6 botnet)* | Tải HTTP dồn dập (~136,000 pps); Nginx worker quá tải 100% CPU do duy trì TCP và bóc tách HTTP GET; Web Service: **504 Gateway Timeout**; 0 drop/s (0%). | eBPF nhận diện và đưa cả 6 IP botnet vào blocklist (`blocked_src=6`); lưu lượng tấn công sụp đổ xuống còn **~242 pps (giảm 99.8%)**; Web Service: **UP 200 OK (1 ms)**. |
+| **DNS Amplification** *(Reflection L4)* | Phản xạ khuếch đại 40–50x dội về từ DNS Resolver (cổng UDP 53) với payload lớn (3–4 KB/gói); bão hòa băng thông; Web Service: **TIMEOUT (> 2000 ms)**; 0 drop/s (0%). | IP máy chủ DNS Reflector bị đưa vào blocklist (`blocked_src=1`); loại bỏ **~100%** gói phản xạ khuếch đại ngay tại card mạng; Web Service: **UP 200 OK (1 ms)**. |
+
 ---
 
 ## 9. Tấn công Công suất Tối đa (Line-Rate) & Tác động Thực tế

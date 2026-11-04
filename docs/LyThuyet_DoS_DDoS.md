@@ -149,14 +149,14 @@ Sử dụng công cụ Apache Benchmark (`ab -k`) thiết lập các kết nối
 
 ### 3.5. Bảng so sánh các kỹ thuật tấn công
 
-| Tiêu chí so sánh | TCP SYN Flood | UDP Flood | HTTP Flood | DNS Amplification |
-|---|---|---|---|---|
-| **Tầng giao thức** | Tầng 4 (TCP) | Tầng 3/4 (UDP) | Tầng 7 (HTTP) | Tầng 3/4 (phản xạ UDP/53) |
-| **Bản chất giao thức** | Hướng kết nối | Phi kết nối | Ứng dụng trên nền TCP | Phản xạ + khuếch đại qua resolver |
-| **Trạng thái bắt tay** | Bỏ dở (chỉ gửi SYN) | Không có | Hoàn tất 3 bước | Không (query/response UDP) |
-| **Tài nguyên bị chiếm dụng** | Hàng đợi SYN Backlog | Băng thông, CPU xử lý ngắt | Worker threads, RAM, Socket | Băng thông (phản hồi khuếch đại) |
-| **Khả năng Spoof IP** | **Có thể** | **Có thể** | **Không thể** (IP thật) | **Bắt buộc** (spoof = IP victim) |
-| **Đặc trưng thống kê cốt lõi** | `syn_s` cao, `ack_s ≈ 0` | `udp_s` cao, chiếm đa số `pps` | `pps` cao, `ack_s ≫ syn_s` | `dns_s` cao (UDP sport 53), khuếch đại ~40× |
+| Tiêu chí so sánh | TCP SYN Flood | UDP Flood | ICMP Flood | HTTP Flood | DNS Amplification |
+|---|---|---|---|---|---|
+| **Tầng giao thức** | Tầng 4 (TCP) | Tầng 3/4 (UDP) | Tầng 3 (ICMP) | Tầng 7 (HTTP) | Tầng 3/4 (phản xạ UDP/53) |
+| **Bản chất giao thức** | Hướng kết nối | Phi kết nối | Báo hiệu/kiểm tra mạng | Ứng dụng trên nền TCP | Phản xạ + khuếch đại qua resolver |
+| **Trạng thái bắt tay** | Bỏ dở (chỉ gửi SYN) | Không có | Không có | Hoàn tất 3 bước | Không (query/response UDP) |
+| **Tài nguyên bị chiếm dụng** | Hàng đợi SYN Backlog | Băng thông, CPU xử lý ngắt | Băng thông, CPU trả lời Ping | Worker threads, RAM, Socket | Băng thông (phản hồi khuếch đại) |
+| **Khả năng Spoof IP** | **Có thể** | **Có thể** | **Có thể** | **Không thể** (IP thật) | **Bắt buộc** (spoof = IP victim) |
+| **Đặc trưng thống kê cốt lõi** | `syn_s` cao, `ack_s ≈ 0` | `udp_s` cao, chiếm đa số `pps` | `pps` cao, `syn=ack=udp=0` | `pps` cao, `ack_s ≫ syn_s` | `dns_s` cao (UDP sport 53), khuếch đại ~40× |
 
 ---
 
@@ -404,6 +404,18 @@ Hệ thống cung cấp cơ chế phòng thủ tự động vòng lặp kín (Cl
 2. **Chặn theo nguồn có thời hạn (Per-Source Drop with TTL):** Nguồn IP gửi vượt ngưỡng `--block-pps` (ví dụ 300 gói/s) sẽ bị ghi vào BPF Map `blocklist` kèm mốc thời gian sống TTL (`--block-ttl`, ví dụ 5 giây). Sau 5 giây, mục này tự động hết hạn, tránh chặn vĩnh viễn IP của người dùng.
 3. **Token Bucket toàn cục theo giao thức (`--block-syn-rate` / `--block-udp-rate` / `--block-icmp-rate`):** Đối với tấn công giả mạo IP ngẫu nhiên (mỗi gói một IP khác nhau), việc chặn theo từng IP là vô tác dụng. Hệ thống dùng Token Bucket với khóa xoay (`bpf_spin_lock`) trong nhân, giới hạn tổng số gói mỗi giao thức (SYN / UDP / ICMP) không vượt quá $N$ gói/giây. Đo trong lab: `--block-udp-rate 1000` cắt **~90%** UDP flood spoof, `--block-icmp-rate 500` cắt **~95%** ICMP flood spoof. Đánh đổi: một phần lưu lượng hợp lệ cùng giao thức cũng bị rớt khi tổng vượt ngưỡng.
 4. **Phòng thủ DNS Amplification (bài học tương phản):** Khác với flood spoof trực tiếp, tại victim một đợt DNS amplification chỉ gồm lưu lượng từ **số ít resolver THẬT** (không giả mạo được, vì phản hồi phải quay về victim). Do đó **chặn theo nguồn (per-source) lại rất hiệu quả**: reflector vượt `--block-pps` sẽ bị đưa vào blocklist và drop — đo trong lab **~100%** phản hồi khuếch đại bị loại bỏ ngay tại XDP. Đây là điểm đối lập thú vị: cùng là volumetric spoof, nhưng SYN/UDP/ICMP spoof cần giới hạn theo tốc độ, còn DNS amp lại trị được bằng chặn nguồn.
+
+### 9.1. Bảng So sánh Định lượng Hiệu quả Phòng thủ eBPF/XDP IPS
+
+| Kịch bản tấn công | Khi không phòng thủ (Detect-only) | Khi phòng thủ (Active IPS eBPF/XDP) |
+|---|---|---|
+| **DoS SYN Flood** *(1 nguồn)* | Tải ~50,000 pps dồn dập vào cổng 80; hàng đợi TCP SYN backlog của Nginx cạn kiệt hoàn toàn; Web Service: **TIMEOUT (> 2000 ms)**, từ chối mọi kết nối mới; 0 drop/s (0%). | eBPF đưa IP vi phạm vào blocklist (`blocked_src=1`, TTL 5s); loại bỏ **100%** gói SYN rác ngay tại driver card mạng (~50,000 drop/s); Web Service: **UP 200 OK (1–2 ms)**. |
+| **DDoS SYN Flood** *(Spoof IP)* | Tải ~15,000 pps với hàng ngàn IP ngẫu nhiên; CPU nhân Linux quá tải xử lý kết nối TCP nửa mở; Web Service: **TIMEOUT (> 2000 ms)**; 0 drop/s (0%). | Token-Bucket toàn cục (`--block-syn-rate 2000`) với `bpf_spin_lock` cắt giảm **~85%** lượng gói SYN rác tại tầng XDP; bảo vệ hàng đợi socket; Web Service: **UP 200 OK (2–4 ms)**. |
+| **DoS UDP Flood** *(1 nguồn)* | Tải UDP ~30,000 pps gây nghẽn băng thông và bão hòa hàng đợi card mạng; Web Service: **SLOW / TIMEOUT (> 1500 ms)**, rớt gói tin hợp lệ; 0 drop/s (0%). | eBPF đưa IP nguồn vào blocklist (`blocked_src=1`); loại bỏ **100%** gói UDP rác tại tầng XDP; đường truyền thông suốt; Web Service: **UP 200 OK (1 ms)**. |
+| **DDoS UDP Flood** *(Spoof IP)* | Bão gói UDP đa nguồn giả mạo dồn dập (~10,000 pps); ngập lụt băng thông tầng mạng; Web Service: **TIMEOUT (> 2000 ms)**; 0 drop/s (0%). | Token-Bucket toàn cục (`--block-udp-rate 1000`) loại bỏ **~90%** lưu lượng UDP flood tại tầng kernel trước khi cấp phát `sk_buff`; Web Service: **UP 200 OK (2–3 ms)**. |
+| **DDoS ICMP Flood** *(Ping Flood)* | Lưu lượng ICMP dồn dập (~10,000 pps); CPU kernel liên tục tiêu hao tài nguyên phân tích và phản hồi Echo Reply; Web Service: **SLOW (> 1800 ms)**; 0 drop/s (0%). | Token-Bucket toàn cục (`--block-icmp-rate 500`) loại bỏ **~95%** gói ICMP vượt trần ngay tại XDP; giải phóng chu kỳ CPU; Web Service: **UP 200 OK (1–2 ms)**. |
+| **DDoS HTTP Flood** *(L7 6 botnet)* | Tải HTTP dồn dập (~136,000 pps); Nginx worker quá tải 100% CPU do duy trì TCP và bóc tách HTTP GET; Web Service: **504 Gateway Timeout**; 0 drop/s (0%). | eBPF nhận diện và đưa cả 6 IP botnet vào blocklist (`blocked_src=6`); lưu lượng tấn công sụp đổ xuống còn **~242 pps (giảm 99.8%)**; Web Service: **UP 200 OK (1 ms)**. |
+| **DNS Amplification** *(Reflection L4)* | Phản xạ khuếch đại 40–50x dội về từ DNS Resolver (cổng UDP 53) với payload lớn (3–4 KB/gói); bão hòa băng thông; Web Service: **TIMEOUT (> 2000 ms)**; 0 drop/s (0%). | IP máy chủ DNS Reflector bị đưa vào blocklist (`blocked_src=1`); loại bỏ **~100%** gói phản xạ khuếch đại ngay tại card mạng; Web Service: **UP 200 OK (1 ms)**. |
 
 ---
 

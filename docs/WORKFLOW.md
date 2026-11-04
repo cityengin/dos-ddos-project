@@ -13,3 +13,7 @@ pushable copy.)
    changes into one commit.
 3. **Sync the remote on session start.** Run `git fetch` and compare against `origin/main`; pull
    new commits before continuing.
+4. **Update documentation on changes.** Whenever a feature or technical change is completed
+   and committed/pushed, always proactively check, update, and push the relevant Markdown
+   documentation files (`README.md`, `CHANGELOG.md`, `docs/TESTING.md`, `docs/LyThuyet_DoS_DDoS.md`, etc.)
+   so that documentation stays completely in sync with the codebase.
