@@ -193,6 +193,17 @@ class EbpfCounter:
             except Exception:
                 pass
 
+    def clear_blocklist(self):
+        """Xoa sach blocklist khi tat phong thu (chuyen ve detect-only)."""
+        try:
+            self._blocklist.clear()
+        except Exception:
+            for k in list(self._blocklist.keys()):
+                try:
+                    del self._blocklist[k]
+                except Exception:
+                    pass
+
     def blocked_src_count(self):
         return sum(1 for _ in self._blocklist.items())
 

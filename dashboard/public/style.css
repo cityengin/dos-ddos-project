@@ -428,6 +428,158 @@ body {
   color: #991b1b;
 }
 
+/* Defense Toggle Pill (Next to Verdict Tag) */
+.defense-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(241, 245, 249, 0.95);
+  border: 1px solid var(--border-light);
+  user-select: none;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.defense-toggle-pill:hover {
+  background: #ffffff;
+  border-color: #94a3b8;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.defense-toggle-pill.active {
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  border-color: #10b981;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25), 0 2px 4px rgba(16, 185, 129, 0.15);
+}
+
+.defense-toggle-icon {
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.defense-toggle-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+/* Slider Track & Thumb */
+.defense-switch {
+  position: relative;
+  display: inline-block;
+  width: 28px;
+  height: 16px;
+  cursor: pointer;
+  margin: 0 2px;
+}
+
+.defense-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.defense-slider {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #cbd5e1;
+  border-radius: 20px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.defense-slider::before {
+  position: absolute;
+  content: "";
+  height: 12px;
+  width: 12px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.defense-switch input:checked + .defense-slider {
+  background-color: #10b981;
+}
+
+.defense-switch input:checked + .defense-slider::before {
+  transform: translateX(12px);
+}
+
+.defense-badge {
+  font-size: 0.58rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+
+.defense-badge.off {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.defense-badge.on {
+  background: #10b981;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 185, 129, 0.3);
+}
+
+/* eBPF Mitigation Box & Header */
+.vbox-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mitigation-box {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mitigation-box:hover {
+  border-color: #94a3b8;
+}
+
+.mitigation-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #94a3b8;
+  display: inline-block;
+  transition: background-color 0.25s ease;
+}
+
+.mitigation-box.active-mitigation {
+  background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2), var(--shadow-sm);
+}
+
+.mitigation-box.active-mitigation .vbox-title {
+  color: #047857;
+  font-weight: 700;
+}
+
+.mitigation-box.active-mitigation .vbox-val {
+  color: #065f46;
+}
+
+.mitigation-box.active-mitigation .mitigation-dot {
+  background-color: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
 .verdict-desc {
   display: none;
 }

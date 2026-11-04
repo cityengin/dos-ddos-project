@@ -73,6 +73,9 @@
     switch (msg.type) {
       case "snapshot":
         setPill("pill-detector", !!msg.detectorOnline, msg.detectorOnline ? "Detector Online" : "Detector Standby");
+        if (msg.defenseActive !== undefined) {
+          updateDefenseUI(msg.defenseActive);
+        }
         if (msg.health) {
           onHealthReceived(msg.health);
         }
@@ -85,6 +88,12 @@
           msg.history.forEach((data) => {
             onMetricReceived(data);
           });
+        }
+        break;
+
+      case "defense_status":
+        if (msg.active !== undefined) {
+          updateDefenseUI(msg.active);
         }
         break;
 
@@ -253,15 +262,29 @@
     }
 
     // eBPF/XDP Mitigation display
+    if (d.block_active !== undefined) {
+      updateDefenseUI(d.block_active);
+    }
     const blockedVal = $("blocked-val");
     const blockedSub = $("blocked-sub");
     if (blockedVal) {
       const bPps = d.blocked_pps || 0;
       const bSrc = d.blocked_src || 0;
-      blockedVal.innerHTML = `${bPps.toLocaleString()} <span class="unit">drop/s</span>`;
-      blockedVal.style.color = bPps > 0 ? "#dc2626" : "#64748b";
+      blockedVal.innerHTML = `${Math.round(bPps).toLocaleString()} <span class="unit">drop/s</span>`;
+      blockedVal.style.color = bPps > 0 ? "#dc2626" : (defenseActiveState ? "#059669" : "#64748b");
       if (blockedSub) {
-        blockedSub.textContent = bPps > 0 ? `Active: ${bSrc} sources blocked` : "Detect-Only Mode";
+        if (defenseActiveState) {
+          if (bPps > 0 || bSrc > 0) {
+            blockedSub.textContent = `BẬT: Đang drop ${Math.round(bPps)} pps (${bSrc} nguồn)`;
+            blockedSub.style.color = "#dc2626";
+          } else {
+            blockedSub.textContent = "BẬT (XDP_DROP Active)";
+            blockedSub.style.color = "#047857";
+          }
+        } else {
+          blockedSub.textContent = "TẮT (Detect-Only)";
+          blockedSub.style.color = "";
+        }
       }
     }
   }
@@ -567,6 +590,87 @@
   fetch("/api/sim/status")
     .then((r) => r.json())
     .then(updateSimUI)
+    .catch(() => {});
+
+  // ---------- Closed-loop eBPF/XDP IPS Defense Controller ----------
+  let defenseActiveState = false;
+
+  function updateDefenseUI(active) {
+    defenseActiveState = !!active;
+    const input = $("defense-toggle-input");
+    const pill = $("defense-toggle-pill");
+    const badge = $("defense-badge");
+    const mitBox = $("mitigation-box");
+    const blockedSub = $("blocked-sub");
+
+    if (input) input.checked = defenseActiveState;
+    if (pill) pill.classList.toggle("active", defenseActiveState);
+    if (badge) {
+      badge.textContent = defenseActiveState ? "BẬT" : "TẮT";
+      badge.className = "defense-badge " + (defenseActiveState ? "on" : "off");
+    }
+    if (mitBox) {
+      mitBox.classList.toggle("active-mitigation", defenseActiveState);
+    }
+    if (blockedSub && !defenseActiveState) {
+      blockedSub.textContent = "TẮT (Detect-Only)";
+      blockedSub.style.color = "";
+    }
+  }
+
+  function toggleDefense(forceState) {
+    const nextState = typeof forceState === "boolean" ? forceState : !defenseActiveState;
+    updateDefenseUI(nextState);
+
+    // 1. Send via WebSocket if connected
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ action: "toggle_defense", enabled: nextState }));
+    }
+
+    // 2. Also send via REST API for resilience
+    fetch("/api/defense/toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: nextState }),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        if (res && res.active !== undefined) {
+          updateDefenseUI(res.active);
+        }
+      })
+      .catch(() => {});
+  }
+
+  const defenseInput = $("defense-toggle-input");
+  if (defenseInput) {
+    defenseInput.addEventListener("change", (e) => {
+      toggleDefense(e.target.checked);
+    });
+  }
+
+  const defensePill = $("defense-toggle-pill");
+  if (defensePill) {
+    defensePill.addEventListener("click", (e) => {
+      // Don't double trigger if clicked directly on checkbox
+      if (e.target === defenseInput || e.target.closest("label")) return;
+      toggleDefense();
+    });
+  }
+
+  const mitBox = $("mitigation-box");
+  if (mitBox) {
+    mitBox.addEventListener("click", () => {
+      toggleDefense();
+    });
+  }
+
+  // Initial fetch for defense status
+  fetch("/api/defense/status")
+    .then((r) => r.json())
+    .then((res) => {
+      if (res && res.active !== undefined) updateDefenseUI(res.active);
+    })
     .catch(() => {});
 
   // Start connection

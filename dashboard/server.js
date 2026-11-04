@@ -49,6 +49,38 @@ let simStatus = {
   pps: 0,
 };
 
+// Closed-loop eBPF/XDP IPS Defense State
+const BLOCK_CTRL_FILE = "/tmp/detector_block";
+let defenseActive = false;
+try {
+  if (fs.existsSync(BLOCK_CTRL_FILE)) {
+    defenseActive = fs.readFileSync(BLOCK_CTRL_FILE, "utf8").trim() === "1";
+  }
+} catch (_) {}
+
+function setDefenseState(active) {
+  defenseActive = !!active;
+  console.log(`[defense] Closed-loop IPS Defense toggled: ${defenseActive ? "ACTIVE (XDP_DROP)" : "OFF (Detect-Only)"}`);
+  try {
+    fs.writeFileSync(BLOCK_CTRL_FILE, defenseActive ? "1" : "0", "utf8");
+  } catch (e) {
+    console.error("[defense] Error writing control file:", e.message);
+  }
+  // Try propagating to docker container 'detector' if present
+  try {
+    spawn("docker", ["exec", "detector", "sh", "-c", `echo ${defenseActive ? 1 : 0} > /tmp/detector_block`]);
+  } catch (_) {}
+
+  broadcast({ type: "defense_status", active: defenseActive });
+  addEvent(
+    defenseActive ? "safe" : "info",
+    "eBPF/XDP IPS Defense",
+    defenseActive
+      ? "🛡️ Đã KÍCH HOẠT phòng thủ tự động eBPF/XDP: XDP_DROP theo danh sách nguồn vi phạm và áp dụng token-bucket rate limit."
+      : "⚪ Đã TẮT phòng thủ eBPF: Chuyển sang chế độ chỉ giám sát (Detect-Only Mode)."
+  );
+}
+
 function startSimulator() {
   if (simProc || simStatus.running) return;
   console.log("[simulator] Starting dynamic benign user simulator on attacker6...");
@@ -172,6 +204,17 @@ app.post("/api/sim/toggle", (req, res) => {
     startSimulator();
   }
   res.json({ ok: true, running: simStatus.running });
+});
+
+// Defense IPS REST APIs
+app.get("/api/defense/status", (req, res) => {
+  res.json({ active: defenseActive });
+});
+
+app.post("/api/defense/toggle", (req, res) => {
+  const target = req.body && typeof req.body.active === "boolean" ? req.body.active : !defenseActive;
+  setDefenseState(target);
+  res.json({ ok: true, active: defenseActive });
 });
 
 const server = http.createServer(app);
@@ -411,11 +454,13 @@ wss.on("connection", (ws) => {
       health: lastHealth,
       history: metricHistory,
       events: eventLog.slice(0, 50),
+      defenseActive,
     })
   );
 
   // Send simulator status
   ws.send(JSON.stringify({ type: "sim_status", ...simStatus }));
+  ws.send(JSON.stringify({ type: "defense_status", active: defenseActive }));
 
   ws.on("message", (raw) => {
     try {
@@ -426,6 +471,9 @@ wss.on("connection", (ws) => {
       } else if (msg.action === "toggle_sim") {
         if (simStatus.running) stopSimulator();
         else startSimulator();
+      } else if (msg.action === "toggle_defense") {
+        const target = typeof msg.enabled === "boolean" ? msg.enabled : !defenseActive;
+        setDefenseState(target);
       }
     } catch {
       /* ignore */

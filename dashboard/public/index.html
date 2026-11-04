@@ -67,6 +67,17 @@
           <div class="verdict-headline">
             <span class="verdict-primary" id="verdict-primary-text">BENIGN</span>
             <span class="verdict-tag" id="verdict-attack-type">An toàn &middot; Không có tấn công</span>
+
+            <!-- Defense Toggle Switch (Bật / Tắt phòng thủ eBPF/XDP) -->
+            <div class="defense-toggle-pill" id="defense-toggle-pill" title="Bật/Tắt chế độ tự động phòng thủ Closed-loop eBPF/XDP IPS">
+              <span class="defense-toggle-icon">🛡️</span>
+              <span class="defense-toggle-label">Phòng thủ:</span>
+              <label class="defense-switch" for="defense-toggle-input">
+                <input type="checkbox" id="defense-toggle-input" aria-label="Bật/Tắt phòng thủ eBPF/XDP">
+                <span class="defense-slider"></span>
+              </label>
+              <span class="defense-badge off" id="defense-badge">TẮT</span>
+            </div>
           </div>
           <p class="verdict-desc" id="verdict-desc-text">Lưu lượng mạng trong giới hạn bình thường. Không phát hiện hành vi bất thường.</p>
         </div>
@@ -89,10 +100,13 @@
           <div class="vbox-val mono" id="nsrc-val">0</div>
           <span class="vbox-sub" id="entropy-sub">Entropy H(src): 0.00</span>
         </div>
-        <div class="verdict-box">
-          <span class="vbox-title">eBPF/XDP Mitigation</span>
+        <div class="verdict-box mitigation-box" id="mitigation-box" title="Nhấp để Bật/Tắt phòng thủ eBPF/XDP IPS">
+          <div class="vbox-header-row">
+            <span class="vbox-title">eBPF/XDP Mitigation</span>
+            <span class="mitigation-dot" id="mitigation-dot"></span>
+          </div>
           <div class="vbox-val mono" id="blocked-val">0 <span class="unit">drop/s</span></div>
-          <span class="vbox-sub" id="blocked-sub">Detect-Only Mode</span>
+          <span class="vbox-sub" id="blocked-sub">TẮT (Detect-Only)</span>
         </div>
       </div>
     </section>

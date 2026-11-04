@@ -194,8 +194,49 @@ def main():
 
     ew = {"mu_pps": 0.0, "mad_pps": 0.0, "mu_syn": 0.0, "mad_syn": 0.0}  # trang thai EWMA
     wcount = 0
+    was_blocking = None
+    is_blocking = args.block
+
+    # File dieu khien dong tu dashboard web UI
+    BLOCK_CTRL_FILE = "/tmp/detector_block"
 
     while True:
+        # Kiem tra file dieu khien dong tu Dashboard
+        if os.path.exists(BLOCK_CTRL_FILE):
+            try:
+                with open(BLOCK_CTRL_FILE, "r") as f:
+                    cval = f.read().strip().lower()
+                    if cval in ("1", "true", "on"):
+                        is_blocking = True
+                    elif cval in ("0", "false", "off"):
+                        is_blocking = False
+            except Exception:
+                pass
+        else:
+            is_blocking = args.block
+
+        # Chuyen doi trang thai phong thu
+        if is_blocking != was_blocking:
+            if is_blocking:
+                sys.stderr.write("[*] [IPS] Closed-loop Defense ACTIVATED (XDP_DROP Active)\n")
+                sys.stderr.flush()
+                if ebpf:
+                    syn_rate = args.block_syn_rate if args.block_syn_rate > 0 else 2000
+                    udp_rate = args.block_udp_rate if args.block_udp_rate > 0 else 1000
+                    icmp_rate = args.block_icmp_rate if args.block_icmp_rate > 0 else 500
+                    ebpf.set_syn_rate(syn_rate)
+                    ebpf.set_udp_rate(udp_rate)
+                    ebpf.set_icmp_rate(icmp_rate)
+            else:
+                sys.stderr.write("[*] [IPS] Defense DEACTIVATED (Detect-Only Mode)\n")
+                sys.stderr.flush()
+                if ebpf:
+                    ebpf.set_syn_rate(0)
+                    ebpf.set_udp_rate(0)
+                    ebpf.set_icmp_rate(0)
+                    ebpf.clear_blocklist()
+            was_blocking = is_blocking
+
         time.sleep(args.interval)
         packets, syn, ack, udp, dns, snap_src, snap_dport = snapshot()
 
@@ -258,9 +299,9 @@ def main():
             elif udp_flood:
                 alert += " [UDP flood]"
 
-        # ====== closed-loop CHAN (neu --block; chi engine ebpf) ======
+        # ====== closed-loop CHAN (neu is_blocking; chi engine ebpf) ======
         blocked_src, blocked_pps = 0, 0
-        if args.block and ebpf:
+        if is_blocking and ebpf:
             # nguon nao vuot nguong trong cua so nay -> dua vao blocklist (TTL); roi don muc het han.
             hot = [ip for ip, c in snap_src.items() if c / args.interval > args.block_pps]
             if hot:
@@ -277,7 +318,7 @@ def main():
         if ml:
             feat = {"pps": pps, "syn_s": syn_s, "ack_s": ack_s, "udp_s": udp_s,
                     "h_src": h_src, "h_dport": h_dport, "n_src": n_src,
-                    "syn_ratio": syn_s / max(pps, 1.0), "ack_syn_ratio": ack_s / max(syn_s, 1.0),
+                    "syn_ratio": syn_ratio, "ack_syn_ratio": ack_syn_ratio,
                     "rate_per_src": pps / max(n_src, 1)}
             vec = [[feat[k] for k in ml["features"]]]
             ml_verdict = str(ml["model"].predict(vec)[0])
@@ -291,7 +332,7 @@ def main():
                 time.strftime("%H:%M:%S"), pps, syn_s, ack_s, udp_s, dns_s, h_src, h_dport, n_src, alert.replace(","," "))
             if ml:
                 row += ",%s,%s" % (ml_verdict or "", ("%.3f" % ml_conf) if ml_conf is not None else "")
-            if args.block:
+            if is_blocking:
                 row += ",%d,%.0f" % (blocked_src, blocked_pps)
             csvf.write(row + "\n")
             csvf.flush()
@@ -327,6 +368,7 @@ def main():
                 "syn_flood": syn_flood, "udp_flood": udp_flood, "dns_amp": dns_amp,
                 "thr_pps": round(thr_pps, 1), "thr_syn": round(thr_syn, 1),
                 "ml_verdict": ml_verdict, "ml_conf": round(ml_conf, 3) if ml_conf is not None else None,
+                "block_active": bool(is_blocking),
                 "blocked_src": blocked_src, "blocked_pps": round(blocked_pps),
                 "top_sources": top_sources,
             }), flush=True)
@@ -334,7 +376,7 @@ def main():
             ml_txt = ""
             if ml:
                 ml_txt = ("  | ML:%s(%.2f)" % (ml_verdict, ml_conf)) if ml_conf is not None else ("  | ML:%s" % ml_verdict)
-            blk_txt = ("  | BLOCK src=%d drop=%.0fpps" % (blocked_src, blocked_pps)) if args.block else ""
+            blk_txt = ("  | BLOCK src=%d drop=%.0fpps" % (blocked_src, blocked_pps)) if is_blocking else ""
             print("%-8s %8.0f %8.0f %8.0f %8.0f %8.0f %10.2f %10.2f   %s%s%s" %
                   (time.strftime("%H:%M:%S"), pps, syn_s, ack_s, udp_s, dns_s, h_src, h_dport, alert, ml_txt, blk_txt))
 
