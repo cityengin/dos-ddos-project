@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Traffic Generator Console — DUT PBL3 Attacker Controller</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Topbar Header -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="flame-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="title-row">
+            <h1>Traffic Generator Console</h1>
+            <span class="badge badge-subtle">PBL3 &middot; Attacker Controller</span>
+          </div>
+          <p class="subtitle">Bảng điều khiển phát tải & mô phỏng kịch bản DoS/DDoS độc lập trên Laptop Tấn công</p>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <!-- Target Pre-flight Status -->
+        <div class="status-pill offline" id="target-pill" title="Trạng thái máy nạn nhân">
+          <span class="status-dot"></span>
+          <span class="status-text" id="target-pill-text">Target: Chưa kiểm tra</span>
+        </div>
+
+        <!-- Attack Running Pill -->
+        <div class="status-pill idle" id="attack-pill">
+          <span class="status-dot"></span>
+          <span class="status-text" id="attack-pill-text">Trạng thái: IDLE</span>
+        </div>
+
+        <!-- Big Emergency Stop Button -->
+        <button class="btn-stop" id="btn-stop-all" type="button" title="Dừng toàn bộ mọi tiến trình phát tải ngay lập tức">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="5" y="5" width="14" height="14" rx="2"/>
+          </svg>
+          <span>DỪNG TẤT CẢ (STOP)</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Block 1: Target Configuration & Pre-Flight Reachability Check -->
+    <section class="panel-card config-panel">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="22" y1="12" x2="18" y2="12"/>
+            <line x1="6" y1="12" x2="2" y2="12"/>
+            <line x1="12" y1="6" x2="12" y2="2"/>
+            <line x1="12" y1="22" x2="12" y2="18"/>
+          </svg>
+          <div>
+            <h2>Khối 1: Cấu hình Mục tiêu & Kiểm tra Sẵn sàng (Pre-flight Check)</h2>
+            <p class="panel-desc">Kiểm tra kết nối mạng nội bộ (Ping) và dịch vụ Web (HTTP 200) trước khi kích hoạt kịch bản</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-grid">
+        <div class="input-group">
+          <label for="input-target">IP Máy Nạn nhân (Victim IP):</label>
+          <input type="text" id="input-target" placeholder="192.168.1.100 hoặc 172.30.0.10" value="172.30.0.10" class="mono" />
+        </div>
+
+        <div class="input-group small">
+          <label for="input-port">Cổng Web (Port):</label>
+          <input type="number" id="input-port" placeholder="80" value="80" class="mono" />
+        </div>
+
+        <div class="input-group">
+          <label for="input-reflector">IP DNS Reflector (Cho Kịch bản DNS):</label>
+          <input type="text" id="input-reflector" placeholder="192.168.1.50 hoặc 172.30.0.30" value="172.30.0.30" class="mono" />
+        </div>
+
+        <div class="input-group small">
+          <label for="input-pps">Tốc độ Gói (pps):</label>
+          <input type="number" id="input-pps" placeholder="200" value="200" min="10" max="5000" class="mono" />
+        </div>
+
+        <div class="btn-check-wrap">
+          <button class="btn-primary" id="btn-check-target" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span>Kiểm tra Kết nối</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Pre-flight Diagnostic Output Banner -->
+      <div class="check-result-banner" id="check-result-banner" style="display: none;">
+        <div class="check-result-badges">
+          <span class="res-badge" id="badge-ping">Ping: -- ms</span>
+          <span class="res-badge" id="badge-http">HTTP: --</span>
+        </div>
+        <p class="check-result-msg" id="check-result-msg">Đang chuẩn bị kiểm tra...</p>
+      </div>
+    </section>
+
+    <!-- Block 2: Test Scenario Trigger Cards -->
+    <section class="section-container">
+      <div class="section-header">
+        <div>
+          <h2>Khối 2: Các Kịch bản Thử nghiệm (Test Scenarios)</h2>
+          <p class="section-sub">Nhấn để phát tải liên tục theo từng giao thức & tầng mạng (nhấn Dừng khẩn cấp khi xong bài đo)</p>
+        </div>
+        <div class="running-timer" id="running-timer" style="display: none;">
+          <span class="pulse-dot"></span>
+          <span>Đang phát: <strong id="timer-text" class="mono">00:00</strong></span>
+        </div>
+      </div>
+
+      <div class="scenarios-grid">
+        <!-- Scenario A: TCP SYN Direct -->
+        <div class="scenario-card" id="card-scen-A">
+          <div class="card-top">
+            <div class="card-tags">
+              <span class="tag tag-l4">L4 Transport</span>
+              <span class="tag tag-dos">DoS (1 IP)</span>
+              <span class="tag tag-tool">hping3</span>
+            </div>
+            <span class="card-num">#A</span>
+          </div>
+          <h3 class="card-title">Kịch bản A &middot; TCP SYN Flood (Direct)</h3>
+          <p class="card-desc">Bắn gói tin TCP SYN từ IP thật của laptop này vào cổng 80, tạo kết nối nửa mở (half-open) làm cạn kiệt bảng SYN backlog.</p>
+          <div class="card-footer">
+            <button class="btn-scenario" data-scenario="A" type="button">
+              <span class="btn-icon">▶</span>
+              <span>Kích hoạt Kịch bản A</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scenario B: TCP SYN Spoofed Botnet -->
+        <div class="scenario-card" id="card-scen-B">
+          <div class="card-top">
+            <div class="card-tags">
+              <span class="tag tag-l4">L4 Transport</span>
+              <span class="tag tag-ddos">DDoS Botnet</span>
+              <span class="tag tag-tool">IP Spoof</span>
+            </div>
+            <span class="card-num">#B</span>
+          </div>
+          <h3 class="card-title">Kịch bản B &middot; TCP SYN Spoofing</h3>
+          <p class="card-desc">Bắn gói tin SYN với địa chỉ IP nguồn ngẫu nhiên hoàn toàn (<span class="mono">--rand-source</span>), giả lập botnet phân tán khổng lồ (Entropy H(src) &gt; 10).</p>
+          <div class="card-footer">
+            <button class="btn-scenario" data-scenario="B" type="button">
+              <span class="btn-icon">▶</span>
+              <span>Kích hoạt Kịch bản B</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scenario C: HTTP Flood Paced -->
+        <div class="scenario-card" id="card-scen-C">
+          <div class="card-top">
+            <div class="card-tags">
+              <span class="tag tag-l7">L7 Application</span>
+              <span class="tag tag-ddos">DDoS L7</span>
+              <span class="tag tag-tool">Paced HTTP</span>
+            </div>
+            <span class="card-num">#C</span>
+          </div>
+          <h3 class="card-title">Kịch bản C &middot; HTTP Flood (Paced)</h3>
+          <p class="card-desc">Bắn các yêu cầu HTTP GET hợp lệ có kiểm soát nhịp độ (paced) với 20 luồng đồng thời, cạn kiệt worker pool Nginx (ACK &gt;&gt; SYN).</p>
+          <div class="card-footer">
+            <button class="btn-scenario" data-scenario="C" type="button">
+              <span class="btn-icon">▶</span>
+              <span>Kích hoạt Kịch bản C</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scenario U: UDP Volumetric Flood -->
+        <div class="scenario-card" id="card-scen-U">
+          <div class="card-top">
+            <div class="card-tags">
+              <span class="tag tag-l4">L4 Transport</span>
+              <span class="tag tag-ddos">Volumetric</span>
+              <span class="tag tag-tool">hping3 UDP</span>
+            </div>
+            <span class="card-num">#U</span>
+          </div>
+          <h3 class="card-title">Kịch bản U &middot; UDP Volumetric Flood</h3>
+          <p class="card-desc">Bão gói tin UDP flood nhắm vào cổng 80, làm nghẽn băng thông và tiêu hao tài nguyên xử lý gói tầng L4 của nạn nhân.</p>
+          <div class="card-footer">
+            <button class="btn-scenario" data-scenario="U" type="button">
+              <span class="btn-icon">▶</span>
+              <span>Kích hoạt Kịch bản U</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scenario I: ICMP Ping Flood -->
+        <div class="scenario-card" id="card-scen-I">
+          <div class="card-top">
+            <div class="card-tags">
+              <span class="tag tag-l3">L3 Network</span>
+              <span class="tag tag-ddos">Ping Flood</span>
+              <span class="tag tag-tool">hping3 ICMP</span>
+            </div>
+            <span class="card-num">#I</span>
+          </div>
+          <h3 class="card-title">Kịch bản I &middot; ICMP Echo Ping Flood</h3>
+          <p class="card-desc">Tạo bão gói tin ICMP echo-request liên tục (<span class="mono">hping3 --icmp</span>) làm quá tải stack mạng hạt nhân Linux của máy Victim.</p>
+          <div class="card-footer">
+            <button class="btn-scenario" data-scenario="I" type="button">
+              <span class="btn-icon">▶</span>
+              <span>Kích hoạt Kịch bản I</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scenario DNS: DNS Amplification -->
+        <div class="scenario-card" id="card-scen-DNS">
+          <div class="card-top">
+            <div class="card-tags">
+              <span class="tag tag-ref">Reflection</span>
+              <span class="tag tag-dos">Khuếch đại ~40x</span>
+              <span class="tag tag-tool">dns_amp.py</span>
+            </div>
+            <span class="card-num">#DNS</span>
+          </div>
+          <h3 class="card-title">Kịch bản DNS &middot; DNS Amplification</h3>
+          <p class="card-desc">Gửi truy vấn nhỏ tới Reflector BIND9 kèm giả mạo IP nguồn nạn nhân; Reflector phản xạ gói TXT lớn (2.5KB) dội thẳng về Victim.</p>
+          <div class="card-footer">
+            <button class="btn-scenario" data-scenario="DNS" type="button">
+              <span class="btn-icon">▶</span>
+              <span>Kích hoạt Kịch bản DNS</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Block 3: Live Output Console & Event Log -->
+    <section class="panel-card console-panel">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo">
+            <polyline points="4 17 10 11 4 5"/>
+            <line x1="12" y1="19" x2="20" y2="19"/>
+          </svg>
+          <div>
+            <h3>Nhật ký Tiến trình Thực thi (Live Output Console)</h3>
+            <p class="panel-desc">Theo dõi lệnh đang thực thi, thông số tốc độ phát tải và phản hồi hệ thống theo thời gian thực</p>
+          </div>
+        </div>
+        <button class="btn-text" id="btn-clear-log" type="button">Xóa Màn hình</button>
+      </div>
+
+      <div class="console-box" id="console-box">
+        <div class="log-line info"><span class="log-time">[Init]</span> Sẵn sàng. Nhập IP máy Victim và nhấn "Kiểm tra Kết nối" để bắt đầu.</div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>DUT PBL3 &middot; Standalone Traffic Generator Controller &middot; Network Security Demonstration Lab</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

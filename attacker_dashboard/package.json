@@ -1,0 +1,14 @@
+{
+  "name": "attacker-traffic-generator",
+  "version": "1.0.0",
+  "description": "Standalone Web Console for Traffic Generation & DoS/DDoS Stress-Testing (DUT PBL3)",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}
