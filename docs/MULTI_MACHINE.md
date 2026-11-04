@@ -1,31 +1,39 @@
-# Chạy lab trên NHIỀU MÁY THẬT (qua WiFi)
+# Chạy lab trên NHIỀU MÁY THẬT (qua WiFi / LAN)
 
 Hướng dẫn chạy lab DoS/DDoS bằng các **laptop thật** nối chung 1 WiFi, thay cho (hoặc song song
-với) mô hình Docker. Giữ NGUYÊN mọi script: `attacks/*.py` và `detection/detector.py` chạy trực
-tiếp trên Linux thật, chỉ cần truyền đúng tham số. Không dùng netplan, không đặt IP tĩnh — IP do
-DHCP cấp (động), mọi IP truyền qua tham số lúc chạy.
+với) mô hình Docker. Hỗ trợ đầy đủ **Victim Defense Console (cổng 3000)** với 11 đồ thị sóng trực tiếp + thanh gạt phòng thủ IPS, và **Attacker Traffic Generator Web Console (cổng 4000)** giúp phát các bài đo 1-click mà không cần gõ lệnh tay phức tạp trong lúc thuyết trình.
+
+> 📄 **Tài liệu tóm tắt in ấn**: Tham khảo file PDF tóm tắt [`HUONG_DAN_DEMO_3_MAY.pdf`](../HUONG_DAN_DEMO_3_MAY.pdf) được thiết kế tối ưu 2 trang để in ấn hoặc mang theo buổi báo cáo.
 
 > ⚠️ CHỈ DÙNG TRONG LAB CÔ LẬP. Chỉ nhắm vào máy `victim` của chính mình, trên WiFi riêng. Không bao
 > giờ nhắm tới máy/dịch vụ không thuộc sở hữu của bạn.
 
+## 0. Bước bắt buộc đầu tiên: Đồng bộ mã nguồn (Trên CẢ 3 Máy)
+
+Trước khi bắt đầu buổi demo, trên CẢ 3 laptop hãy mở terminal và kéo mã nguồn mới nhất về:
+```bash
+cd ~/dos-ddos-project && git pull origin main
+```
+
 ## 1. Mô hình 3 máy
 
 ```
-         WiFi riêng (vd 192.168.1.0/24, DHCP)
-   +------------------+   +------------------+   +------------------+
-   | victim           |   | attacker1        |   | attacker2 (thêm  |
-   | nginx + detector |   | syn/http flood   |   | sau, tùy chọn)   |
-   +------------------+   +------------------+   +------------------+
+         WiFi riêng (vd 192.168.1.0/24 qua DHCP hoặc Hotspot 4G)
+   +--------------------+   +---------------------+   +---------------------+
+   | victim             |   | attacker1           |   | attacker2           |
+   | nginx + detector   |   | Traffic Console :4000|  | Traffic Console :4000|
+   | SOC Console :3000  |   | DNS Reflector :53   |   |                     |
+   +--------------------+   +---------------------+   +---------------------+
 ```
 
-| Vai trò   | Máy        | Chạy gì                                        | Cần cài |
-|-----------|------------|------------------------------------------------|---------|
-| victim    | 1 laptop   | nginx (web đích) + `detector.py` (sniff WiFi)  | nginx, python3-scapy, tcpdump |
-| attacker1 | 1 laptop   | `hping3` (L3/L4) / `ab` (L7 HTTP)              | hping3, apache2-utils |
-| attacker2 | thêm sau   | giống attacker1                                | hping3, apache2-utils |
+| Vai trò | Máy | Chạy gì | Cần cài |
+|---|---|---|---|
+| **victim** | 1 laptop (máy chiếu) | Nginx (:80) + `detector.py` + SOC Console (:3000) | `nginx`, `python3-scapy`, `tcpdump`, `nodejs`, `npm` |
+| **attacker1** | 1 laptop | `attacker_dashboard` (:4000) + DNS Reflector BIND9 (:53) | `hping3`, `apache2-utils`, `docker`, `nodejs` |
+| **attacker2** | 1 laptop | `attacker_dashboard` (:4000) | `hping3`, `apache2-utils`, `nodejs` |
 
-Bắt đầu với **2 máy** (1 victim + 1 attacker1) là đủ chạy kịch bản A, B, và C-1-nguồn. Thêm máy
-thứ 3 (attacker2) khi nào cần C thành DDoS thật (xem mục 7).
+Bắt đầu với **2 máy** (1 victim + 1 attacker1) là đủ chạy kịch bản A, B, U, I, DNS và C-1-nguồn. Thêm máy
+thứ 3 (attacker2) khi cần kịch bản C trở thành DDoS phân tán đa nguồn thật.
 
 ## 2. Tìm IP và kiểm tra mạng
 
@@ -75,28 +83,72 @@ git clone <URL_REPO> ~/dos-ddos-project
 Mặc định các lệnh bên dưới giả sử repo ở `~/dos-ddos-project`. Nếu clone chỗ khác, đổi tham số
 đường dẫn cho phù hợp (và đặt biến `REMOTE_REPO` khi dùng `run_ddos_remote.sh`).
 
-## 5. Chạy detector trên victim
+## 5. Chạy detector & Dashboard SOC trên victim
 
-Chạy trong 1 terminal trên máy victim (thay `wlan0` + IP victim cho đúng máy bạn):
+Chạy trong terminal trên máy victim (thay `wlan0` và `192.168.1.100` bằng IP máy bạn):
 
 ```bash
-sudo python3 ~/dos-ddos-project/detection/detector.py \
-    --iface wlan0 --victim 192.168.1.50 --pps 40 --syn 25
+cd ~/dos-ddos-project
+
+# Khởi chạy detector kết hợp Dashboard SOC Console thời gian thực:
+sudo .venv/bin/python3 detection/detector.py \
+    --iface wlan0 \
+    --victim 192.168.1.100 \
+    --pps 40 --syn 25 \
+    --ml detection/window_model.joblib \
+    --stream | node dashboard/server.js --victim 192.168.1.100
 ```
 
-- `--iface wlan0`  : sniff card WiFi thật (khác Docker dùng `eth0`).
-- `--victim <ip>`  : chỉ đếm gói đi VÀO victim (loại gói victim tự trả về) → n_src/ack chính xác.
-- `sudo`           : sniff cần quyền root.
-- Thêm `--csv ~/run.csv` nếu muốn ghi log; thêm `--ml ~/dos-ddos-project/detection/window_model.joblib`
-  nếu đã train model (tùy chọn).
+- Mở trình duyệt tại **`http://localhost:3000`** và bấm F11 để chiếu toàn màn hình.
+- Giao diện cung cấp: 11 đồ thị sóng trực tiếp (bổ sung cột `DNS/s`), trạng thái Web Service phản hồi realtime, nhật ký sự kiện, và **thanh gạt phòng thủ eBPF/XDP Closed-loop IPS** (`[🛡️ Phòng thủ: BẬT / TẮT]`).
 
-Engine mặc định là `scapy` (ổn định trên WiFi). `--engine ebpf` (XDP) có thể KHÔNG attach được trên
-card WiFi (nhiều driver không hỗ trợ XDP native); nếu muốn thử thì thêm `--engine ebpf`, lỗi thì quay
-lại scapy.
+## 6. Khởi chạy Traffic Generator Console & DNS Reflector trên 2 Attacker
 
-## 6. Chạy các kịch bản thực tế (100% dùng hping3 và ab)
+Để thao tác nhanh và chuyên nghiệp trong buổi thuyết trình, bạn sử dụng giao diện web **Traffic Generator Console (:4000)** thay vì phải gõ lệnh terminal thủ công:
 
-Thay `192.168.1.50` bằng IP victim thật. Chạy các lệnh kiểm thử TRÊN MÁY ATTACKER:
+### 6.1. Trên Laptop Attacker 1 (kiêm DNS Reflector)
+```bash
+# 1. Bật container DNS Reflector BIND9 cổng 53 (chỉ cần chạy 1 lần):
+cd ~/dos-ddos-project/dns && docker run -d --name dns_reflector -p 53:53/udp $(docker build -q .)
+
+# 2. Bật Web Console phát tải:
+cd ~/dos-ddos-project/attacker_dashboard && node server.js --port 4000
+```
+
+### 6.2. Trên Laptop Attacker 2
+```bash
+cd ~/dos-ddos-project/attacker_dashboard && node server.js --port 4000
+```
+
+### 6.3. Thao tác trên giao diện Web `http://localhost:4000`
+1. Nhập **Target Victim IP**: `192.168.1.100` | **Port**: `80`.
+2. Nhập **DNS Reflector IP**: `192.168.1.50` (IP của Attacker 1).
+3. Bấm **[🔍 Kiểm tra Kết nối]**: Đèn xanh `🟢 SẴN SÀNG: Ping OK | HTTP 200 OK` báo hiệu thông mạng.
+4. Bấm 1-click vào các nút kịch bản để phát tải:
+   - **Kịch bản A (SYN Direct)**: DoS 1 nguồn.
+   - **Kịch bản B (SYN Spoofed)**: DDoS giả mạo IP nguồn ngẫu nhiên.
+   - **Kịch bản C (HTTP Paced)**: DDoS HTTP L7.
+   - **Kịch bản U (UDP Flood)**: DoS/DDoS volumetric UDP.
+   - **Kịch bản I (ICMP Flood)**: DoS/DDoS ping flood.
+   - **Kịch bản DNS (DNS Amp)**: Phản xạ khuếch đại DNS dội về victim.
+5. Khi kết thúc kịch bản, bấm nút đỏ **[🛑 STOP ALL TRAFFIC]** để dừng ngay lập tức.
+
+*(Lưu ý: Nếu vẫn muốn dùng dòng lệnh thủ công thay cho Web Console, bạn có thể tham khảo các lệnh `hping3` và `ab` ở mục 8 bên dưới).*
+
+## 7. Kịch bản Trình diễn 4 Pha trước Hội đồng (Presentation Playbook)
+
+| Pha | Hành động 2 Attacker | Hiện tượng trên Màn hình Victim (Máy chiếu) |
+|---|---|---|
+| **Pha 1: Baseline** | Chưa phát tải. | Banner xanh `BENIGN`, 11 đồ thị 0–10 pps, Web: `UP (200) 1ms`. Thanh gạt `[🛡️ Phòng thủ: TẮT]`. |
+| **Pha 2: DoS đơn nguồn** | Attacker 1 bấm `[Kịch bản A: SYN Direct]`. | Banner cam `DoS [SYN flood]`, `n_src = 1`, `H(src) ≈ 0.00`. AI ML & Rule cùng bắt đúng. Sau đó bấm `[STOP ALL TRAFFIC]` hạ nhiệt về `BENIGN`. |
+| **Pha 3: DDoS đa nguồn & DNS Amp** | Attacker 1 bấm `[B: SYN Spoofed]`, Attacker 2 bấm `[C: HTTP Paced]` hoặc `[DNS Amp]`. | Banner đỏ rực `DDoS`, `n_src` tăng hàng trăm/nghìn IP, `H(src) > 7–8 bits`, cột `DNS/s` tăng vọt, Web Service bị nghẽn (`SLOW` / `TIMEOUT`). |
+| **Pha 4: Bật Phòng thủ IPS (Đắt giá)** | 2 Attacker vẫn đang bắn DDoS. | Ngay trên máy chiếu, dùng chuột **gạt thanh trượt [🛡️ Phòng thủ: BẬT]** &rarr; eBPF kích hoạt `XDP_DROP` tại card mạng, `drop/s` nhảy vọt, Web Service lập tức hồi sinh: **`UP (200) 1ms`** trước mắt Thầy Cô! |
+
+---
+
+## 8. Các lệnh Terminal thủ công (Tùy chọn thay thế cho Web Console)
+
+Nếu không sử dụng giao diện web Traffic Generator Console (:4000), bạn có thể chạy các lệnh kiểm thử thủ công trực tiếp trên terminal của máy Attacker:
 
 ### A — DoS TCP SYN Flood (1 nguồn)
 ```bash
@@ -143,22 +195,12 @@ Detector: `pps` cao nhưng `SYN=0, ACK=0, UDP=0` → nhận diện **`[ICMP Floo
 > **không làm sập** victim — nó minh họa **nhận dạng** loại tấn công volumetric (tag `[UDP flood]`),
 > không phải gây sập. Muốn thật sự nghẽn phải bão hòa băng thông đường truyền (quy mô lớn hơn nhiều).
 
-## 7. Hai máy bây giờ vs thêm máy thứ 3
-
-- **2 máy (1 victim + 1 attacker):** chạy được A (DoS), B (DDoS qua spoof), và C với 1 nguồn
-  (detector sẽ báo DoS vì n_src=1). Đủ để minh họa phân loại DoS/DDoS và nhận dạng SYN vs L7.
-- **Thêm máy thứ 3 (attacker2):** chỉ cần (1) cài phần mềm mục 3, (2) clone repo mục 4, (3) chạy
-  lệnh tấn công trên CẢ 2 máy attacker cùng lúc. **KHÔNG đổi gì** ở victim/detector/script. Lúc đó
-  C chạy từ 2 nguồn thật → `n_src=2` → **DDoS L7 thật**.
-
-Chạy 2 attacker cùng lúc tiện nhất bằng orchestrator SSH (mục dưới): chỉ cần thêm một cờ `-a`.
-
-## 8. Chạy nhiều attacker cùng lúc bằng `run_ddos_remote.sh`
+## 9. Chạy nhiều attacker cùng lúc bằng `run_ddos_remote.sh`
 
 `run_ddos_remote.sh` (ở gốc repo) bắn SONG SONG từ nhiều máy attacker qua SSH. Đặt và chạy trên máy
 ĐIỀU KHIỂN (tiện nhất là chính máy victim — nó đã có repo).
 
-### 8.1. Tạo SSH key một lần (để không bị hỏi mật khẩu lúc bắn song song)
+### 9.1. Tạo SSH key một lần (để không bị hỏi mật khẩu lúc bắn song song)
 Trên máy điều khiển:
 ```bash
 ssh-keygen -t ed25519            # Enter hết; tạo key nếu chưa có
@@ -167,7 +209,7 @@ ssh-copy-id user@192.168.1.62
 ssh user@192.168.1.61 true       # kiểm tra: vào được không cần mật khẩu
 ```
 
-### 8.2. Chạy
+### 9.2. Chạy
 ```bash
 # 1 attacker, SYN:
 ./run_ddos_remote.sh syn  -t 192.168.1.50 -d 30 -a user@192.168.1.61
@@ -175,17 +217,17 @@ ssh user@192.168.1.61 true       # kiểm tra: vào được không cần mật 
 # 2 attacker, HTTP (DDoS L7 thật, n_src=2):
 ./run_ddos_remote.sh http -t 192.168.1.50 -d 30 -a user@192.168.1.61 -a user@192.168.1.62
 
-# UDP flood (volumetric, cần raw socket giống SYN — xem mục 9):
+# UDP flood (volumetric, cần raw socket giống SYN — xem mục 10):
 ./run_ddos_remote.sh udp  -t 192.168.1.50 -d 30 -a user@192.168.1.61
 
 # thêm máy thứ 3 sau này: chỉ thêm 1 cờ -a nữa
 ./run_ddos_remote.sh http -t 192.168.1.50 -d 30 -a user@192.168.1.61 -a user@192.168.1.62 -a user@192.168.1.63
 ```
 Các cờ: `-t` IP victim, `-d` giây, `-a` user@ip (lặp lại), `-r` pps/nguồn cho SYN và UDP (mặc định
-400), `-s` thêm sudo cho SYN/UDP (chỉ khi dùng NOPASSWD sudoers thay vì CAP_NET_RAW — mục 9). Repo
+400), `-s` thêm sudo cho SYN/UDP (chỉ khi dùng NOPASSWD sudoers thay vì CAP_NET_RAW — mục 10). Repo
 trên máy attacker mặc định `~/dos-ddos-project`; đổi bằng biến `REMOTE_REPO=/đường/dẫn ./run_ddos_remote.sh ...`.
 
-## 9. Quyền hạn khi chạy hping3 (sudo / raw socket)
+## 10. Quyền hạn khi chạy hping3 (sudo / raw socket)
 
 `hping3` mở raw socket để tạo gói L3/L4 nên cần quyền root (`sudo`). `ab` là HTTP client tầng ứng dụng thông thường nên KHÔNG cần sudo.
 
@@ -201,7 +243,7 @@ sudo chmod 440 /etc/sudoers.d/dos-lab
 Rồi bắn kèm `-s`: `./run_ddos_remote.sh syn ... -s`. Cách này cũng nới quyền (cho chạy python3 bất
 kỳ dưới root không mật khẩu) → chỉ dùng trên máy lab, gỡ file sudoers khi xong.
 
-## 10. Khác biệt so với Docker
+## 11. Khác biệt so với Docker
 
 - **Sniff NIC thật:** detector sniff thẳng card WiFi (`--iface wlan0`), không dùng chung namespace
   như Docker. Không còn vấn đề "SYN-ACK của victim bị đếm thành nguồn" theo kiểu netns — nhưng bộ lọc
@@ -210,10 +252,10 @@ kỳ dưới root không mật khẩu) → chỉ dùng trên máy lab, gỡ file
   XDP native (nhanh hơn); card WiFi thường KHÔNG hỗ trợ XDP native → dùng `scapy` (mặc định) cho an
   toàn.
 - **Không có orchestrator Docker:** `run_ddos.sh`, `experiments/run_scenarios.py`, `dashboard/` đều
-  dùng `docker exec` → KHÔNG dùng cho máy thật. Máy thật dùng `run_ddos_remote.sh` + chạy tay.
+  dùng `docker exec` → KHÔNG dùng cho máy thật. Máy thật dùng Traffic Generator Console hoặc `run_ddos_remote.sh`.
 - **IP động (DHCP):** mọi IP truyền qua tham số lúc chạy; không đặt IP tĩnh, không netplan.
 
-## 11. An toàn & gỡ lỗi thường gặp
+## 12. An toàn & gỡ lỗi thường gặp
 
 - **Chỉ nhắm victim của mình, WiFi riêng.** Không nhắm IP lạ.
 - **ping không thông:** cùng WiFi chưa? AP bật "AP/client isolation" (chặn máy-tới-máy)? Tắt tính

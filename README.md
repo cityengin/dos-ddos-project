@@ -191,11 +191,38 @@ Giao diện web giám sát chuyên dụng ([`dashboard/`](dashboard/)) chạy tr
 
 ### Tính năng Nổi bật
 
-- **Banner Trạng thái Cảnh báo Thời gian thực**: Đổi màu trực quan tức thì (`BENIGN` - Xanh lá, `DoS` - Màu cam, `DDoS` - Màu đỏ) kèm nhãn vector tấn công (`[SYN flood]`, `[UDP flood]`, `[HTTP flood]`) và độ tự tin AI (ML Confidence).
+- **Banner Trạng thái Cảnh báo & Thanh gạt Phòng thủ IPS Động**: Đổi màu trực quan tức thì (`BENIGN` - Xanh lá, `DoS` - Màu cam, `DDoS` - Màu đỏ) kèm nhãn vector tấn công (`[SYN flood]`, `[UDP flood]`, `[HTTP flood]`, `[DNS amp]`) và độ tự tin AI (ML Confidence).
+  - Tích hợp **Thanh trượt công tắc phòng thủ eBPF/XDP IPS (`[🛡️ Phòng thủ: BẬT / TẮT]`)** ngay trên banner: Cho phép chuyển đổi tức thì giữa chế độ chỉ giám sát (Detect-Only) và chế độ phòng thủ chủ động (Closed-loop IPS) trực tiếp tại card mạng Linux Kernel mà không cần khởi động lại tiến trình!
+<p align="center">
+  <img src="assets/banner_defense_on.png" alt="Thanh gạt kích hoạt phòng thủ Closed-loop IPS" width="100%">
+</p>
+
+- **Hộp thông số Giảm thiểu thiệt hại (eBPF/XDP Mitigation)**: Hiển thị trực tiếp số gói tin bị loại bỏ theo thời gian thực (`drop/s`), trạng thái danh sách chặn nguồn (blocklist TTL) và đèn báo hoạt động.
 - **Service Health Probe**: Định kỳ kiểm tra tình trạng dịch vụ Nginx mỗi 2.5 giây, đo đạc độ trễ phản hồi (ms) và mã trạng thái HTTP (200 OK / Timeout).
-- **10 Biểu đồ Trượt Sparkline Canvas**: Trực quan hóa biến thiên liên tục trong 60 giây của toàn bộ 10 đặc trưng mạng.
+- **11 Biểu đồ Trượt Sparkline Canvas (Bố cục 4-4-3)**: Trực quan hóa biến thiên liên tục trong 60 giây của toàn bộ 10 đặc trưng mạng cùng chỉ số thứ 11 **`DNS/s`** (UDP source-port 53) phát hiện phản xạ DNS.
 - **Bảng Top Attacker IPs**: Xếp hạng các địa chỉ IP phát tải lớn nhất, tính toán tỷ lệ đóng góp lưu lượng và tự động gắn nhãn cảnh báo **SPOOFED IP** khi phát hiện địa chỉ nguồn ngẫu nhiên.
 - **Nhật ký Sự kiện An ninh (Event Log)**: Ghi nhận có thứ tự thời gian các sự kiện an ninh mạng theo từng cấp độ cảnh báo (`safe`, `warn`, `crit`, `info`).
+
+---
+
+## Bảng điều khiển phát tải Tấn công (Attacker Traffic Generator Console)
+
+Nhằm tối ưu hóa trải nghiệm thực nghiệm trên máy thật (không cần gõ dòng lệnh phức tạp trong lúc thuyết trình), dự án trang bị bảng điều khiển web độc lập ([`attacker_dashboard/`](attacker_dashboard/)) dành riêng cho các máy thử nghiệm tải:
+
+<p align="center">
+  <img src="assets/attacker_dashboard.png" alt="Giao diện Attacker Traffic Generator Console" width="100%">
+</p>
+
+- **Khối 1: Pre-flight Target Check**: Nhập IP/Port máy Victim và IP máy DNS Reflector, sau đó nhấn **[🔍 Kiểm tra Kết nối]** để probe tự động bằng Ping ICMP và HTTP GET. Đèn báo xanh `🟢 SẴN SÀNG: Ping OK | HTTP 200 OK` xác nhận kết nối mạng đã thông suốt.
+- **Khối 2: 6 Kịch bản Bắn tải Đo đạc (1-Click Trigger)**:
+  - **A: SYN Flood (Direct IP)** — Tấn công DoS L4 đơn nguồn vào cổng 80.
+  - **B: SYN Flood (Spoofed IPs)** — Tấn công DDoS L4 đa nguồn giả mạo ngẫu nhiên (`--rand-source`).
+  - **C: HTTP Flood (Paced)** — Tấn công DoS/DDoS L7 nhịp độ cao làm nghẽn worker pool web server.
+  - **U: UDP Volumetric Flood** — Tấn công volumetric UDP bào mòn băng thông mạng.
+  - **I: ICMP Ping Flood** — Tấn công dồn dập gói tin ping L3.
+  - **DNS: Amplification (Reflection)** — Tấn công phản xạ & khuếch đại DNS qua Reflector BIND9.
+- **Khối 3: Nút Dừng Khẩn cấp [🛑 STOP ALL TRAFFIC]**: Hủy ngay lập tức toàn bộ các tiến trình tấn công nền (`hping3`, `http_flood.py`, `dns_amp.py`) chỉ với một cú nhấp chuột.
+- **Khối 4: Live Output Terminal**: Console tối màu hiển thị trực tiếp đầu ra stdout/stderr thời gian thực qua WebSocket.
 
 ---
 
@@ -264,51 +291,55 @@ Nhằm đáp ứng yêu cầu xử lý ở tốc độ dây (line-rate), mô-đu
 
 ### Chế độ A: Demo mạng máy thật (WiFi / LAN)
 
-#### 1. Thiết lập trên Máy Nạn nhân (Victim Laptop)
-```bash
-# Cài đặt các gói phụ thuộc
-sudo apt update && sudo apt install -y nginx python3-scapy tcpdump nodejs npm
-sudo systemctl enable --now nginx
+Mô hình gồm **3 laptop thật** kết nối chung 1 mạng Wi-Fi (hoặc Hotspot 4G phát từ điện thoại): **1 Victim + 2 Attacker**.
+> 📄 **Tài liệu hướng dẫn in ấn**: Xem file cẩm nang in ấn tóm tắt [`HUONG_DAN_DEMO_3_MAY.pdf`](HUONG_DAN_DEMO_3_MAY.pdf) và tài liệu chi tiết tại [`docs/MULTI_MACHINE.md`](docs/MULTI_MACHINE.md).
 
-# Tải mã nguồn dự án
-git clone https://github.com/cityengin/dos-ddos-project.git ~/dos-ddos-project
+#### Bước 0: Đồng bộ mã nguồn mới nhất trên CẢ 3 Máy
+```bash
+cd ~/dos-ddos-project && git pull origin main
+```
+Xác định địa chỉ IP và card mạng của từng máy bằng lệnh `hostname -I` hoặc `ip -brief addr` (ví dụ: Victim `192.168.1.100`, Attacker 1 `192.168.1.50`, Attacker 2 `192.168.1.51`).
+
+#### Bước 1: Thiết lập trên Máy Nạn nhân (Victim Laptop — Kết nối Máy chiếu)
+```bash
+# 1. Bật Web Server Nginx cổng 80 (Docker hoặc cài trực tiếp):
+docker run -d --name victim_web -p 80:80 nginx:alpine
+# hoặc: sudo systemctl start nginx
+
+# 2. Khởi chạy Bộ dò kép & Dashboard SOC Console:
 cd ~/dos-ddos-project
-
-# Khởi chạy Bảng điều khiển phòng thủ & Detector
-cd dashboard
-npm install
-node server.js --iface wlan0 --victim <IP_CỦA_VICTIM> --port 3000
+sudo .venv/bin/python3 detection/detector.py \
+    --iface wlan0 \
+    --victim 192.168.1.100 \
+    --pps 40 --syn 25 \
+    --ml detection/window_model.joblib \
+    --stream | node dashboard/server.js --victim 192.168.1.100
 ```
-Mở trình duyệt truy cập: `http://localhost:3000`.
+Mở trình duyệt truy cập: **`http://localhost:3000`** (bấm F11 để chiếu toàn màn hình hiển thị 11 đồ thị sóng trực tiếp và thanh gạt phòng thủ IPS).
 
-#### 2. Khởi chạy Tấn công từ các Máy Tấn công (Attacker Laptops)
-```bash
-# Cài đặt công cụ phát tải
-sudo apt update && sudo apt install -y hping3 apache2-utils curl
+#### Bước 2: Thiết lập trên Hai Máy Tấn công (Attacker Laptops)
+- **Trên Laptop Attacker 1 (kiêm DNS Reflector):**
+  ```bash
+  # 1. Khởi chạy DNS Reflector BIND9 cổng 53 (chỉ cần chạy 1 lần):
+  cd ~/dos-ddos-project/dns && docker run -d --name dns_reflector -p 53:53/udp $(docker build -q .)
 
-# Phát các đợt tấn công thử nghiệm vào IP Victim:
-# 1. L4 SYN Flood (DoS đơn nguồn)
-sudo hping3 -S -p 80 -i u2000 <IP_VICTIM>
+  # 2. Khởi chạy Traffic Generator Console:
+  cd ~/dos-ddos-project/attacker_dashboard && node server.js --port 4000
+  ```
+- **Trên Laptop Attacker 2:**
+  ```bash
+  cd ~/dos-ddos-project/attacker_dashboard && node server.js --port 4000
+  ```
+- **Thao tác trên giao diện Web `http://localhost:4000` của cả 2 máy Attacker:**
+  1. Nhập **Target Victim IP:** `192.168.1.100` | **Port:** `80`.
+  2. Nhập **DNS Reflector IP:** `192.168.1.50` (IP Wi-Fi của máy Attacker 1).
+  3. Bấm nút **[🔍 Kiểm tra Kết nối]**: Đèn xanh `🟢 SẴN SÀNG: Ping OK | HTTP 200 OK` báo hiệu đã thông mạng và sẵn sàng phát tải.
 
-# 2. L4 SYN Flood (DDoS giả mạo IP ngẫu nhiên)
-sudo hping3 -S -p 80 --rand-source -i u2000 <IP_VICTIM>
-
-# 3. L3/L4 UDP Flood (Volumetric)
-sudo hping3 --udp -p 80 -i u2000 <IP_VICTIM>
-
-# 4. L3 ICMP Echo Flood (Ping Flood)
-sudo hping3 --icmp -i u2000 <IP_VICTIM>
-
-# 5. L7 HTTP Flood (Tầng ứng dụng)
-ab -k -c 50 -n 30000 http://<IP_VICTIM>/
-```
-
-#### 3. Điều phối Tấn công Đồng thời qua SSH
-Từ máy điều khiển, kích hoạt tấn công đồng bộ trên cả hai máy attacker:
-```bash
-# Điều phối 2 máy thật cùng tấn công HTTP flood -> n_src = 2
-./run_ddos_remote.sh http -t <IP_VICTIM> -d 30 -a user@192.168.1.21 -a user@192.168.1.22
-```
+#### Bước 3: Kịch bản Trình diễn 4 Pha trước Hội đồng
+1. **Pha 1 (Trạng thái Bình thường - Baseline)**: Cả 2 Attacker chưa bấm gì. Victim hiển thị `BENIGN (An toàn)`, 11 đồ thị phẳng lặng (0–10 pps), Web Service: `UP (200) 1ms`. Thanh trượt phòng thủ ở trạng thái `[🛡️ Phòng thủ: TẮT]`.
+2. **Pha 2 (Tấn công DoS đơn nguồn)**: Attacker 1 bấm `[Kịch bản A: SYN Direct]` &rarr; Victim đổi banner cam `DoS [SYN flood]`, `n_src = 1`, `H(src) ≈ 0.00`. Sau đó Attacker 1 bấm `[STOP ALL TRAFFIC]` để hệ thống tự động hạ nhiệt về `BENIGN`.
+3. **Pha 3 (Tấn công DDoS đa nguồn & DNS Amplification)**: Attacker 1 bấm `[Kịch bản B: SYN Spoofed]`, Attacker 2 bấm `[Kịch bản C: HTTP Paced]` hoặc `[Kịch bản DNS: Amplification]` &rarr; Victim đổi banner đỏ rực `DDoS`, `n_src` tăng vọt lên hàng trăm/nghìn IP, `H(src) > 7.0–8.0 bits`, đồ thị `DNS/s` tăng cao, Web Service bị nghẽn (`SLOW` / `ERR / TIMEOUT`).
+4. **Pha 4 (Kích hoạt Phòng thủ Closed-loop IPS — Đắt giá nhất)**: Ngay trên màn hình máy chiếu, dùng chuột **gạt thanh trượt [🛡️ Phòng thủ: BẬT]** &rarr; eBPF/XDP kích hoạt `XDP_DROP` tại card mạng, số đếm `drop/s` nhảy vọt lên hàng nghìn gói/giây, Web Service của Victim lập tức hồi sinh: **`UP (200) 1ms`** trước mắt Thầy Cô!
 
 ---
 
@@ -363,10 +394,16 @@ docker compose ps
 ├── dashboard/                    # Bảng điều khiển phòng thủ Victim Defense Console
 │   ├── package.json              # Khai báo phụ thuộc (Express, WebSocket)
 │   ├── server.js                 # Backend Node.js (đọc stream stdin, REST API, probe Nginx)
-│   └── public/                   # Giao diện web người dùng
-│       ├── index.html            # Khung giao diện (10 sparklines, status banner, logs)
-│       ├── style.css             # Định dạng giao diện Light theme hiện đại
-│       └── app.js                # Xử lý WebSocket và vẽ 10 biểu đồ trượt canvas 60s
+│   └── public/                   # Giao diện web người dùng (11 charts, IPS toggle, banner, logs)
+│
+├── attacker_dashboard/           # Bảng điều khiển phát tải Tấn công (Attacker Console :4000)
+│   ├── package.json              # Khai báo phụ thuộc (Express, WebSocket)
+│   ├── server.js                 # Backend Node.js (Pre-flight probe, trigger 6 kịch bản, stop)
+│   └── public/                   # Giao diện web người dùng cho 2 laptop Attacker
+│
+├── dns/                          # Container DNS Reflector BIND9 phục vụ kịch bản DNS Amplification
+│   ├── Dockerfile                # Image Ubuntu + bind9
+│   └── named.conf                # Cấu hình authoritative zone amp.lab (bản ghi TXT lớn 3.5KB)
 │
 ├── ml/                           # Quy trình nghiên cứu và huấn luyện Học máy
 │   ├── pcap_to_windows.py        # Trích xuất đặc trưng có nhãn từ file PCAP theo timeline
