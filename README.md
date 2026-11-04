@@ -292,7 +292,7 @@ Nhằm đáp ứng yêu cầu xử lý ở tốc độ dây (line-rate), mô-đu
 ### Chế độ A: Demo mạng máy thật (WiFi / LAN)
 
 Mô hình gồm **3 laptop thật** kết nối chung 1 mạng Wi-Fi (hoặc Hotspot 4G phát từ điện thoại): **1 Victim + 2 Attacker**.
-> 📄 **Tài liệu hướng dẫn in ấn**: Xem file cẩm nang in ấn tóm tắt [`HUONG_DAN_DEMO_3_MAY.pdf`](HUONG_DAN_DEMO_3_MAY.pdf) và tài liệu chi tiết tại [`docs/MULTI_MACHINE.md`](docs/MULTI_MACHINE.md).
+> 📖 **Cẩm nang hướng dẫn chi tiết**: Xem toàn bộ quy trình thiết lập, phân chia công việc và kịch bản demo 4 pha tại [`docs/MULTI_MACHINE.md`](docs/MULTI_MACHINE.md).
 
 #### Bước 0: Đồng bộ mã nguồn mới nhất trên CẢ 3 Máy
 ```bash
