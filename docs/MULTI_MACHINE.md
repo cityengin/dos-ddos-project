@@ -123,8 +123,11 @@ Hai máy này đóng vai trò là các nguồn phát sinh tải thử nghiệm (
 
 #### Trên Laptop Attacker 1 (Kiêm DNS Reflector):
 ```bash
-# 1. Khởi chạy container DNS Reflector cổng 53 (chỉ cần chạy 1 lần):
-cd ~/dos-ddos-project/dns && docker run -d --name dns_reflector -p 53:53/udp $(docker build -q .)
+# 1. Khởi chạy container DNS Reflector cổng 53:
+# Mẹo: Ubuntu mặc định chạy systemd-resolved trên 127.0.0.53:53, nên hãy bind trực tiếp vào IP Wi-Fi
+# của máy Attacker 1 (thay 192.168.1.50 bằng IP thực tế của bạn) để tránh lỗi "address already in use":
+cd ~/dos-ddos-project/dns
+docker run -d --name dns_reflector -p $(hostname -I | awk '{print $1}'):53:53/udp $(docker build -q .)
 
 # 2. Khởi chạy Attacker Traffic Generator Console:
 cd ~/dos-ddos-project/attacker_dashboard && node server.js --port 4000
