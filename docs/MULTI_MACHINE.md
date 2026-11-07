@@ -36,6 +36,19 @@ Ghi lại IP và tên card mạng Wi-Fi (thường là `wlan0` hoặc `wlp...`):
 | **ATTACKER 1** | 1 laptop | `192.168.1.50` | • Traffic Generator Console (:4000)<br>• DNS Reflector BIND9 container (:53) | `hping3`, `apache2-utils`, `docker`, `nodejs` |
 | **ATTACKER 2** | 1 laptop | `192.168.1.51` | • Traffic Generator Console (:4000) | `hping3`, `apache2-utils`, `nodejs` |
 
+### 1.3. Cài đặt công cụ phát tải (Bắt buộc trên 2 máy Attacker)
+
+Trước buổi thuyết trình, trên cả 2 máy Attacker, mở terminal và chạy lệnh cài đặt trọn gói một lần:
+```bash
+sudo apt update && sudo apt install -y hping3 python3-scapy apache2-utils nodejs npm
+```
+- `hping3`: Dùng cho các kịch bản **A** (SYN Direct), **B** (SYN Spoofed), **U** (UDP Flood), **I** (ICMP Ping).
+- `python3-scapy`: Dùng cho kịch bản **DNS** (DNS Amplification qua `attacks/dns_amp.py`).
+- `apache2-utils`: Cung cấp công cụ benchmark L7 `ab`.
+- `nodejs` & `npm`: Khởi chạy Attacker Traffic Generator Console cổng 4000.
+
+> 💡 **Tính năng tự kiểm tra môi trường thông minh**: Khi khởi động `attacker_dashboard`, hệ thống sẽ tự động kiểm tra các công cụ này. Nếu máy còn thiếu công cụ nào, hệ thống sẽ chặn lệnh và in khung hướng dẫn cài đặt trực quan ngay trên Web Console thay vì báo lỗi ngầm.
+
 ---
 
 ## 2. Giải đáp: "IP DNS Reflector lấy ở đâu?"

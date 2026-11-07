@@ -7,6 +7,10 @@ và tuân thủ quy tắc đánh số phiên bản [Semantic Versioning](https:/
 
 ## [Chưa phát hành]
 
+### Thêm mới
+
+- **Bộ tự kiểm tra môi trường và hướng dẫn cài đặt trực quan trên Attacker Web Console (`attacker_dashboard/server.js`)**: Tự động rà soát sự hiện diện của các công cụ nền tảng (`hping3`, `python3`, `scapy`) ngay khi khởi động và trước mỗi lần phát tải. Nếu phát hiện thiếu công cụ nào, hệ thống chặn kích hoạt để tránh lỗi văng ngầm (`sudo: command not found`), đồng thời in khung hướng dẫn và câu lệnh cài đặt nhanh (`sudo apt install ...`) trực tiếp lên giao diện Web Terminal.
+
 ## [2.0.0] - 2026-11-05
 
 ### Thay đổi

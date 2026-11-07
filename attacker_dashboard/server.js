@@ -101,6 +101,76 @@ function stopCurrentAttack() {
   });
 }
 
+// -------------------------------------------------------------
+// Environment Check Helpers
+// -------------------------------------------------------------
+function checkBinary(name) {
+  return new Promise((resolve) => {
+    exec(`which ${name}`, (err, stdout) => {
+      resolve(!err && !!(stdout || "").trim());
+    });
+  });
+}
+
+function checkPythonModule(mod) {
+  return new Promise((resolve) => {
+    exec(`python3 -c "import ${mod}" 2>/dev/null`, (err) => {
+      resolve(!err);
+    });
+  });
+}
+
+async function performEnvironmentCheck(logToWeb = true) {
+  const hasHping3 = await checkBinary("hping3");
+  const hasPython3 = await checkBinary("python3");
+  const hasScapy = await checkPythonModule("scapy");
+
+  const missing = [];
+  if (!hasHping3) {
+    missing.push({
+      tool: "hping3",
+      pkg: "hping3",
+      scenarios: "A (SYN Direct), B (SYN Spoof), U (UDP Flood), I (ICMP Ping)",
+    });
+  }
+  if (!hasPython3) {
+    missing.push({
+      tool: "python3",
+      pkg: "python3",
+      scenarios: "C (HTTP Flood), DNS (DNS Amplification)",
+    });
+  }
+  if (!hasScapy) {
+    missing.push({
+      tool: "scapy",
+      pkg: "python3-scapy",
+      scenarios: "DNS (DNS Amplification)",
+    });
+  }
+
+  if (missing.length === 0) {
+    if (logToWeb) {
+      addLog("success", "✅ [MÔI TRƯỜNG SẴN SÀNG] Đã kiểm tra đầy đủ công cụ: hping3, python3, scapy. Có thể phát tải toàn bộ 6 kịch bản.");
+    }
+    return { ok: true, missing: [] };
+  }
+
+  const pkgList = missing.map((m) => m.pkg).join(" ");
+  if (logToWeb) {
+    addLog("warn", "════════════════════════════════════════════════════════════════");
+    addLog("warn", "⚠️ [KIỂM TRA HỆ THỐNG] Phát hiện máy Attacker này còn thiếu công cụ:");
+    missing.forEach((m) => {
+      addLog("err", `   ❌ Thiếu '${m.tool}' ➔ Cần cho: ${m.scenarios}`);
+    });
+    addLog("info", "👉 LỆNH CÀI ĐẶT NHANH (Mở terminal máy này và chạy lệnh sau):");
+    addLog("warn", `   sudo apt update && sudo apt install -y ${pkgList}`);
+    addLog("info", "   (Sau khi cài xong, bấm lại nút kịch bản để chạy ngay mà không cần restart)");
+    addLog("warn", "════════════════════════════════════════════════════════════════");
+  }
+
+  return { ok: false, missing, installCmd: `sudo apt update && sudo apt install -y ${pkgList}` };
+}
+
 // 1. Pre-flight Target Check (Ping + HTTP Probe)
 app.post("/api/check", (req, res) => {
   const target = (req.body.target || "").trim();
@@ -182,6 +252,41 @@ app.post("/api/attack/start", async (req, res) => {
     return res.status(400).json({ ok: false, error: "Thiếu IP mục tiêu (target)" });
   }
 
+  // 0. Kiểm tra công cụ cần thiết trước khi khởi chạy
+  if (["A", "B", "U", "I"].includes(scenario)) {
+    const hasHping3 = await checkBinary("hping3");
+    if (!hasHping3) {
+      addLog("err", `❌ [LỖI THIẾU CÔNG CỤ] Kịch bản ${scenario} yêu cầu 'hping3' nhưng máy chưa cài đặt!`);
+      addLog("info", "👉 Lệnh cài đặt nhanh: sudo apt update && sudo apt install -y hping3");
+      addLog("info", `   (Cài xong bấm lại nút kịch bản ${scenario} là chạy được ngay)`);
+      return res.status(400).json({
+        ok: false,
+        error: "Máy Attacker chưa cài đặt 'hping3'. Vui lòng mở terminal chạy: sudo apt install -y hping3",
+      });
+    }
+  } else if (scenario === "C") {
+    const hasPython3 = await checkBinary("python3");
+    if (!hasPython3) {
+      addLog("err", `❌ [LỖI THIẾU CÔNG CỤ] Kịch bản C yêu cầu 'python3'! Vui lòng chạy: sudo apt install -y python3`);
+      return res.status(400).json({
+        ok: false,
+        error: "Máy Attacker chưa cài đặt 'python3'. Vui lòng chạy: sudo apt install -y python3",
+      });
+    }
+  } else if (scenario === "DNS") {
+    const hasPython3 = await checkBinary("python3");
+    const hasScapy = await checkPythonModule("scapy");
+    if (!hasPython3 || !hasScapy) {
+      const missingPkg = !hasPython3 ? "python3 python3-scapy" : "python3-scapy";
+      addLog("err", `❌ [LỖI THIẾU THƯ VIỆN] Kịch bản DNS Amplification yêu cầu Scapy (${missingPkg})!`);
+      addLog("info", `👉 Lệnh cài đặt nhanh: sudo apt update && sudo apt install -y ${missingPkg}`);
+      return res.status(400).json({
+        ok: false,
+        error: `Máy Attacker thiếu thư viện Scapy. Vui lòng chạy: sudo apt install -y ${missingPkg}`,
+      });
+    }
+  }
+
   await stopCurrentAttack();
 
   let cmd = [];
@@ -255,7 +360,12 @@ app.post("/api/attack/start", async (req, res) => {
 
     currentProcess.stderr.on("data", (data) => {
       const line = data.toString().trim();
-      if (line) addLog("warn", `[${name}] ${line}`);
+      if (line) {
+        addLog("warn", `[${name}] ${line}`);
+        if (line.includes("command not found") && line.includes("hping3")) {
+          addLog("err", "👉 Lỗi thiếu 'hping3': Mở terminal chạy lệnh: sudo apt install -y hping3");
+        }
+      }
     });
 
     currentProcess.on("exit", (code) => {
@@ -288,6 +398,12 @@ app.get("/api/status", (req, res) => {
   });
 });
 
+// 5. Environment Check API
+app.get("/api/env-check", async (req, res) => {
+  const result = await performEnvironmentCheck(false);
+  res.json(result);
+});
+
 const server = http.createServer(app);
 wss = new WebSocketServer({ server });
 
@@ -311,4 +427,6 @@ server.listen(PORT, HOST, () => {
   console.log(`  🛑 Emergency stop: Ctrl+C or Click 'STOP' in Browser`);
   console.log(`=======================================================`);
   addLog("info", `Bảng điều khiển đã khởi động tại cổng ${PORT}. Sẵn sàng phát tải.`);
+  // Tự động kiểm tra công cụ khi khởi động và thông báo lên giao diện
+  performEnvironmentCheck(true);
 });
