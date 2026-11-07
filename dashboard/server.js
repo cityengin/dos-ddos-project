@@ -27,6 +27,7 @@ const PPS_THR = getArg("--pps", process.env.PPS || "40");
 const SYN_THR = getArg("--syn", process.env.SYN || "25");
 const ENGINE = getArg("--engine", process.env.ENGINE || "scapy");
 const NO_SPAWN = hasFlag("--no-spawn") || process.env.NO_SPAWN === "1";
+const NO_SIM = hasFlag("--no-sim") || process.env.NO_SIM === "1";
 
 const ROOT_DIR = path.join(__dirname, "..");
 const DETECTOR_SCRIPT = path.join(ROOT_DIR, "detection", "detector.py");
@@ -82,6 +83,7 @@ function setDefenseState(active) {
 }
 
 function startSimulator() {
+  if (NO_SIM) return;
   if (simProc || simStatus.running) return;
   console.log("[simulator] Starting dynamic benign user simulator on attacker6...");
   try {
