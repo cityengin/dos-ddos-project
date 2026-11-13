@@ -9,6 +9,7 @@ và tuân thủ quy tắc đánh số phiên bản [Semantic Versioning](https:/
 
 ### Thêm mới
 
+- **Báo cáo PBL3 (`BaoCaoPBL3.docx`)**: bản viết lại theo mẫu báo cáo của khoa (Times New Roman 13, giãn dòng 1,3), gồm Phần 1–5 (giới thiệu, nghiên cứu liên quan, phương pháp và giải thuật, thực nghiệm với số liệu đo lại ngày 14/11/2026, kết luận – hạn chế – điều kiện triển khai), 8 bảng, 6 hình, 4 công thức, 2 giải thuật và 26 tài liệu tham khảo kiểu IEEE. Còn để trống: email, bảng phân công, tóm tắt và phụ lục.
 - **Bộ tự kiểm tra môi trường và hướng dẫn cài đặt trực quan trên Attacker Web Console (`attacker_dashboard/server.js`)**: Tự động rà soát sự hiện diện của các công cụ nền tảng (`hping3`, `python3`, `scapy`) ngay khi khởi động và trước mỗi lần phát tải. Nếu phát hiện thiếu công cụ nào, hệ thống chặn kích hoạt để tránh lỗi văng ngầm (`sudo: command not found`), đồng thời in khung hướng dẫn và câu lệnh cài đặt nhanh (`sudo apt install ...`) trực tiếp lên giao diện Web Terminal.
 
 ### Thay đổi
