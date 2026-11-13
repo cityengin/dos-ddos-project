@@ -322,15 +322,17 @@ Xác định địa chỉ IP và card mạng của từng máy bằng lệnh `ho
 docker run -d --name victim_web -p 80:80 nginx:alpine
 # hoặc: sudo systemctl start nginx
 
-# 2. Khởi chạy Bộ dò kép & Dashboard SOC Console:
+# 2. Khởi chạy Bộ dò kép & Dashboard SOC Console (bộ đếm eBPF/XDP để công tắc phòng thủ chặn được gói):
 cd ~/dos-ddos-project
 sudo .venv/bin/python3 detection/detector.py \
     --iface wlan0 \
     --victim 192.168.1.100 \
+    --engine ebpf \
     --pps 40 --syn 25 \
     --ml detection/window_model.joblib \
     --stream | node dashboard/server.js --victim 192.168.1.100
 ```
+> ⚠️ `--engine ebpf` cần BCC (`python3-bpfcc`, kernel headers) và `.venv` tạo với `--system-site-packages` — xem cách cài ở [`docs/MULTI_MACHINE.md` mục 1.4](docs/MULTI_MACHINE.md). Với bộ đếm Scapy (bỏ cờ này), công tắc phòng thủ chỉ đổi trạng thái hiển thị, không chặn gói.
 Mở trình duyệt truy cập: **`http://localhost:3000`** (bấm F11 để chiếu toàn màn hình hiển thị 11 đồ thị sóng trực tiếp và thanh gạt phòng thủ IPS).
 
 #### Bước 2: Thiết lập trên Hai Máy Tấn công (Attacker Laptops)

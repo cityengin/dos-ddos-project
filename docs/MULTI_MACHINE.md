@@ -32,7 +32,7 @@ Ghi lại IP và tên card mạng Wi-Fi (thường là `wlan0` hoặc `wlp...`):
 
 | Vai trò | Máy | Địa chỉ IP ví dụ | Chức năng trong buổi Demo | Cần cài đặt |
 |---|---|---|---|---|
-| **VICTIM** | 1 laptop (nối máy chiếu) | `192.168.1.100` | • Nginx Web Server (:80)<br>• `detector.py` giám sát card Wi-Fi<br>• SOC Defense Console (:3000) | `nginx`, `python3-scapy`, `tcpdump`, `nodejs`, `npm` |
+| **VICTIM** | 1 laptop (nối máy chiếu) | `192.168.1.100` | • Nginx Web Server (:80)<br>• `detector.py` giám sát card Wi-Fi<br>• SOC Defense Console (:3000) | `nginx`, `tcpdump`, `nodejs`, `npm`, `python3-bpfcc`, `linux-headers` (xem mục 1.4) |
 | **ATTACKER 1** | 1 laptop | `192.168.1.50` | • Traffic Generator Console (:4000)<br>• DNS Reflector BIND9 container (:53) | `hping3`, `apache2-utils`, `docker`, `nodejs` |
 | **ATTACKER 2** | 1 laptop | `192.168.1.51` | • Traffic Generator Console (:4000) | `hping3`, `apache2-utils`, `nodejs` |
 
@@ -48,6 +48,27 @@ sudo apt update && sudo apt install -y hping3 python3-scapy apache2-utils nodejs
 - `nodejs` & `npm`: Khởi chạy Attacker Traffic Generator Console cổng 4000.
 
 > 💡 **Tính năng tự kiểm tra môi trường thông minh**: Khi khởi động `attacker_dashboard`, hệ thống sẽ tự động kiểm tra các công cụ này. Nếu máy còn thiếu công cụ nào, hệ thống sẽ chặn lệnh và in khung hướng dẫn cài đặt trực quan ngay trên Web Console thay vì báo lỗi ngầm.
+
+### 1.4. Cài đặt trên Máy Nạn nhân (bắt buộc để công tắc phòng thủ thật sự chặn gói)
+
+Công tắc `[🛡️ Phòng thủ]` trên dashboard chỉ **chặn được gói** khi detector chạy với bộ đếm eBPF/XDP (`--engine ebpf`). Với bộ đếm Scapy (mặc định), gạt công tắc chỉ đổi trạng thái hiển thị, không có gói nào bị bỏ. Bộ đếm eBPF cần thư viện BCC, mà BCC chỉ cài được qua `apt` (gói `python3-bpfcc`, nằm trong Python hệ thống), nên môi trường ảo `.venv` phải được tạo với `--system-site-packages` để nhìn thấy gói này:
+
+```bash
+sudo apt update && sudo apt install -y nginx tcpdump nodejs npm python3-venv \
+    python3-bpfcc bpfcc-tools linux-headers-$(uname -r)
+
+cd ~/dos-ddos-project
+# Tạo mới .venv có thấy gói hệ thống (bcc):
+python3 -m venv --system-site-packages .venv
+# Hoặc, nếu máy đã có .venv từ trước, chuyển nó sang chế độ thấy gói hệ thống (giữ nguyên gói đã cài):
+python3 -m venv --upgrade --system-site-packages .venv
+
+# Bản scikit-learn/joblib phải khớp bản đã huấn luyện window_model.joblib:
+.venv/bin/pip install scikit-learn==1.9.1 joblib==1.6.0 scapy
+
+# Kiểm tra: phải in ra "OK 1.9.1"
+.venv/bin/python -c "import bcc, sklearn; print('OK', sklearn.__version__)"
+```
 
 ---
 
@@ -100,15 +121,20 @@ sudo systemctl start nginx
 ```bash
 cd ~/dos-ddos-project
 
-# Khởi chạy detector Scapy/ML pipe vào Dashboard Server:
+# Khởi chạy detector (bộ đếm eBPF/XDP + ML) pipe vào Dashboard Server:
 sudo .venv/bin/python3 detection/detector.py \
     --iface wlan0 \
     --victim 192.168.1.100 \
+    --engine ebpf \
     --pps 40 --syn 25 \
     --ml detection/window_model.joblib \
     --stream | node dashboard/server.js --victim 192.168.1.100
 ```
 *(Lưu ý: Thay `wlan0` bằng tên card Wi-Fi của bạn và thay `192.168.1.100` bằng IP máy bạn).*
+
+- `--engine ebpf` gắn chương trình XDP (chế độ generic) vào card Wi-Fi để đếm gói trong nhân và cho phép công tắc phòng thủ **thật sự chặn gói**. Cần cài đặt theo mục 1.4; nếu thiếu BCC hoặc kernel headers, detector báo lỗi và thoát ngay (mã lỗi 5) thay vì chạy âm thầm.
+- Dừng detector bằng `Ctrl+C` để nó tự gỡ chương trình XDP khỏi card mạng. Nếu tiến trình bị tắt đột ngột, lần khởi động sau sẽ tự gỡ chương trình cũ trước khi gắn lại.
+- Nếu chỉ cần trình diễn phần phát hiện (không chặn), có thể bỏ `--engine ebpf` để dùng bộ đếm Scapy; khi đó công tắc phòng thủ không có tác dụng chặn.
 
 #### Bước 3: Chiếu lên màn hình Máy chiếu
 - Mở trình duyệt web truy cập: **`http://localhost:3000`**.

@@ -14,6 +14,7 @@ và tuân thủ quy tắc đánh số phiên bản [Semantic Versioning](https:/
 ### Sửa lỗi
 
 - **`detector.py --ml` bị dừng ngay ở cửa sổ đầu tiên với lỗi `UnboundLocalError`**: từ commit `95e3e8e`, hai đặc trưng `syn_ratio` và `ack_syn_ratio` được tính *sau* khối suy luận ML nên khối này dùng biến chưa được gán. Vì dashboard tự thêm `--ml` khi có `window_model.joblib`, nhánh học máy trên dashboard và `run_scenarios.py` đều không chạy được. Nay hai tỷ lệ được tính trước khối ML, giữ giá trị chưa làm tròn đúng như lúc huấn luyện (`window_features.py`); luồng JSON `--stream` vẫn làm tròn 3 chữ số như cũ. Đã kiểm tra lại trong lab với kịch bản A: luật và ML cùng kết luận DoS khi tấn công (độ tin cậy ML 0,60–0,63), BENIGN khi không có tấn công.
+- **Công tắc phòng thủ trên demo 3 laptop không thật sự chặn gói**: lệnh chạy detector trên máy nạn nhân trong `docs/MULTI_MACHINE.md` và `README.md` dùng bộ đếm Scapy mặc định, trong khi cơ chế chặn (blocklist + token bucket XDP) chỉ hoạt động với `--engine ebpf` — gạt công tắc chỉ đổi trạng thái hiển thị. Nay lệnh mẫu thêm `--engine ebpf`, và `docs/MULTI_MACHINE.md` có mục 1.4 hướng dẫn cài BCC (`python3-bpfcc`, `bpfcc-tools`, kernel headers) cùng cách tạo/chuyển `.venv` sang `--system-site-packages` (BCC chỉ cài được qua apt, venv thường không import được `bcc`) và cài `scikit-learn==1.9.1`/`joblib==1.6.0` khớp model. Việc venv `--system-site-packages` nhìn thấy `bcc` đã được kiểm tra; chưa kiểm thử gắn XDP trên card Wi-Fi của laptop thật trong lần sửa này.
 
 ## [2.0.0] - 2026-11-05
 
