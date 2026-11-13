@@ -310,6 +310,11 @@ def main():
             blocked_src = ebpf.blocked_src_count()
             blocked_pps = ebpf.last_blocked / args.interval
 
+        # ty le dan xuat - tinh TRUOC khoi ML (truoc day tinh sau -> --ml loi UnboundLocalError o cua so dau).
+        # Giu gia tri CHUA lam tron cho ML (khop window_features.py luc train); chi lam tron khi in JSON.
+        syn_ratio = syn_s / max(pps, 1.0)
+        ack_syn_ratio = ack_s / max(syn_s, 1.0)
+
         # ====== ML song song (neu co --ml) ======
         # Dung vector dac trung DUNG THU TU model da luu; cong thuc KHOP window_features.py
         # (nguon chan ly dung chung voi bo trich pcap luc train). Cung cap du 10 FEATURES hien tai;
@@ -337,9 +342,6 @@ def main():
             csvf.write(row + "\n")
             csvf.flush()
 
-        syn_ratio = round(syn_s / max(pps, 1.0), 3)
-        ack_syn_ratio = round(ack_s / max(syn_s, 1.0), 3)
-
         if args.stream:
             # Dinh dang IP (ho tro ca str scapy lan int network-order tu ebpf)
             def _fmt_ip(ip):
@@ -362,7 +364,7 @@ def main():
                 "pps": round(pps), "syn": round(syn_s), "ack": round(ack_s), "udp": round(udp_s),
                 "dns": round(dns_s),
                 "h_src": round(h_src, 3), "h_dport": round(h_dport, 3), "n_src": n_src,
-                "syn_ratio": syn_ratio, "ack_syn_ratio": ack_syn_ratio,
+                "syn_ratio": round(syn_ratio, 3), "ack_syn_ratio": round(ack_syn_ratio, 3),
                 "rate_per_src": round(pps / max(n_src, 1), 1),
                 "triggered": bool(triggered), "verdict": verdict or "BENIGN",
                 "syn_flood": syn_flood, "udp_flood": udp_flood, "dns_amp": dns_amp,
