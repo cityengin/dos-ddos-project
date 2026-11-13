@@ -42,13 +42,15 @@ python analysis/metrics.py detection/B.csv --truth DDoS
 python analysis/metrics.py detection/C.csv --truth DDoS
 ```
 
-**Kết quả kỳ vọng (Phân loại chính xác 100%, thời gian phát hiện ~0s, False Positives = 0):**
+**Kết quả kỳ vọng (phát hiện ngay cửa sổ đầu tiên, không cảnh báo ngoài thời gian tấn công).** Giá trị dưới đây là trung vị của lần chạy lưu trong `results/final/` (31/10/2026); con số cụ thể thay đổi theo máy:
 
 | Kịch bản | pps | syn/s | ack/s | n_src | H(src) | Nhãn chuẩn | Kết luận (Luật ngưỡng) |
 |---|---|---|---|---|---|---|---|
-| A — SYN 1 nguồn | ~300 | ~150 | 0 | 1 | 0.00 | DoS | `DoS [SYN flood]` |
-| B — SYN 6 nguồn + Spoof | ~4000 | ~2000 | 0 | **~2300** | ~11.1 | DDoS | `DDoS [SYN flood]` |
-| C — HTTP 6 nguồn (L7) | ~1800 | ~400 | ~1400 | 6 | ~2.58 | DDoS | `DDoS` (không gắn thẻ SYN) |
+| A — SYN 1 nguồn | ~350 | ~175 | 0 | 1 | 0.00 | DoS | `DoS [SYN flood]` (10/11 cửa sổ) |
+| B — SYN 6 nguồn + Spoof | ~2500 | ~2500 | 0 | **~2500** | ~11.3 | DDoS | `DDoS [SYN flood]` (10/10) |
+| C — HTTP 6 nguồn (L7) | ~1400 | ~0 | ~1400 | 6 | 2.58 | DDoS | `DDoS` (10/10, không gắn thẻ SYN) |
+
+Ở A, `pps ≈ 2 × syn/s` vì mỗi SYN-ACK của victim bị kernel máy tấn công trả lại bằng một gói RST (hping3 tạo SYN bằng raw socket).
 
 **Điểm kiểm tra mấu chốt:**
 - Kịch bản A là **DoS** (`n_src = 1`); kịch bản B và C là **DDoS`.
@@ -63,10 +65,10 @@ Chạy riêng bằng cờ `--only D` hoặc `--only E` — được thiết kế
 
 | Kịch bản | pps | syn/s | ack/s | n_src | Nhãn chuẩn | Kết luận Luật ngưỡng |
 |---|---|---|---|---|---|---|
-| D — SYN Spoof tốc độ thấp (Low-rate) | ~24 | ~24 | 0 | ~24 | DDoS | **Không cảnh báo** — dưới ngưỡng 40/25, luật **bỏ sót 100%** |
-| E — HTTP 1 nguồn tải cao (Flash Crowd) | ~3000 | ~800 | ~2200 | 1 | BENIGN | **DoS** — vượt ngưỡng pps, luật **báo nhầm (False Alarm)** |
+| D — SYN Spoof tốc độ thấp (2 × 12 pps) | ~24–28 | ~24–28 | 0 | ~24–28 | DDoS | **Sát ngưỡng 25 SYN/s** — tùy lần chạy, luật bỏ sót hoặc bắt được (`results/final/D.csv`: 28 SYN/s → bắt 8/9 cửa sổ) |
+| E — HTTP 1 nguồn tải cao | ~2200 | ~0 | ~2200 | 1 | BENIGN | **DoS** — vượt ngưỡng pps, luật **báo nhầm** (8/9 cửa sổ) |
 
-**Kết quả kỳ vọng:** Luật ngưỡng bỏ sót đòn tấn công D (False Negative) và báo động nhầm người dùng hợp lệ E (False Positive); trong khi đó mô hình Học máy (Mục 5) phân loại chính xác D là `DDoS` và E là `BENIGN`.
+**Kết quả thực đo (`results/final/`):** Học máy (Mục 5) kết luận D là `DDoS` ở 9/9 cửa sổ. Với E, **ML cũng kết luận `DoS`** ở 8/9 cửa sổ: nhìn từ victim, một máy gửi HTTP ~2200 pps giống hệt HTTP flood 1 nguồn (kiểu lưu lượng mang nhãn DoS trong dữ liệu huấn luyện), nên đặc trưng theo gói không tách được hai trường hợp này. Ưu thế của ML với tấn công dưới ngưỡng thể hiện trên tập dữ liệu huấn luyện (Mục 5: 163/180 cửa sổ dưới ngưỡng, luật 0/180).
 
 ---
 
@@ -169,14 +171,16 @@ docker exec -it detector python3 /app/detector.py --pps 40 --syn 25 \
 **Kết quả kỳ vọng (`train_window.py`, tập dữ liệu PCAP 3 lần chạy với 3,362 cửa sổ, kiểm định LORO):**
 - Điểm F1 phát hiện nhị phân: **~0.88 (Luật ngưỡng) vs 0.996 (Random Forest)**.
 - Độ chính xác đa lớp (Accuracy): **~61.1% (Luật ngưỡng) vs 99.4% (Random Forest)**.
-- Luật ngưỡng hoàn toàn nhầm lẫn giữa DoS và DDoS khi có lưu lượng nền hỗn hợp; trong khi Random Forest phân định chính xác tuyệt đối cả 3 lớp (`BENIGN`, `DoS`, `DDoS`).
-- Thứ tự đặc trưng quan trọng nhất: `n_src`, `h_src`, `pps`, `rate_per_src`.
+- Macro-F1 3 lớp: **0.477 (Luật ngưỡng) vs 0.994 (Random Forest)**. Luật đường cơ sở (`n_src ≥ 2` → DDoS, không có điều kiện `top_share`) xếp 82% cửa sổ DoS vào DDoS vì luôn có một nguồn benign chạy nền, và báo nhầm 363/1124 cửa sổ BENIGN (Random Forest: 1/1124).
+- Cửa sổ tấn công dưới ngưỡng (`pps < 40` và `syn_s < 25`): luật 0/180, Random Forest **163/180 (90.6%)**.
+- Thứ tự đặc trưng quan trọng nhất: `n_src` (0.28), `h_src` (0.25), `pps` (0.15), `rate_per_src` (0.11).
 
 **Kết quả kỳ vọng khi chạy detector live (`--ml`):**
 Mỗi dòng log hiển thị đồng thời cả kết luận của Luật ngưỡng lẫn Học máy: `ALERT | ML:<verdict>(<conf>)`.
 - Bình thường $\to$ `BENIGN`
-- SYN 1 nguồn $\to$ `DoS`
-- SYN spoofing hoặc botnet phân tán $\to$ `DDoS`
+- SYN 1 nguồn $\to$ `DoS` (độ tin cậy ~0.6)
+- SYN spoofing hoặc botnet phân tán $\to$ `DDoS` (~0.9–1.0)
+- Lưu ý (đo 14/11/2026): với lưu lượng hợp lệ của `benign_dynamic_users.py` (12–24 người dùng ảo, không có trong dữ liệu huấn luyện), luật không báo nhầm nhưng ML báo nhầm `DoS` ở 5/30 cửa sổ — mô hình cần huấn luyện lại khi lưu lượng nền thay đổi.
 
 ---
 
@@ -204,89 +208,89 @@ Hộp trạng thái hiển thị song song **hai dòng**: `rule: <X>` (Luật ng
 
 ## 7. Engine Bắt gói: So sánh Scapy vs eBPF ở Tốc độ Line-Rate
 
-Detector hỗ trợ hai engine: `--engine scapy` (mặc định) và `--engine ebpf` (tầng XDP trong kernel). Để chứng minh eBPF không bị rớt gói ở cường độ cao, gửi một số lượng gói tin cố định và so sánh:
+Detector hỗ trợ hai engine: `--engine scapy` (mặc định) và `--engine ebpf` (chương trình XDP trong kernel, chế độ generic). Để so sánh độ chính xác, cho 6 attacker phát UDP flood **không giả mạo** ở tốc độ tối đa trong một khoảng thời gian cố định, rồi so số gói detector đếm được với bộ đếm `rx_packets` của chính card `eth0`:
 
 ```bash
-# Khởi động detector ghi log CSV với engine eBPF:
+# Detector ghi CSV với engine cần đo (lặp lại với --engine scapy):
 docker exec -d detector python3 -u /app/detector.py --pps 40 --syn 25 --victim 172.30.0.10 \
-    --engine ebpf --csv /app/bnd.csv
+    --engine ebpf --csv /app/cnt.csv
+sleep 8
+rx0=$(docker exec victim cat /proc/net/dev | awk -F: '/eth0:/{split($2,a," "); print a[2]}')
 
-# Bơm chính xác 120,000 gói tin SYN spoofed từ 6 nguồn attacker:
+# Lưu ý: hping3 --flood BỎ QUA tham số -c, phải giới hạn bằng timeout:
 for a in attacker1 attacker2 attacker3 attacker4 attacker5 attacker6; do \
-    docker exec -d $a hping3 -S -p 80 --rand-source --flood -c 20000 172.30.0.10; done
-
-# Đợi khoảng 20 giây cho bão gói kết thúc, sau đó dừng detector:
+    docker exec -d $a timeout 8 hping3 --udp -p 80 -q --flood 172.30.0.10; done
+sleep 14
+rx1=$(docker exec victim cat /proc/net/dev | awk -F: '/eth0:/{split($2,a," "); print a[2]}')
 docker exec detector pkill -f detector.py
 
-# Tính tổng số gói tin mà detector ghi nhận được:
-awk -F, 'NR>1{s+=$2} END{print s}' detection/bnd.csv
+echo "eth0 nhận: $((rx1-rx0))"; awk -F, 'NR>1{s+=$2} END{print "detector đếm:", s}' detection/cnt.csv
 ```
 
-**Kết quả kỳ vọng:**
-- Trong số 120,000 gói tin phát ra, engine **Scapy** chỉ đếm được **~57%** (chạm trần năng lực xử lý ở mức ~6.9k pps).
-- Engine **eBPF** đếm chính xác **~95%** và ghi nhận đúng đỉnh lưu lượng thực tế (~30k pps).
-- Ở tốc độ thấp, cả hai engine đều chính xác tuyệt đối (thử nghiệm 5,000 gói: eBPF đạt 4,986).
+**Kết quả đo ngày 14/11/2026** (i7-12700H, kernel 7.0, ~1.1–1.2 triệu pps):
+
+| Engine | `eth0` thực nhận | Detector đếm được | Tỷ lệ | Đỉnh thấy được |
+|---|---|---|---|---|
+| Scapy | 8,647,512 | 80,039 | **0.9%** | ~10k pps |
+| eBPF/XDP | 9,767,022 | 9,764,336 | **≈100%** | ~1.24 triệu pps |
+
+> [!NOTE]
+> Phiên bản trước của mục này dùng `hping3 --flood -c 20000` và giả định "120,000 gói"; vì `--flood` bỏ qua `-c`, số gói thực phát lớn hơn nhiều, nên các tỷ lệ cũ (Scapy ~57%, eBPF ~95%) không còn dùng. Bản đo mới dùng UDP không giả mạo để toàn bộ lưu lượng nằm trong lab.
 
 ---
 
 ## 8. Cơ chế Phòng thủ Hủy gói Tự động (Closed-Loop XDP Drop, `--block`)
 
-Mặc định detector chạy ở chế độ chỉ phát hiện (Detect-only). Khi thêm cờ `--block` (yêu cầu `--engine ebpf`), hệ thống kích hoạt cơ chế IPS tự động hủy gói trong kernel:
+Mặc định detector chạy ở chế độ chỉ phát hiện. Khi thêm cờ `--block` (yêu cầu `--engine ebpf`), nguồn vượt `--block-pps` bị đưa vào blocklist có TTL và gói của nó bị `XDP_DROP`; các cờ `--block-syn-rate/--block-udp-rate/--block-icmp-rate` bật token bucket theo giao thức cho tấn công giả mạo nguồn.
+
+> [!IMPORTANT]
+> Xóa file điều khiển cũ trước khi đo: `docker exec detector rm -f /tmp/detector_block`. Nếu file này còn giá trị `1` từ lần gạt công tắc trên dashboard trước đó, detector sẽ tự bật chặn ngay khi khởi động, kể cả khi không có `--block`.
 
 ```bash
-# Bật chặn tự động theo nguồn (hiệu quả với DoS/DDoS nguồn thật A / C):
+# Ví dụ kịch bản C ở mức tối đa, bật chặn:
 docker exec -d detector python3 -u /app/detector.py --iface eth0 --pps 40 --syn 25 --victim 172.30.0.10 \
-    --engine ebpf --block --block-pps 200 --block-ttl 5 --csv /app/blk.csv
-
-# Kích hoạt đợt tấn công HTTP flood từ 6 container:
+    --engine ebpf --block --block-pps 300 --block-ttl 5 --csv /app/blk.csv
 for a in attacker1 attacker2 attacker3 attacker4 attacker5 attacker6; do \
-    docker exec -d $a python3 /app/http_flood.py 172.30.0.10 -p 80 -t 20 -d 16; done
+    docker exec -d $a timeout 10 ab -k -c 500 -t 9 -n 100000000 http://172.30.0.10/; done
+
+# Song song, đo khách hợp lệ từ host (mỗi 0.2 s, timeout 2 s):
+while :; do curl -s -m2 -o /dev/null -w '%{http_code} %{time_total}\n' http://localhost:8080/; sleep .2; done
 ```
 
-**Kết quả kỳ vọng:**
-- **Kịch bản C (HTTP 6 nguồn thật)**: Hệ thống nhận diện và đưa cả 6 IP vào danh sách chặn (`blocked_src=6`), lưu lượng tấn công sụp đổ hoàn toàn từ **~136,000 pps xuống chỉ còn ~242 pps**; người dùng hợp lệ bên ngoài vẫn nhận phản hồi 200 OK bình thường.
-- **Kịch bản B (SYN Spoof ngẫu nhiên)**: Chặn theo IP nguồn đơn lẻ không có tác dụng do mỗi gói mang một IP mới. Khi bổ sung cờ giới hạn tốc độ SYN toàn cục `--block-syn-rate 2000`, hệ thống cắt bỏ thành công **~85%** lượng gói SYN rác.
-- **Kịch bản U (UDP Spoof) và I (ICMP Spoof)**: Tương tự B, chặn theo IP vô dụng với gói giả mạo. Token-bucket toàn cục theo giao thức xử lý được: `--block-udp-rate 1000` cắt **~90%** UDP flood 6 nguồn spoof; `--block-icmp-rate 500` cắt **~95%** ICMP flood spoof (`blocked_src=0`, phần vượt định mức bị drop). Đánh đổi: một phần lưu lượng hợp lệ cùng giao thức cũng rớt.
-- **Kịch bản DNS (DNS Amplification)**: Ngược lại với spoof trực tiếp — tại victim chỉ có **ít reflector THẬT** nên **chặn per-source lại hiệu quả**: reflector `.30` vượt `--block-pps` bị đưa vào blocklist, đo được **~100%** phản hồi khuếch đại bị drop (`blocked_src=1`, `blocked_pps ≈ pps`), khách hợp lệ vẫn 200 OK.
-- **Tính an toàn**: Danh sách chặn có thời gian sống TTL tự động giải phóng (không chặn vĩnh viễn); các máy khách gửi tốc độ thấp không bao giờ bị chặn nhầm.
+**Kết quả đo ngày 14/11/2026** (mỗi kịch bản 10 giây ở mức tối đa, chạy hai lần: chỉ phát hiện và `--block`; khi không tấn công, p95 của khách hợp lệ ≈ 2.6–3.8 ms):
 
-### Bảng So sánh Định lượng Hiệu quả Phòng thủ eBPF/XDP IPS
+| Kịch bản (mức tối đa) | Lưu lượng tấn công (trung bình) | Chỉ phát hiện: khách hợp lệ | Bật chặn: gói tấn công bị bỏ | Bật chặn: khách hợp lệ |
+|---|---|---|---|---|
+| **A** — `hping3 -S --flood`, 1 nguồn | ~235k pps (đỉnh ~265k) | 100% 200 OK, p95 2.9 ms | **99.9%** (`blocked_src=1`) | 100%, p95 3.3 ms |
+| **C** — `ab -k -c 500` × 6 nguồn | ~565k pps (đỉnh ~734k) | 100% 200 OK, p95 8.1 ms | Lưu lượng sụp còn **~4.5k pps** (`blocked_src=6`) | 100%, p95 3.5 ms |
+| **DNS amp** — `dns_amp.py --pps 0` | ~2.3k pps | 100% 200 OK, p95 2.0 ms | **94.9%** (`blocked_src=1`) | 100%, p95 2.4 ms |
 
-| Kịch bản tấn công | Khi không phòng thủ (Detect-only) | Khi phòng thủ (Active IPS eBPF/XDP) |
-|---|---|---|
-| **DoS SYN Flood** *(1 nguồn)* | Tải ~50,000 pps dồn dập vào cổng 80; hàng đợi TCP SYN backlog của Nginx cạn kiệt hoàn toàn; Web Service: **TIMEOUT (> 2000 ms)**, từ chối mọi kết nối mới; 0 drop/s (0%). | eBPF đưa IP vi phạm vào blocklist (`blocked_src=1`, TTL 5s); loại bỏ **100%** gói SYN rác ngay tại driver card mạng (~50,000 drop/s); Web Service: **UP 200 OK (1–2 ms)**. |
-| **DDoS SYN Flood** *(Spoof IP)* | Tải ~15,000 pps với hàng ngàn IP ngẫu nhiên; CPU nhân Linux quá tải xử lý kết nối TCP nửa mở; Web Service: **TIMEOUT (> 2000 ms)**; 0 drop/s (0%). | Token-Bucket toàn cục (`--block-syn-rate 2000`) với `bpf_spin_lock` cắt giảm **~85%** lượng gói SYN rác tại tầng XDP; bảo vệ hàng đợi socket; Web Service: **UP 200 OK (2–4 ms)**. |
-| **DoS UDP Flood** *(1 nguồn)* | Tải UDP ~30,000 pps gây nghẽn băng thông và bão hòa hàng đợi card mạng; Web Service: **SLOW / TIMEOUT (> 1500 ms)**, rớt gói tin hợp lệ; 0 drop/s (0%). | eBPF đưa IP nguồn vào blocklist (`blocked_src=1`); loại bỏ **100%** gói UDP rác tại tầng XDP; đường truyền thông suốt; Web Service: **UP 200 OK (1 ms)**. |
-| **DDoS UDP Flood** *(Spoof IP)* | Bão gói UDP đa nguồn giả mạo dồn dập (~10,000 pps); ngập lụt băng thông tầng mạng; Web Service: **TIMEOUT (> 2000 ms)**; 0 drop/s (0%). | Token-Bucket toàn cục (`--block-udp-rate 1000`) loại bỏ **~90%** lưu lượng UDP flood tại tầng kernel trước khi cấp phát `sk_buff`; Web Service: **UP 200 OK (2–3 ms)**. |
-| **DDoS ICMP Flood** *(Ping Flood)* | Lưu lượng ICMP dồn dập (~10,000 pps); CPU kernel liên tục tiêu hao tài nguyên phân tích và phản hồi Echo Reply; Web Service: **SLOW (> 1800 ms)**; 0 drop/s (0%). | Token-Bucket toàn cục (`--block-icmp-rate 500`) loại bỏ **~95%** gói ICMP vượt trần ngay tại XDP; giải phóng chu kỳ CPU; Web Service: **UP 200 OK (1–2 ms)**. |
-| **DDoS HTTP Flood** *(L7 6 botnet)* | Tải HTTP dồn dập (~136,000 pps); Nginx worker quá tải 100% CPU do duy trì TCP và bóc tách HTTP GET; Web Service: **504 Gateway Timeout**; 0 drop/s (0%). | eBPF nhận diện và đưa cả 6 IP botnet vào blocklist (`blocked_src=6`); lưu lượng tấn công sụp đổ xuống còn **~242 pps (giảm 99.8%)**; Web Service: **UP 200 OK (1 ms)**. |
-| **DNS Amplification** *(Reflection L4)* | Phản xạ khuếch đại 40–50x dội về từ DNS Resolver (cổng UDP 53) với payload lớn (3–4 KB/gói); bão hòa băng thông; Web Service: **TIMEOUT (> 2000 ms)**; 0 drop/s (0%). | IP máy chủ DNS Reflector bị đưa vào blocklist (`blocked_src=1`); loại bỏ **~100%** gói phản xạ khuếch đại ngay tại card mạng; Web Service: **UP 200 OK (1 ms)**. |
+- **Chặn theo nguồn** hiệu quả với tấn công từ nguồn thật (A, C) và với DNS amplification (victim chỉ thấy một số ít reflector thật).
+- **Tấn công giả mạo nguồn (B, U, I):** chặn theo IP vô dụng vì mỗi gói mang một IP mới; token bucket theo giao thức xử lý được — lần đo trước ghi nhận ~85% SYN bị bỏ với `--block-syn-rate 2000`, ~90% UDP với `--block-udp-rate 1000`, ~95% ICMP với `--block-icmp-rate 500` (`blocked_src=0`). Đánh đổi: gói hợp lệ cùng giao thức cũng bị bỏ khi tổng vượt giới hạn. Các số này **chưa được đo lại**: mạng `dos-lab` không `internal` và host bật chuyển tiếp gói, nên SYN-ACK/ICMP mà victim gửi tới IP giả có thể đi ra Internet — chỉ chạy B/U/I khi host đã ngắt Internet.
+- **Tính an toàn:** Danh sách chặn có TTL tự hết hạn (không chặn vĩnh viễn); khách gửi tốc độ thấp không bị chặn nhầm.
 
 ---
 
 ## 9. Tấn công Công suất Tối đa (Line-Rate) & Tác động Thực tế
 
-Dự án cung cấp hai mức cường độ phát tải: `paced` (có điều tiết tốc độ, phục vụ thu thập dữ liệu ML) và `max` (**tốc độ line-rate tối đa** qua `hping3 --flood` và `ab`, yêu cầu `--engine ebpf`).
+Dự án cung cấp hai mức cường độ phát tải: `paced` (có điều tiết tốc độ, phục vụ thu thập dữ liệu ML) và `max` (**tốc độ tối đa** qua `hping3 --flood` và `ab`, yêu cầu `--engine ebpf`).
 
 ```bash
 # Chạy kịch bản tối đa với run_scenarios:
 python experiments/run_scenarios.py --only A --intensity max --duration 10        # A: 1 nguồn hping3 --flood
-python experiments/run_scenarios.py --only B --intensity max                      # B: 6 nguồn --rand-source --flood
+python experiments/run_scenarios.py --only C --intensity max --duration 10        # C: 6 nguồn ab -k -c 500
 
 # Chạy kịch bản tối đa với run_ddos.sh:
-./run_ddos.sh syn  -i max            # hping3 --rand-source --flood
 ./run_ddos.sh http -i max            # ab -k -c 500
 
-# Kiểm tra tác động thực tế lên máy nạn nhân (đo song song):
-# 1. Đếm tốc độ gói thực tế vào card mạng eth0 của victim:
-docker exec detector sh -c 'cat /proc/net/dev' | awk '/eth0:/{gsub(/:/," ");print "rx_packets="$3}'
-# 2. Đo độ trễ phản hồi của khách hàng hợp lệ:
-while :; do curl -s -m3 -o /dev/null -w '%{http_code} %{time_total}\n' http://localhost:8080/; sleep .25; done
+# Đo khách hợp lệ song song (từ host):
+while :; do curl -s -m2 -o /dev/null -w '%{http_code} %{time_total}\n' http://localhost:8080/; sleep .2; done
 ```
 
-**Kết quả đo đạc thực tế:**
-- Dưới cường độ tấn công cực đại (A-max ~190k pps, B-max ~123k pps, C-max ~693k pps), card mạng `eth0` ghi nhận **0 gói tin bị rớt (0 rx drops)**, và người dùng hợp lệ vẫn nhận phản hồi **100% mã 200 OK** nhờ nhân Linux hiện đại kích hoạt cơ chế SYN Cookies và máy chủ Nginx tĩnh xử lý cực nhanh (độ trễ p95 chỉ tăng nhẹ từ 1ms lên 11ms).
-- Khi bật cơ chế bảo vệ `--block`, các nguồn tấn công bị hủy tại XDP, lưu lượng giảm mạnh từ ~433k pps xuống ~28 pps và độ trễ trở lại mức 1ms lý tưởng.
+**Kết quả đo ngày 14/11/2026** (chi tiết ở bảng Mục 8):
+- Ở chế độ chỉ phát hiện, A-max (~235k pps), C-max (~565k pps) và DNS-max (~2.3k pps) đều **không làm gián đoạn dịch vụ**: khách hợp lệ nhận 100% phản hồi 200 OK; tác động lớn nhất là p95 trong kịch bản HTTP tăng từ ~2.6 ms lên 8.1 ms. Nguyên nhân: SYN cookies của kernel chống cạn hàng đợi SYN, nginx phục vụ trang tĩnh rất nhanh, và lab Docker chạy trên một máy nên **không có giới hạn băng thông** để tấn công thể tích làm nghẽn.
+- Khi bật `--block`, A-max bị bỏ 99.9% tại XDP, C-max sụp từ ~565k xuống ~4.5k pps và p95 của khách hợp lệ về lại ~3.5 ms.
+- B-max (SYN giả mạo `--flood`) không được đo lại vì lý do nêu ở Mục 8.
 
 ---
 
@@ -297,8 +301,8 @@ while :; do curl -s -m3 -o /dev/null -w '%{http_code} %{time_total}\n' http://lo
 - [ ] Phân loại chuẩn xác: Kịch bản A -> DoS, Kịch bản B -> DDoS, Kịch bản C -> DDoS, UDP DoS -> DoS, UDP DDoS / ICMP -> DDoS.
 - [ ] Phân biệt đặc trưng gói: Tấn công SYN có `ack ≈ 0`; tấn công HTTP có `ack >> syn`; tấn công UDP có `udp_s` cao và gắn nhãn `[UDP flood]`; tấn công ICMP có `pps` cao với `syn_s = ack_s = udp_s = 0`; DNS amplification có `dns_s` cao (UDP sport 53) và gắn nhãn `[DNS amp]`.
 - [ ] Chế độ ngưỡng thích nghi (Adaptive EWMA) phát hiện đúng và không báo nhầm khi lưu lượng nền biến thiên.
-- [ ] Mô hình Học máy Random Forest cửa sổ (LORO) đạt độ chính xác 99.4%, phân tách chuẩn xác các trường hợp biên khó (D/E).
+- [ ] Mô hình Học máy Random Forest cửa sổ (LORO) đạt độ chính xác 99.4%, F1 0.996 (luật đường cơ sở 0.883), bắt 163/180 cửa sổ dưới ngưỡng; kịch bản E vẫn bị cả luật lẫn ML kết luận DoS (giới hạn đã biết).
 - [ ] Detector hiển thị đồng thời cả kết luận của Luật ngưỡng lẫn Học máy trên console và Dashboard.
-- [ ] Engine eBPF đếm chính xác ~95% gói tin ở tốc độ cao (so với Scapy chỉ ~57%).
-- [ ] Chế độ `--block` dập tắt thành công đòn tấn công nguồn thật (từ ~136k pps xuống ~242 pps) và cắt giảm 85% đòn SYN flood spoofing.
+- [ ] Engine eBPF đếm ≈100% gói tin ở ~1.2 triệu pps (so với `rx_packets` của eth0), Scapy chỉ ~1%.
+- [ ] Chế độ `--block` bỏ 99.9% SYN flood 1 nguồn (A-max), làm HTTP flood 6 nguồn (C-max) sụp từ ~565k xuống ~4.5k pps, bỏ 94.9% phản xạ DNS; khách hợp lệ vẫn 100% 200 OK.
 - [ ] Bảng điều khiển Web Dashboard cập nhật mượt mà theo thời gian thực tại `http://localhost:3000`.

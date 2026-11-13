@@ -11,6 +11,15 @@ và tuân thủ quy tắc đánh số phiên bản [Semantic Versioning](https:/
 
 - **Bộ tự kiểm tra môi trường và hướng dẫn cài đặt trực quan trên Attacker Web Console (`attacker_dashboard/server.js`)**: Tự động rà soát sự hiện diện của các công cụ nền tảng (`hping3`, `python3`, `scapy`) ngay khi khởi động và trước mỗi lần phát tải. Nếu phát hiện thiếu công cụ nào, hệ thống chặn kích hoạt để tránh lỗi văng ngầm (`sudo: command not found`), đồng thời in khung hướng dẫn và câu lệnh cài đặt nhanh (`sudo apt install ...`) trực tiếp lên giao diện Web Terminal.
 
+### Thay đổi
+
+- **Đồng bộ số liệu trong `README.md`, `docs/TESTING.md`, `docs/LyThuyet_DoS_DDoS.md` với lần đo lại ngày 14/11/2026** (chỉ các kịch bản không giả mạo nguồn, toàn bộ lưu lượng nằm trong lab):
+  - **Bảng phòng thủ eBPF/XDP**: thay các mô tả "Web Service TIMEOUT > 2000 ms / 504 Gateway Timeout" (không có log đo, mâu thuẫn với mục đo line-rate) bằng số đo thật: ở chế độ chỉ phát hiện, khách hợp lệ vẫn 100% 200 OK với A-max ~235k pps (p95 2,9 ms), C-max ~565k pps (p95 8,1 ms), DNS-max ~2,3k pps; khi `--block` (B=300 pps, TTL 5 s): A bị bỏ 99,9%, C sụp còn ~4,5k pps, phản xạ DNS bị bỏ 94,9%, p95 khách hợp lệ ≤ 3,5 ms. Ghi rõ lab Docker không có giới hạn băng thông.
+  - **Độ chính xác bộ đếm**: phương pháp cũ (`hping3 --flood -c 20000`, "120.000 gói") sai vì `--flood` bỏ qua `-c`. Đo lại bằng `timeout` + so với `rx_packets` của `eth0` ở ~1,1–1,2 triệu pps: Scapy đếm 0,9%, eBPF ≈100% (thay cho 57% / 95%).
+  - **Bảng kết quả kịch bản**: cập nhật trung vị từ `results/final/` (A ~350 pps, B ~2489 pps/H 11,28, C ~1386 pps…), thêm số cửa sổ đúng của luật và ML; Benign và DNS đo lại. Sửa các khẳng định sai: kịch bản **E** bị cả luật lẫn ML kết luận DoS (8/9 cửa sổ), không phải "ML: BENIGN 100%"; kịch bản **D** nằm sát ngưỡng (lần chạy lưu trữ: `syn_s` 28 ≥ 25, luật bắt 8/9); ML báo nhầm 5/30 cửa sổ trên lưu lượng `benign_dynamic_users.py`. Bổ sung số LORO đã tái lập: dưới ngưỡng 163/180 (luật 0/180), BENIGN báo nhầm 1/1124 (luật 363/1124).
+  - Sửa mô tả XDP: chương trình chạy ở chế độ generic nên gói bị bỏ trước netfilter và ngăn xếp TCP/IP chứ không phải "tại driver, trước khi cấp phát `sk_buff`"; chu kỳ health probe là 2,5 s (không phải 3 s).
+  - Ghi chú an toàn: các kịch bản giả mạo nguồn (B/U/I) chưa đo lại vì mạng `dos-lab` không `internal` và host bật chuyển tiếp gói — gói trả lời tới IP giả có thể đi ra Internet; số token bucket (85/90/95%) giữ nguyên, đánh dấu là lần đo trước.
+
 ### Sửa lỗi
 
 - **`detector.py --ml` bị dừng ngay ở cửa sổ đầu tiên với lỗi `UnboundLocalError`**: từ commit `95e3e8e`, hai đặc trưng `syn_ratio` và `ack_syn_ratio` được tính *sau* khối suy luận ML nên khối này dùng biến chưa được gán. Vì dashboard tự thêm `--ml` khi có `window_model.joblib`, nhánh học máy trên dashboard và `run_scenarios.py` đều không chạy được. Nay hai tỷ lệ được tính trước khối ML, giữ giá trị chưa làm tròn đúng như lúc huấn luyện (`window_features.py`); luồng JSON `--stream` vẫn làm tròn 3 chữ số như cũ. Đã kiểm tra lại trong lab với kịch bản A: luật và ML cùng kết luận DoS khi tấn công (độ tin cậy ML 0,60–0,63), BENIGN khi không có tấn công.
